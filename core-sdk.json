@@ -1,6 +1,6 @@
 {
   "format": 1,
-  "source_revision": "10ccb43abb96f3fad5c2b951a300b2c4344cfc91",
+  "source_revision": "55c6ac1e65cb6c3a15945f1bf097aa8aac60dbd1",
   "source_dirty": false,
   "roots": [
     "sdk",
@@ -8,7 +8,7 @@
     "crates/plugin-sdk",
     "crates/process-engine"
   ],
-  "sha256": "469d6ea4477370e6bd056eb9735fb6d17c56982c6ba4a4ecd4a464bfed3c9c76",
+  "sha256": "607d473a73688004b2d0d26739afdff15e61cc8386d6f1c6d518838f92acb68a",
   "files": [
     {
       "path": "CORE-LICENSE",
@@ -2496,8 +2496,8 @@
     },
     {
       "path": "sdk/verify-snapshot.mjs",
-      "bytes": 2535,
-      "sha256": "d5d720b0f6dc29f0bf3cd770d86bc08c76fcdc09187c2958953b95f2170e5c35",
+      "bytes": 2609,
+      "sha256": "2990ce1f6d7e62c27d2badc61a4a9c21d8d06511778843c206ebbe1f9faf1dc6",
       "executable": false
     }
   ]

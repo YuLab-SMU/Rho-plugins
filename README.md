@@ -4,6 +4,9 @@ Scientific implementations and their views, public domain contracts, methods,
 native adapters and tests. Plugins share a development repository but produce
 separate immutable packages. They do not require the core or application checkout
 to build. All existing sixteen official packages remain ordinary plugins.
+The public core lives in [Rho-core](https://github.com/YuLab-SMU/Rho-core);
+the application and coordinated development entry live in
+[Rho](https://github.com/YuLab-SMU/Rho).
 
 ```sh
 npm ci --ignore-scripts
