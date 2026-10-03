@@ -147,14 +147,27 @@ def run(binary):
             result = backend.reply(original["request"])
             assert result["type"] == "commit_plan" and result["data"]["outcome"] == "succeeded", result
             assert result["data"]["facts"][0]["key"] == "original"
-            assert backend.query("files.snapshot", {})["data"]["code"] == "busy"
+            captured_digest = result["data"]["output"]["after"]["files"][0]["sha256"]
+            observation = backend.query("files.snapshot", dict(paths=["note.txt"]))
+            assert observation["type"] == "query_result", observation
+            assert observation["data"]["completeness"] == "partial"
+            assert observation["data"]["data"]["files"] == result["data"]["output"]["after"]["files"]
+            (root / "note.txt").write_text("external\n")
+            (root / "other.R").write_text("print(42)\n")
+            current = backend.query("files.read_text", dict(path="note.txt"))
+            assert current["type"] == "query_result", current
+            assert current["data"]["data"]["fragments"][0]["text"] == "external\n"
+            assert current["data"]["data"]["file"]["sha256"] != captured_digest
+            assert backend.query("files.read_text", dict(path="other.R"))["data"]["data"]["fragments"][0]["text"] == "print(42)\n"
+            assert backend.query("files.read_text", dict(path="note.txt", expected_sha256=captured_digest))["data"]["code"] == "content_changed"
             release = backend.send("release")
             assert backend.reply(release)["data"]["code"] == "busy"
-            pending = backend.invoke(patch("after", "not-written"), "pending")
+            pending = backend.invoke(patch("external", "not-written"), "pending")
             cancel = backend.send("cancel", dict(operation_id="pending"))
             responses = {frame["request"]: frame["body"] for frame in [backend.receive(), backend.receive()]}
             assert responses[cancel] == dict(type="cancel_acknowledged", data=dict(operation_id="pending", confirmed=False))
             assert responses[pending["request"]]["data"]["outcome"] == "cancelled"
+            assert (root / "note.txt").read_text() == "external\n"
             wrong = dict(operation_id="original", binding=copy.deepcopy(original["binding"]), outcome="succeeded")
             wrong["binding"]["target"] = "/other"
             request = backend.send("operation_settled", wrong)
@@ -162,10 +175,10 @@ def run(binary):
             backend.settle(pending, "cancelled")
             backend.settle(original, "succeeded")
             backend.settle(original, "succeeded")
-            stale = backend.invoke(patch("after", "not-written"), "stale", [dict(kind="file.sha256", subject="note.txt", expected="sha256:" + hashlib.sha256(b"before\n").hexdigest())])
+            stale = backend.invoke(patch("external", "not-written"), "stale", [dict(kind="file.sha256", subject="note.txt", expected="sha256:" + hashlib.sha256(b"before\n").hexdigest())])
             assert backend.reply(stale["request"])["data"]["outcome"] == "failed"
             backend.settle(stale, "failed")
-            assert (root / "note.txt").read_text() == "after\n"
+            assert (root / "note.txt").read_text() == "external\n"
             release = backend.send("release")
             assert backend.reply(release) == dict(type="released")
             backend.end()
@@ -198,7 +211,7 @@ def run(binary):
                     assert (root / "note.txt").read_text() == "after\n"
             finally:
                 backend.cleanup()
-    print("Files executable protocol passed: protected paths, settlement fences, cancellation truth, duplicate refusal, foreign identity and disconnected pending work.")
+    print("Files executable protocol passed: observations before settlement, external changes, protected paths, write fences, cancellation truth, duplicate refusal, foreign identity and disconnected pending work.")
 
 
 if __name__ == "__main__":

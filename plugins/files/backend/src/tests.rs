@@ -129,7 +129,7 @@ async fn trusted_paths_scopes_and_typed_text_observations() {
 }
 
 #[tokio::test]
-async fn original_settlement_holds_the_lane_and_pending_cancellation_does_not_write() {
+async fn original_settlement_fences_writes_without_blocking_observations() {
     let (_temp, owner, root) = fixture();
     fs::write(format!("{root}/note.txt"), "before\n").unwrap();
     let patch = "diff --git a/note.txt b/note.txt\n--- a/note.txt\n+++ b/note.txt\n@@ -1 +1 @@\n-before\n+after\n";
@@ -162,13 +162,19 @@ async fn original_settlement_holds_the_lane_and_pending_cancellation_does_not_wr
         "after\n"
     );
     assert!(!owner.ready_to_release());
+    let (current, completeness) = owner
+        .query(&call(
+            "files.snapshot",
+            json!({"paths":["note.txt"]}),
+            &root,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(completeness, ObservationCompleteness::Partial);
     assert_eq!(
-        owner
-            .query(&call("files.snapshot", json!({}), &root, None))
-            .await
-            .unwrap_err()
-            .code,
-        "busy"
+        current["files"],
+        result.output.as_ref().unwrap()["after"]["files"]
     );
     let pending = call(
         "files.apply_patch",
@@ -217,6 +223,70 @@ async fn original_settlement_holds_the_lane_and_pending_cancellation_does_not_wr
             operation_id: OperationId::new("stale").unwrap(),
             binding: stale.binding,
             outcome: PluginOutcome::Failed,
+        })
+        .unwrap();
+    assert!(owner.ready_to_release());
+}
+
+#[tokio::test]
+async fn observations_after_an_unsettled_patch_accept_external_changes() {
+    let (_temp, owner, root) = fixture();
+    fs::write(format!("{root}/note.txt"), "before\n").unwrap();
+    fs::write(format!("{root}/other.R"), "print(42)\n").unwrap();
+    let original = call(
+        "files.apply_patch",
+        json!({"patch":"diff --git a/note.txt b/note.txt\n--- a/note.txt\n+++ b/note.txt\n@@ -1 +1 @@\n-before\n+after\n"}),
+        &root,
+        Some("original"),
+    );
+    owner.admit(&original).unwrap();
+    let receipt = owner.invoke(&original, watch::channel(false).1).await;
+    assert_eq!(receipt.outcome, PluginOutcome::Succeeded);
+    let captured = receipt.output.as_ref().unwrap()["after"]["files"][0]["sha256"].clone();
+
+    fs::write(format!("{root}/note.txt"), "external\n").unwrap();
+    let (current, completeness) = owner
+        .query(&call(
+            "files.read_text",
+            json!({"path":"note.txt"}),
+            &root,
+            None,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(completeness, ObservationCompleteness::Partial);
+    assert_eq!(current["fragments"][0]["text"], "external\n");
+    assert_ne!(current["file"]["sha256"], captured);
+    assert!(!owner.ready_to_release());
+    assert_eq!(
+        owner
+            .query(&call(
+                "files.read_text",
+                json!({"path":"note.txt","expected_sha256":captured}),
+                &root,
+                None
+            ))
+            .await
+            .unwrap_err()
+            .code,
+        "content_changed"
+    );
+    let other = owner
+        .query(&call(
+            "files.read_text",
+            json!({"path":"other.R"}),
+            &root,
+            None,
+        ))
+        .await
+        .unwrap()
+        .0;
+    assert_eq!(other["fragments"][0]["text"], "print(42)\n");
+    owner
+        .settle(&OperationSettlement {
+            operation_id: OperationId::new("original").unwrap(),
+            binding: original.binding,
+            outcome: PluginOutcome::Succeeded,
         })
         .unwrap();
     assert!(owner.ready_to_release());

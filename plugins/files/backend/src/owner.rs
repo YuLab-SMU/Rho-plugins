@@ -10,7 +10,7 @@ use std::{
     path::Path,
     sync::{Arc, Mutex, OnceLock},
 };
-use tokio::sync::{OwnedMutexGuard, watch};
+use tokio::sync::{OwnedMutexGuard, RwLock, watch};
 
 pub const MAX_ACCEPTED: usize = 32;
 const MAX_QUERY_BYTES: usize = 512 * 1024;
@@ -102,7 +102,10 @@ pub struct Owner {
     root: String,
     runtime: OnceLock<GitProject>,
     paths: OnceLock<WorkspacePaths>,
+    // Serialize managed writes until settlement; observations do not use this fence.
     lane: Arc<tokio::sync::Mutex<()>>,
+    // Protect observations only while a managed patch is actually touching disk.
+    native_access: RwLock<()>,
     accepted: Mutex<BTreeMap<String, Accepted>>,
 }
 impl Owner {
@@ -120,6 +123,7 @@ impl Owner {
             runtime: OnceLock::new(),
             paths: OnceLock::new(),
             lane: Arc::new(tokio::sync::Mutex::new(())),
+            native_access: RwLock::new(()),
             accepted: Mutex::new(BTreeMap::new()),
         })
     }
@@ -220,15 +224,6 @@ impl Owner {
             ));
         }
         let runtime = self.runtime()?;
-        if call
-            .binding
-            .capability
-            .id
-            .as_str()
-            .starts_with("files.context.")
-        {
-            return Ok((self.context(call).await?, ObservationCompleteness::Complete));
-        }
         if call.binding.capability.id.as_str() == "files.prepare_patch" {
             let request: PluginPreflightRequest = decode(&call.arguments)?;
             if request.capability.id.as_str() != "files.apply_patch"
@@ -273,12 +268,19 @@ impl Owner {
                 ObservationCompleteness::Complete,
             ));
         }
-        let _lane = self.lane.try_lock().map_err(|_| Failure {
+        let _native = self.native_access.try_read().map_err(|_| Failure {
             code: "busy",
-            message:
-                "Files is applying or settling an original patch; no new observation was submitted"
-                    .into(),
+            message: "Files is applying a native patch; no new observation was submitted".into(),
         })?;
+        if call
+            .binding
+            .capability
+            .id
+            .as_str()
+            .starts_with("files.context.")
+        {
+            return Ok((self.context(call).await?, ObservationCompleteness::Complete));
+        }
         let data = match call.binding.capability.id.as_str() {
             "files.snapshot" => {
                 let mut args = decode(&call.arguments)?;
@@ -402,7 +404,15 @@ impl Owner {
     ) -> PluginCommitPlan {
         let acquiring = self.lane.clone().lock_owned();
         let lane = tokio::select! { lane = acquiring => Some(lane), _ = cancelled(&mut cancellation) => None };
-        let plan = if lane.is_none() || *cancellation.borrow() {
+        let native = if lane.is_some() && !*cancellation.borrow() {
+            tokio::select! {
+                native = self.native_access.write() => Some(native),
+                _ = cancelled(&mut cancellation) => None,
+            }
+        } else {
+            None
+        };
+        let plan = if native.is_none() || *cancellation.borrow() {
             PluginCommitPlan {
                 outcome: PluginOutcome::Cancelled,
                 output: None,
@@ -415,6 +425,8 @@ impl Owner {
         } else {
             self.apply(call).await
         };
+        // Current-state reads need no journal acknowledgement or attribution proof.
+        drop(native);
         // Returning a result is not the journal's settlement acknowledgement.
         let mut accepted = self.accepted.lock().unwrap();
         let entry = accepted

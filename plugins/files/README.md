@@ -10,6 +10,15 @@ the ordinary package is the sole filesystem/Git implementation. The backend
 returns commit plans to the same Host Operation gateway; it has no journal of its
 own. A native result retains its execution lane until exact original settlement.
 
+The write lane and native disk access have different lifetimes. Bounded reads
+share native access and pause only while this owner is executing a patch. Once
+the native attempt returns, reads can observe current files even while its Host
+settlement is pending. Later external changes are new observations; they do not
+rewrite the retained patch result, confirm its journal outcome or prove attribution.
+Subsequent managed patches and instance release remain fenced until settlement.
+This coordination does not lock out external file writers or make a multi-file
+observation an atomic snapshot.
+
 Native reads retain normalized project roots, protected-path exclusions, bounded
 pages, UTF-8 positions, hashes and native file identities. Changed or replaced text
 produces typed diagnostics. Git reads and patches retain their existing command
