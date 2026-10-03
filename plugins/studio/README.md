@@ -1,5 +1,9 @@
 # Plugin Studio
 
+Pending [capability transfer requirements](MIGRATION.md) specify the development
+backend, retained content and acceptance needed when Core exits these workflows.
+The behavior below describes the current Core-backed UI, not that migration.
+
 An ordinary removable UI plugin using the public protocol and UI SDK. Open its
 `studio` contribution with empty configuration. Management grants are explicit: scenario preparation, application, instance activation, test creation and view opening can delegate the standard declared scopes to selected packages; Studio has no direct scientific operation grant.
 Choose an installed revision and an existing development branch, or create a new

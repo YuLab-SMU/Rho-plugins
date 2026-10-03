@@ -8,6 +8,25 @@ The public core lives in [Rho-core](https://github.com/YuLab-SMU/Rho-core);
 the application and coordinated development entry live in
 [Rho](https://github.com/YuLab-SMU/Rho).
 
+## Planned capability transfers from Core
+
+The receiving owners keep their requirements alongside their source:
+
+| Owner | Required capability preservation |
+| --- | --- |
+| [Studio](plugins/studio/MIGRATION.md) | Source editing, builds, fixture previews, disposable backend tests and development drafts |
+| [Manager](plugins/manager/MIGRATION.md) | Scenario definitions, history, preparation and composition orchestration |
+| [Editor](plugins/editor/MIGRATION.md) | Document identity, acknowledged drafts, external-file conflicts and public editing actions |
+| [Console](plugins/console/MIGRATION.md) | Command input, acknowledged view state and original execution continuity |
+
+These are pending owner requirements, not completed backend or data migrations.
+Studio and Manager currently have no backend. Core-only removal can finish
+independently; a product capability remains pending until its receiving flow is
+verified. Layout and generic presentation persistence belong to the application
+shell; files, R and the Core journal retain their existing ownership.
+
+## Development
+
 ```sh
 npm ci --ignore-scripts
 node scripts/check.mjs

@@ -1,5 +1,9 @@
 # Console
 
+Pending [input and view-state transfer requirements](MIGRATION.md) preserve
+acknowledged command input and execution continuity as Core presentation state
+contracts change. They do not claim a new storage path is implemented.
+
 An ordinary UI-only plugin bound to one exact R backend instance. View configuration
 contains `source: InstanceRef`; a different revision or instance is never selected
 implicitly. Open, save and close use the same public view lifecycle as other plugins.

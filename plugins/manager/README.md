@@ -1,5 +1,9 @@
 # Plugin manager
 
+Pending [scenario and composition transfer requirements](MIGRATION.md) assign the
+future backend and preservation of definitions, partial preparations and history.
+The behavior below describes the current Core-backed UI, not that migration.
+
 An ordinary, independently built UI plugin for installed revisions, retained
 instances and per-window scenarios, following approved Paper PS01/02/06/07.
 It uses only the public protocol and UI SDK, and the same Host ports as CLI/MCP.
