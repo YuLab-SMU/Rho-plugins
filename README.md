@@ -2,18 +2,19 @@
 
 This repository owns scientific implementations, domain contracts, native
 adapters, methods and optional views. A reusable Agent evaluation and improvement
-plugin has also been selected: it will organize trials and call owner-supplied
-checkers, while scientific semantics remain with each domain owner and Core
-contract regressions remain in Core. This is a design decision; the shared plugin
-and improvement workflow have not been implemented. See the
+plugin has also been selected. Its [evaluation entry](plugins/agent-eval/README.md)
+now owns the migrated Claude Code evaluator and invokes the existing R artifact
+checker through the same entry. Scientific semantics remain with each domain
+owner and Core contract regressions remain in Core. Candidate improvement,
+hillclimbing and application installation remain unimplemented. See the
 [evaluation boundary](docs/REBUILD.md#agent-评估与改进插件). The new
 [Rho-core](https://github.com/YuLab-SMU/Rho-core) provides selected managed
 execution through a library, local host and CLI. The
 [Rho application](https://github.com/YuLab-SMU/Rho) owns composition and presentation.
 
 The former plugin source has been backed up on the local branch
-`codex/legacy-plugins-before-rebuild`. New work proceeds on `main`; this planning
-step has not cleared its old source tree or rebuilt the plugins. The archive
+`codex/legacy-plugins-before-rebuild`. New work proceeds on `main`; the evaluation
+slice has started, while the retained scientific source tree remains. The archive
 branch has not been pushed. The existing sixteen packages and their Core
 dependency snapshots describe the old implementation, not an accepted new-Core
 composition or a requirement to recreate all packages.
