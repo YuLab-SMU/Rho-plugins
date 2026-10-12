@@ -1,7 +1,12 @@
 # Rho official plugins
 
 This repository owns scientific implementations, domain contracts, native
-adapters, methods and optional views. The new
+adapters, methods and optional views. A reusable Agent evaluation and improvement
+plugin has also been selected: it will organize trials and call owner-supplied
+checkers, while scientific semantics remain with each domain owner and Core
+contract regressions remain in Core. This is a design decision; the shared plugin
+and improvement workflow have not been implemented. See the
+[evaluation boundary](docs/REBUILD.md#agent-评估与改进插件). The new
 [Rho-core](https://github.com/YuLab-SMU/Rho-core) provides selected managed
 execution through a library, local host and CLI. The
 [Rho application](https://github.com/YuLab-SMU/Rho) owns composition and presentation.
