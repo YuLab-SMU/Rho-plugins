@@ -1,26 +1,27 @@
 # Rho-plugins：真实领域试用与重建边界
 
-决策日期：2026-10-11。当前动作是保留旧代码、落实重建规则，并用真实 R 分析检查
-新 Core 的受管价值。领域试用已在下述限定范围验收；评估插件切片已完成迁移，
-旧科学插件的重建尚未开始。
+决策日期：2026-10-11；主分支边界更新：2026-10-12。先归档旧代码、落实重建规则，
+再用真实 R 分析检查新 Core 的受管价值。领域试用和评估插件迁移已在限定范围
+验收；main 已移除旧资产，新的科学插件全面重写尚未开始。
 2026-10-12 补充选择：Agent 评估与改进实验作为可供其他插件复用的独立插件能力；
 随后按用户要求迁入现有评估工具，并交付公共二进制调用与 R 产物核验复用；
 候选改进、盲测管理和应用接入尚未实现。
 
 ## 旧实现与主分支
 
-旧源码已在本地分支 `codex/legacy-plugins-before-rebuild` 保留。分支尚未推送；创建
-本地分支、提交文档与发布源码是不同结果。旧提交、分支来源和发布状态通过 Git 核对，
-不在工作规则中维护提交清单。
+2026-10-12 用户明确要求主分支只保留新插件仓库内容。完整受控旧源码已发布到
+[`codex/legacy-plugins-before-rebuild`](https://github.com/YuLab-SMU/Rho-plugins/tree/codex/legacy-plugins-before-rebuild)，
+远端分支头和根树已与本地备份核对。从 main 移除的旧文件，其内容摘要与文件模式
+全部与该备份一致；本地忽略的构建缓存、证据与用户数据不属于源码备份。
 
-后续新工作在 `main` 按选定流程交付。当前主分支仍保留旧源码，尚未清空或重新实现。
-十六个旧包、旧测试和旧设计是可查的历史材料，不是必须恢复的产品清单。仅在一个具体
-需求或失败需要回答时查看旧实现，不按旧子系统地图搬运代码。
+`main` 现在只保留已选择的新工作：Agent 评估插件、真实 R 分析配方与领域核验、
+验收记录和当前仓库说明。旧十六包、旧 Core 的 `crates/`、`sdk/`、`core-sdk.json`、
+旧 Cargo／前端清单、构建脚本、Jet 源码与补丁、旧运行材料和技能均离开 main。
+此变化使用普通后续提交，保留 Git 历史；归档只用于回答具体需求或失败。
 
-`crates/`、`sdk/`、`core-sdk.json` 与现有构建流程使用旧 Core 的导出依赖。它们不能
-代表新 Core 的接口。本轮不刷新这些快照，不更新应用锁，不为旧消费者提供兼容层，
-不迁移、导出或清理旧 catalog、项目和已保存内容。未来确有旧数据需求时另行选择；
-本轮使用新建项目与存储。
+旧包与旧设计不是必须恢复的产品清单。后续工作继续使用选定的公共 Core CLI、
+R／原生工具及普通文件，不刷新旧快照、更新应用锁、提供兼容层或迁移旧 catalog。
+科学插件全面重写、统一装载和应用接入仍按真实需求分别选择。
 
 ## 先跑真实分析
 
@@ -44,8 +45,8 @@ leave-one-donor-out 检查结果对单个供体的敏感性。使用维护中的
 分析所需时间来自实际计算；不添加休眠来伪造长任务。输出文本不自动等于产物已经
 完整保存；观察到当前文件也不自动证明它是某个旧操作的历史产物。来源与因果只按
 实际记录表达。等待者中断、分析中断、宿主崩溃和 R 会话恢复分别验收，不扩大 Core
-[现有受管运行契约](../../Rho-core/docs/MANAGED-RUN.md)与
-[宿主／CLI 契约](../../Rho-core/docs/HOST-CLI.md)的保证。
+[现有受管运行契约](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/MANAGED-RUN.md)与
+[宿主／CLI 契约](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md)的保证。
 
 Core 自带的分析试点和夹具可以证明其公开调用行为，不能替代这项领域 Owner 的真实
 结果与产物核验。构建通过、退出码成功、Agent 自述和旧应用验收也不替代这些证据。
@@ -183,6 +184,6 @@ Owner 分工和发布边界是本项目的选择，不声称文章或现有实�
 行为检查，Cargo 构建和测试串行运行；复用适用的已验证产物。文档变更检查链接和
 渲染内容。保留失败、超时和未执行事实，不为得到全绿反复重跑或放宽权限。
 
-旧 [Studio](../plugins/studio/MIGRATION.md)、[Manager](../plugins/manager/MIGRATION.md)、
-[Editor](../plugins/editor/MIGRATION.md) 与 [Console](../plugins/console/MIGRATION.md)
-移交清单仅供具体需求参考。本轮不按这些历史清单建立后端或迁移旧状态。
+旧 Studio、Manager、Editor 与 Console 移交清单只在
+[归档插件目录](https://github.com/YuLab-SMU/Rho-plugins/tree/codex/legacy-plugins-before-rebuild/plugins)
+保留，供具体需求参考。当前不按这些历史清单建立后端或迁移旧状态。

@@ -1,83 +1,61 @@
-# Rho official plugins
+# Rho plugins
 
-This repository owns scientific implementations, domain contracts, native
-adapters, methods and optional views. A reusable Agent evaluation and improvement
-plugin has also been selected. Its [evaluation entry](plugins/agent-eval/README.md)
-now owns the migrated Claude Code evaluator and invokes the existing R artifact
-checker through the same entry. Scientific semantics remain with each domain
-owner and Core contract regressions remain in Core. Candidate improvement,
-hillclimbing and application installation remain unimplemented. See the
-[evaluation boundary](docs/REBUILD.md#agent-评估与改进插件). The new
-[Rho-core](https://github.com/YuLab-SMU/Rho-core) provides selected managed
-execution through a library, local host and CLI. The
-[Rho application](https://github.com/YuLab-SMU/Rho) owns composition and presentation.
+This repository owns domain methods, native preconditions, scientific artifact
+checks and reusable Agent evaluation. [Rho-core](https://github.com/YuLab-SMU/Rho-core)
+owns generic managed execution through its public CLI; the
+[Rho application](https://github.com/YuLab-SMU/Rho) owns component selection,
+assembly and presentation.
 
-The former plugin source has been backed up on the local branch
-`codex/legacy-plugins-before-rebuild`. New work proceeds on `main`; the evaluation
-slice has started, while the retained scientific source tree remains. The archive
-branch has not been pushed. The existing sixteen packages and their Core
-dependency snapshots describe the old implementation, not an accepted new-Core
-composition or a requirement to recreate all packages.
+`main` contains the selected rebuilt work. The complete former implementation is
+preserved on the published
+[`codex/legacy-plugins-before-rebuild`](https://github.com/YuLab-SMU/Rho-plugins/tree/codex/legacy-plugins-before-rebuild)
+branch. Its sixteen packages, Core dependency snapshots, build tools, Jet source
+and patches are historical references, not dependencies of this branch or a list
+of features to restore.
 
-Read the [rebuild plan](docs/REBUILD.md) and
-[real-R domain trial](examples/real-r-analysis/README.md). The selected trial uses
-the public airway/GSE52778 RNA-seq data, a donor-paired DESeq2 analysis and
-leave-one-donor-out checks plus 200 model-conditional count simulations. The
-[observed acceptance](examples/real-r-analysis/ACCEPTANCE.md) records a 9-minute
-23-second native run, continuation of the original request, verified retrieval,
-independent arithmetic checks and native model observation. Its scientific limits
-and original failures remain explicit. Only demonstrated gaps select subsequent
-plugin or application work; this plan assumes no new SDK or plugin protocol.
+## Available work
 
-## Historical capability-transfer references
+| Entry | What it does | Current boundary |
+| --- | --- | --- |
+| [Agent evaluation plugin](plugins/agent-eval/README.md) | Runs explicit public Core CLI trials, invokes domain-owned checkers and regrades retained evidence | Reusable Python source plugin; no application installation or automatic improvement loop |
+| [Real R analysis recipe](examples/real-r-analysis/README.md) | Paired airway/GSE52778 DESeq2 analysis, donor sensitivity, conditional simulations and artifact checks | Real batch consumer and domain acceptance; no interactive R-memory recovery |
 
-These documents record the former Core-reduction plan and old consumers. They
-remain available to answer concrete requirements; they do not select rebuild
-work or require legacy-data migration:
+The [current status](docs/STATUS.md) distinguishes implementation, verification
+and remaining design. The [rebuild plan](docs/REBUILD.md) records ownership and
+why new methods and evaluation stay outside Core. Execution success, domain
+checks and model judgments remain separate facts.
 
-| Owner | Required capability preservation |
-| --- | --- |
-| [Studio](plugins/studio/MIGRATION.md) | Source editing, builds, fixture previews, disposable backend tests and development drafts |
-| [Manager](plugins/manager/MIGRATION.md) | Scenario definitions, history, preparation and composition orchestration |
-| [Editor](plugins/editor/MIGRATION.md) | Document identity, acknowledged drafts, external-file conflicts and public editing actions |
-| [Console](plugins/console/MIGRATION.md) | Command input, acknowledged view state and original execution continuity |
+## Run and verify
 
-No receiving flow is claimed complete by keeping these documents. New domain
-work does not require Studio, Manager, Editor, Console or their old state models.
-
-## Legacy development reference
-
-The following commands build or check the retained implementation against its
-old pinned public dependency. They do not verify compatibility with rebuilt Core
-or run the new domain trial. Use the trial's own instructions for selected work.
+The evaluation entry uses Python's standard library. Core trials require an
+explicitly selected public `rho-core` binary; model trials additionally use the
+caller's configured Claude Code CLI. Neither requires Core source, a legacy SDK,
+Rust build tools or the former plugin protocol.
 
 ```sh
-npm ci --ignore-scripts
-node scripts/check.mjs
-node scripts/build.mjs files /new/external/files-package
-node scripts/build.mjs r /new/external/r-package
+python3 plugins/agent-eval/run.py --help
+python3 plugins/agent-eval/run.py core-agent --binary /absolute/rho-core --baseline --trials 1
+python3 plugins/agent-eval/run.py r-artifacts /absolute/airway/artifacts
+
+python3 -m unittest discover -s plugins/agent-eval -p 'test_*.py' -v
+RHO_EVAL_CORE_BINARY=/absolute/rho-core python3 -m unittest discover -s plugins/agent-eval/core-agent -p 'test_*.py' -v
 ```
 
-The normal builder reuses this repository's Cargo cache. `--independent` additionally
-builds the selected self-contained source package. UI tool dependencies live in
-this repository's `node_modules`, independently of the application's tools.
+The R recipe documents its existing R/package prerequisites and native resource
+limits. Checks can read retained artifacts without rerunning analysis or starting
+Core. Outputs and local evidence stay in ignored `target/` or a caller-selected
+new directory; tracked acceptance records do not publish those private files.
+See [evaluation acceptance](plugins/agent-eval/ACCEPTANCE.md) and
+[R fact acceptance](examples/real-r-analysis/ACCEPTANCE.md) for actual checks,
+original failures and scientific limits.
 
-`crates/` and `sdk/` contain the former public dependency pinned by `core-sdk.json`.
-Keep these snapshots unchanged during planning and the real-domain trial; do not
-refresh them from rebuilt Core. A future selected integration defines its own
-public dependency before any consumer update. Native scientific libraries, Jet
-and its ordered patches are owned here.
+## Subsequent work
 
-Use focused tests for the changed owner, for example:
+Priorities are R batch recipes, scientific artifact provenance/integrity/retrieval,
+and bounded evaluation improvement. Candidate optimization, Git rollback,
+development/validation/blind-test management, uniform plugin loading and new
+application integration remain unimplemented. Select a new capability from an
+observed user gap and fix it in its owner.
 
-```sh
-cargo test -p rho-files-backend --locked
-python3 /absolute/files-package/tests/protocol.py /absolute/files-package/dist/rho-files-backend
-```
-
-The old application connection tests live in `Rho/scripts/test-composition.mjs`
-and consume old built artifacts. Their historical results do not establish a
-new-Core integration. Whole-product runners, package-count and monorepo-path
-checks are not rebuild prerequisites. Component READMEs describe the retained
-protocol behavior; use them only for concrete owner requirements. No runtime or
-user installation is started by a build.
+Source is licensed under [AGPL-3.0](LICENSE). Current handling and reporting rules
+are in [Privacy](PRIVACY.md) and [Security](SECURITY.md).
