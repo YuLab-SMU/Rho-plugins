@@ -1,163 +1,110 @@
-# Rho-plugins: functional components
+# Component architecture
 
-Selected design: 2026-10-13. Rho-core is the intelligent system's foundation;
-Rho is the application container; Rho-plugins owns actual functional components.
-This page records the selected direction, not an implemented plugin runtime or
-application composition. See [Status](STATUS.md) for delivered behavior and
-[Rebuild](REBUILD.md) for the retained domain evidence.
+Rho-core is the execution foundation, Rho is the application container and
+Rho-plugins owns the actual functional components. Components serve headless
+callers and application users while retaining the same native behavior and facts.
+[Status](STATUS.md) distinguishes delivered consumers from this selected design.
 
-## Ownership and entry points
+## Components and entries
 
-A component may provide an Agent, editor, file operations, data table, plot,
-scientific method, evaluation or another real capability. Scientific components
-retain their methods, native preconditions, artifact interpretation and checks.
-The broader component model does not transfer those semantics to the container.
+A component provides a concrete capability such as an Agent, editor, file
+operation, table, plot, scientific method or evaluation. It owns its implementation,
+inputs, native preconditions, effects, resources, results and checks.
 
-CLI, Skills, MCP and UI are optional entry points to the same functionality.
-Components need only the entries required by their consumers. A command,
-MCP tool and UI action that perform the same operation must reuse the component's
-implementation, preconditions and result facts. Managed execution entries also
-preserve the original request identity.
-Skills supply instructions; they do not independently grant authority or execute
-a second scientific path.
+CLI, Skills, MCP and UI are optional entries. A component provides the entries its
+consumers need. Entries performing the same operation reuse its behavior and
+conditions; managed execution entries also preserve the original request identity.
+Skills supply instructions, and do not grant additional authority.
 
-Headless and application consumption are both supported design goals. A native
-component can use Core's public execution capability without a UI dependency;
-Rho can assemble its views and interaction. This does not require Core to load
-React, interpret plugin manifests or run the Agent's model loop. Core's current
-resident CLI is the demonstrated public connection, not its private socket wire.
+R, Python, Rust, TypeScript and maintained CLIs are valid implementation choices.
+Headless consumers can use Core's public resident CLI without a UI dependency.
+Rho can assemble component views and interactions. Core owns execution guarantees;
+it does not host React views or the Agent's model loop.
 
-R, Python, Rust, TypeScript, maintained CLIs and ordinary files remain valid
-implementation choices. Do not introduce a mandatory language runtime, Rust
-dynamic ABI, scientific WASM runtime or replacement native execution system.
+## Shared interaction concepts
 
-## Shared interaction semantics
+The initial composition uses four proposed concepts. Concrete schemas and
+versioning will be implemented with the selected consumer; no public SDK or universal
+loader is implied by this document.
 
-The selected composition needs four common concepts. Their exact schema and
-versioning will be implemented for a concrete consumer; this page does not create
-a new public protocol, SDK or universal loader.
-
-| Concept | Component responsibility | Application responsibility |
+| Concept | Component owns | Rho owns |
 | --- | --- | --- |
-| Action | Define input, native conditions, effects, results and cancellation semantics | Present and route the selected action with its existing authorization and scope |
-| Resource | Identify files, tables, plots, tasks or buffers and their source and validity | Pass resource references and display Owner facts |
-| Selection | Identify stable domain objects within a particular resource/content version | Propagate selection between participating views and Agent context |
-| View | Provide rendering, actions, subscriptions and release behavior | Place it in the workspace and manage focus, layout and window lifetime |
+| Action | Inputs, preconditions, effects, results and cancellation semantics | Presentation and routing within the existing authorization and scope |
+| Resource | Identity, source and validity of files, tables, plots, tasks and buffers | Passing references and displaying owner-provided facts |
+| Selection | Stable domain objects in a specific resource/content version | Linked views and explicit Agent context |
+| View | Rendering, actions, subscriptions and release behavior | Placement, focus, layout and windows |
 
-Selection uses domain identity, such as gene IDs in a particular analysis output,
-not a visible row index after sorting. A component checks that selected inputs
-still refer to valid content before applying an action. A buffer-local content
-version or artifact digest serves its particular resource; there is no global
-scientific revision.
+Selection refers to domain identities, such as genes in an analysis result,
+rather than a row's current display position. Owners validate resource identity
+and freshness before applying actions. Buffer versions and artifact digests serve
+their own resources; there is no global scientific revision.
 
-## State and lifecycle
+## State and lifetimes
 
-Each Owner retains its facts. Core owns its documented managed execution state;
-scientific components own native conditions, outputs and scientific checks; the
-editor owns unsaved buffers and content conflicts; the Agent component owns its
-session and model context; Rho owns layout, focus and application composition.
-An application store is not another execution journal or scientific database.
+Core owns managed execution facts. Scientific components own native state,
+artifacts, provenance and checks. Editors own logical buffers, unsaved content,
+local versions, undo and concurrent-write checks. Agent components own sessions
+and model context. Rho owns layout and composition; each view owns rendering,
+focus and cursor state.
 
-When assembling Rho, the resident Core Host must have a lifetime independent of
-its observing windows and renderer processes. Closing or releasing a view is
-distinct from cancelling a task or confirming that execution stopped. A new
-window queries the original request; uncertainty is preserved and does not cause
-automatic submission under a new request ID. Reading must not start or recover
-a runtime. Host shutdown and native-session recovery retain Core's actual limits.
+Detached views refer to the same logical resources. Detaching an editor must not
+create a second authoritative unsaved buffer. Layout restoration does not prove
+content saved, execution active or artifacts complete. Agent edits encounter the
+same buffer and conflict checks as user edits.
 
-Multi-window views share references to the same logical resources. Detaching an
-editor view does not create a second authoritative unsaved buffer. Layout restore
-does not prove content saved, a task running or an artifact complete. These
-properties need explicit acceptance in the chosen application combination.
+The resident Core Host has a lifetime independent of observing views and renderer
+processes. Closing a view or Agent session is distinct from task cancellation and
+confirmed execution stop. Reconnection queries the original request, preserves
+unknown outcomes and does not automatically replay work under a new identity.
+Reading must not start or recover a runtime. Host shutdown and native-session
+recovery retain the limits of Core's
+[managed execution](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/MANAGED-RUN.md)
+and [resident CLI](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md).
 
-See Core's [managed contract](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/MANAGED-RUN.md)
-and [Host/CLI contract](https://github.com/YuLab-SMU/Rho-core/blob/main/docs/HOST-CLI.md).
-Core stdout/stderr are bounded observations, not scientific artifact storage.
-Existing manifests, completion declarations, ordinary files and Owner checkers
-remain the scientific evidence path.
+Bounded stdout/stderr are execution observations. Scientific artifacts remain
+ordinary files with owner-defined manifests, completion declarations and checks.
+Execution completion, artifact completeness and scientific interpretation remain
+separate facts.
 
-## UI implementation and interoperability
+## Application surfaces
 
-Rho's selected container direction is Electron, React, TypeScript, Vite and
-Dockview. First-party functional views are selected and built with the
-application while their source and semantics remain owned by their components.
-This is a design choice; no React plugin package, docking implementation or
-Electron application currently exists on main.
+The selected Rho container uses Electron, React/TypeScript, Vite and Dockview.
+First-party components retain their source ownership and contribute trusted React
+views. Selected editing, table and plot views use CodeMirror 6, AG Grid Community
+and ECharts, preserving native scientific outputs and provenance. These choices
+are not implemented UI dependencies in this repository.
 
-The first composition selects CodeMirror 6 for editing, AG Grid Community for
-tables and ECharts alongside preserved native scientific outputs for plots.
-Avoid requiring commercial grid or docking features implicitly; acceptance must
-name the actual features and licensing of the chosen combination. These libraries
-are implementation choices, not mandatory dependencies of every component.
+Agent-composed views use a typed json-render catalog of registered components
+with explicit resource and action references. Schema validation does not establish
+authorization, resource freshness or scientific truth. Models do not supply
+privileged executable JavaScript. Independently supplied HTML views may use an
+isolated MCP Apps host with only the selected messages and permissions.
 
-There are three complementary view forms:
+Every entry applies the same mechanical checks of existing authorization,
+caller/project visibility and native conditions. Rho adds no further approval when
+the user's authorization covers the action. Models and retrieved content cannot
+broaden scope. Core caller namespaces are not authenticated principals; UI
+isolation does not sandbox native R/Python execution. Native programs retain the
+Host's OS authority. See [Privacy](../PRIVACY.md) and [Security](../SECURITY.md).
 
-- Trusted React views integrate with the application's theme, commands, selection
-  and layout for selected first-party functionality.
-- Agent-composed views use a typed catalog, with json-render as the selected
-  initial candidate. The Agent describes registered components and binds resource
-  and action references. Schema validation is separate from authorization,
-  stale-input checks and scientific validity; arbitrary generated privileged
-  JavaScript is not the selected integration path.
-- Independently supplied HTML views may use an isolated MCP Apps host when a
-  real consumer needs it. The host must expose only the selected messages and
-  permissions. An iframe or renderer boundary does not sandbox native R/Python
-  code or make every plugin safe to run.
+MCP can expose tools/resources. MCP Apps can expose isolated UI. AG-UI or A2UI
+adapters require a concrete Agent event or cross-client UI consumer. Portable
+Skills/MCP packaging can coexist with namespaced Rho extensions. These optional
+interfaces do not replace native facts or Core request identity.
+Rho's [technology direction](https://github.com/YuLab-SMU/Rho/blob/main/docs/TECHSTACK.md)
+records library choices, licensing and official references.
 
-An Agent, click or CLI command must encounter the same mechanical checks of the
-existing authorization, caller/project visibility and native preconditions.
-Models and retrieved content cannot broaden scope. The container does not add
-another approval to a request whose authorization already covers the action.
-Core caller namespaces are not authenticated principals or an OS sandbox. Native
-tools retain the Host's OS authority; UI isolation and bounded output retention do
-not add native containment. See the current [Privacy](../PRIVACY.md) boundary.
+## Joint acceptance
 
-MCP is an optional tool/resource interface; MCP Apps is an optional isolated UI
-interface; AG-UI may adapt a selected Agent's event stream; A2UI may serve a
-demonstrated cross-client declarative UI requirement. None replaces Core's
-request identity or scientific Owner facts. Agent Plugins packaging can expose
-portable Skills/MCP and namespaced Rho extensions, but is not itself Rho's
-functional component runtime.
+Scientific workbench interaction, freely composed views and Agent-driven UI evolve
+in the same vertical flow: an Agent selects a component action, native execution
+produces real resources, script/table/plot views share selection, views detach
+without losing unsaved content, and observers reconnect to the original task.
+The Agent then composes a further view from the same catalog and references.
+[Roadmap](ROADMAP.md#first-joint-flow) defines the acceptance conditions.
 
-Official references for these design choices:
-
-- [Electron security guidance](https://www.electronjs.org/docs/latest/tutorial/security)
-  and [Dockview licensing/features](https://dockview.dev/docs/overview/licence/).
-- [CodeMirror state/view model](https://codemirror.net/docs/ref/),
-  [AG Grid Community/Enterprise boundary](https://www.ag-grid.com/react-data-grid/community-vs-enterprise/)
-  and [ECharts events/actions](https://echarts.apache.org/handbook/en/concepts/event/).
-- [json-render catalog](https://json-render.dev/docs/catalog),
-  [MCP Apps specification](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx),
-  [AG-UI](https://docs.ag-ui.com/introduction), [A2UI](https://a2ui.org/) and
-  [Agent Plugins specification](https://agent-plugins.org/specification).
-
-## First integrated acceptance
-
-Natural-language interaction, linked scientific views and workspace composition
-must evolve together. The first selected application slice is:
-
-1. An Agent turns a concrete analysis request into the component's action and a
-   parameter view; execution uses the same native implementation and public Core
-   capability as a headless caller.
-2. The actual script, result table and plot share the analysis resources and
-   provenance. Selecting stable objects in either view updates the other view and
-   the Agent's explicit context.
-3. Docking and detaching views preserve selection, Unicode input, unsaved content
-   and undo behavior. Agent edits encounter the editor's buffer and conflict checks.
-4. Closing an observer and reconnecting find the original task and partial
-   results without replay. Execution completion, artifact completeness and
-   scientific checks are displayed separately.
-5. The Agent composes a further view using registered components and the same
-   resource/action references. A second domain component later tests whether
-   these semantics are reusable.
-
-This is a future acceptance flow, not a passed application test. Existing R and
-evaluation evidence can be reused within its recorded scope. Fresh execution uses
-disposable projects and owned Hosts; no user Host or R session is restarted.
-Before resource or performance claims, name the protected resource, configuration
-and exceeded-limit behavior, then measure the actual chosen combination.
-
-Each repository continues to deliver its selected owner boundary independently.
-Application assembly records immutable source and artifact identities, explicit
-local overrides and acceptance of the combination. A component regression pass
-does not prove the application composition, distribution or installation.
+This flow has not run. Existing component evidence can be reused only within its
+recorded scope. Assembly records immutable component identities, explicit local
+overrides and actual acceptance of the combination. Measure protected resources
+and configure exceeded-limit behavior before making performance or containment
+claims.

@@ -1,46 +1,56 @@
-# airway / GSE52778：真实领域试用的事实验收
+# Paired airway analysis acceptance
 
-验收日期：2026-10-11。研究问题是四个培养的人气道平滑肌供体细胞系，在控制供体
-差异后是否观察到地塞米松转录响应，以及估计对单一供体和拟合模型内计数变异的
-敏感性。数据、方法、来源与复现命令见 [README](README.md)。分析由插件仓库的
-领域消费者负责，外部 Codex Agent 使用现有 Core CLI；不是 Core 自带的科研夹具。
+Recorded execution: 2026-10-11. The research question concerns dexamethasone
+transcriptional response in four cultured human airway smooth-muscle donor cell
+lines, adjusted for donor differences, and sensitivity to one donor and conditional
+count variation. [README](README.md) defines data, method, provenance and commands.
+The domain consumer performed the analysis through the public Core CLI, with an
+external Codex Agent operating that interface.
 
-## 实际执行与接续
+## Execution and continuation
 
-- 原始数据为已安装 airway 1.28.0 的 63,677 × 8 整数矩阵，四个处理／未处理供体
-  对，总计 175,516,423 counts。Core 外独立读取的完整矩阵与受管分析导出 SHA-256
-  相同，不只比较样本数或总数。没有重新比对 FASTQ。
-- R 4.5.2、DESeq2 1.48.2；主分析 `~ cell + dex`、四次留一供体，以及 200 次全
-  16,139 基因 × 8 样本的负二项参数模拟重拟合。实际 R 运行 562.6595 秒，约
-  9 分 23 秒；时间来自拟合，没有延时填充。
-- 原请求 `dex-paired-bootstrap-001`，run `18dd91c642960ec0-44421.1`，R PID 44427。
-  等待客户端 SIGTERM 后退出 -15，lookup 仍找到这个活动 run/PID；运行中和结束后
-  的同身份 submit 都返回 existing。原生入口恰好一条，没有重派发或补造结果。
-- 接受的脚本与产物记录摘要均为
-  `5d4e1c20a4f6cf468ead65d5656729e0cb69e4df0562e65eeaf22a22e32024a9`。
-  终态 Code 0、已释放、无 unsaved；stdout 36,080 字节、stderr 7,600 字节全量
-  保留并读回，均 EOF、非 lossy。
-- 原目录与取回副本各 12/12 独立检查通过。产物目录共 33 个文件，manifest 列
-  31 项产物，合计 183,546,739 字节；另两项为 manifest 与完成标记。自己的 Host
-  正常退出，未强制终止，无未确认或仍开放请求，socket 已删除。
+- Installed airway 1.28.0 supplied 63,677 × 8 integer counts, four treated/untreated
+  donor pairs and 175,516,423 total counts. The independently read full matrix
+  outside Core and managed-analysis export had identical SHA-256, beyond matching
+  dimensions or sums. FASTQ reads were not realigned.
+- R 4.5.2 and DESeq2 1.48.2 ran the main `~ cell + dex` analysis, four donor-omission
+  fits and 200 negative-binomial simulations/refits over 16,139 genes × 8 samples.
+  Actual R execution was 562.6595 seconds, about 9 minutes 23 seconds, without delay
+  padding.
+- Request `dex-paired-bootstrap-001`, run `18dd91c642960ec0-44421.1`, R PID 44427.
+  The SIGTERM-interrupted wait client exited -15; lookup still found that active
+  run/PID. Same-identity submit during and after execution returned `existing`.
+  Exactly one native entry was observed, with no redispatch or reconstructed result.
+- Accepted script and artifact-record digest:
+  `5d4e1c20a4f6cf468ead65d5656729e0cb69e4df0562e65eeaf22a22e32024a9`.
+  Terminal state was Code 0, released, no `unsaved`; stdout 36,080 bytes and stderr
+  7,600 bytes were retained/read completely, both EOF and non-lossy.
+- Original and retrieved artifacts each passed 12/12 independent checks. The tree
+  contained 33 files: 31 manifested artifacts totaling 183,546,739 bytes, plus
+  manifest and completion marker. The owned Host exited normally, without forced
+  termination or unconfirmed/open requests; its socket was removed.
 
-可复核的本地证据保存在 `target/real-r-analysis/airway-03/`：`analysis.R`、
-`entries.jsonl`、`evidence/` 的原始 CLI 回执与两份核验报告、`artifacts/` 的取回
-产物及 `negative-checks/` 的失败反例。原始试验目录为 `/private/tmp/rho-airway-03`。
-这些忽略目录中的文件未发布，不是永久远端存档；本文保留独立可读的结论。
+Local evidence is at `target/real-r-analysis/airway-03/`: `analysis.R`,
+`entries.jsonl`, original CLI receipts and both checker reports in `evidence/`,
+retrieved `artifacts/` and failed counterexamples in `negative-checks/`.
+The original experiment root was `/private/tmp/rho-airway-03`.
+Ignored local files are not published or permanent remote archives; this record
+retains independently readable observations and limits.
 
-## 数值观察与科学边界
+## Numerical observations
 
-固定预过滤保留 16,139 个基因，主分析全部有 p 值、系数拟合均收敛；BH < 0.05
-得到 4,068 个基因。独立 Python 检查器从输入重算五个模型的 ratio 归一化与 baseMean，
-从导出的 LFC／SE／p 值重算 Wald 统计量、正态双尾与 BH，并核对配对、基因宇宙
-及敏感性汇总。
+The fixed prefilter retained 16,139 genes. Every main-analysis gene had a p-value
+and converged coefficient fit; 4,068 had BH-adjusted p < 0.05. The independent
+Python checker recomputed ratio normalization and baseMean for all five models,
+Wald statistics, normal two-tail p-values and BH from exported LFC/SE/p-values,
+and checked pairing, gene universe and sensitivity summaries.
 
-主分析显著的 4,068 个基因在四次留一供体分析中方向均一致，其中 2,056 个在四次
-中仍满足 BH < 0.05。方向一致不代表精度不变；六样本敏感性拟合的显著性也不能
-当作新的独立生物学重复。下列六个预选响应基因在五次真实拟合中均收敛且为正。
+All 4,068 significant main-analysis genes retained direction in all four
+leave-one-donor-out fits; 2,056 remained BH < 0.05 in all four. Stable direction
+does not establish stable precision or independent replication. All six declared
+response genes converged and had positive effects in all five real-data fits.
 
-| 基因 | 主分析 log2 fold change | 条件模拟 2.5% | 条件模拟 97.5% | 有限且收敛／请求次数 | 正向次数 |
+| Gene | Main log2 fold change | Conditional 2.5% | Conditional 97.5% | Finite/converged out of requested | Positive estimates |
 | --- | --- | --- | --- | --- | --- |
 | CRISPLD2 | 2.6273 | 2.2756 | 2.9975 | 200/200 | 200 |
 | DUSP1 | 2.9439 | 2.7054 | 3.1518 | 200/200 | 200 |
@@ -49,45 +59,65 @@
 | PER1 | 3.1878 | 2.8741 | 3.5041 | 200/200 | 200 |
 | TSC22D3 | 3.1862 | 2.5122 | 3.8937 | 200/200 | 200 |
 
-CRISPLD2 的主分析 BH 为 1.6263 × 10^-45，留一供体 log2 fold change 范围
-2.4769–2.8861。正向与原研究观察一致，不是新发现的通过阈值，也不把原论文使用
-不同定量方法得到的 316 个差异基因作为本分析的目标。
+CRISPLD2 main-analysis BH was 1.6263 × 10^-45; donor-omission log2 fold changes
+ranged 2.4769–2.8861. Direction matched the original study's observations, without
+becoming a discovery acceptance threshold. The original paper's 316-gene result
+from a different quantification pipeline was not this analysis's target.
 
-条件分位数来自固定四供体、拟合均值／离散度下的独立基因计数模拟。它们不是
-供体种群或临床响应置信区间，不增加真实供体，不验证负二项假设或基因相关结构。
-独立检查核对 64,556 个拟合均值对比、首个完整模拟矩阵摘要、1,200 条标志基因
-记录的 Wald 数值与 type-7 分位数／方向计数。未独立重拟合 DESeq2、重放 R RNG、
-重算每次模拟的全基因 BH，或重算没有导出完整矩阵的其余 199 个矩阵摘要。
+## Scientific and verification limits
 
-另用同版本 R 原生读回五个 RDS，121/121 检查通过：完整 counts、配对、设计、
-归一化、离散度、系数收敛、六列原生结果与导出 CSV 一致；实际 full 模型保存的
-均值和离散度与模拟参数一致。这是原生观察，不能充作独立统计 oracle。
+Conditional quantiles use the fixed four donors and fitted means/dispersions with
+independent gene count simulations. They are not donor-population or clinical
+confidence intervals, add no biological replication, and validate neither the
+negative-binomial assumption nor gene correlation structure.
 
-四页科学图全部检查：MA 图用边界三角表示超出显示范围的点；PCA 明确为
-log2(normalized count + 1)，PC1 33.5%、PC2 25.0%，N080611 的供体差异可见。
-六基因配对计数图全部上升；条件模拟图红线为主估计，蓝虚线为条件分位数。
-无缺字、裁切或重叠；未因 PCA 中的供体差异事后删除样本。
+Independent checks compared 64,556 fitted means, the first full simulated matrix
+digest and 1,200 marker records' Wald values, type-7 quantiles and direction counts.
+They did not independently refit DESeq2, replay the R RNG, recompute each
+simulation's whole-gene BH or recompute the remaining 199 matrix digests whose
+complete matrices were not exported.
 
-## 原失败与拒绝反例
+Separate native observation read five RDS models with the same R/package versions.
+All 121/121 checks passed: full counts, pairing, design, normalization, dispersion,
+coefficient convergence and six native result columns matched CSV exports. Stored
+full-fit means/dispersions matched simulation parameters. This is native
+observation, not an independent statistical oracle.
 
-- 01：一次性 Host 在沙箱中无法绑定 socket，未进入受管分析；启动失败证据保留。
-- 02：五次真实拟合只用了 20.348 秒，不满足本轮长任务要求。原任务接续和单入口
-  成功，但驱动因核验器文件尚未就绪收尾失败。后来对原产物的 11/11 数值检查通过，
-  没有覆盖原驱动失败，也没有重跑该请求。03 是新增条件模拟工作的新请求。
-- 三个独立副本反例均返回 exit 1：改动文件字节、删除 complete，以及篡改一个 BH
-  值后同步更新文件／清单／完成摘要。最后一例的完整性检查通过，独立 BH 重算仍
-  明确拒绝伪造值。原产物未改；失败报告保留。
+All four scientific figure pages were inspected. MA boundary triangles indicated
+points beyond display limits. PCA was explicitly `log2(normalized count + 1)`:
+PC1 33.5%, PC2 25.0%, with visible N080611 donor difference. All six paired-gene
+count plots increased; simulation figures used red main estimates and blue dashed
+conditional quantiles. No missing glyphs, clipping or overlap were observed.
+PCA donor differences did not trigger post-hoc sample removal.
 
-本轮验收的是实际批分析、等待接续、来源关联、可读产物及上述科学事实。未验证
-交互 R 内存恢复、Host 崩溃后的 R 恢复或完整应用集成。研究问题的进一步适用性
-仍由使用这些公开数据的研究者判断。
+## Failed attempts and rejected counterexamples
 
-## 具体缺口与后续价值
+- Attempt 01: the disposable Host could not bind its socket in the sandbox; managed
+  analysis did not begin. Startup failure evidence remains retained.
+- Attempt 02: five actual fits took 20.348 seconds, below that experiment's long-task
+  requirement. Same-task continuation and single native entry succeeded, but the
+  driver failed during finalization because the checker file was not ready.
+  Later 11/11 checks of its original artifacts did not erase that driver failure
+  or rerun the request. Attempt 03 used a new request for added simulation work.
+- Three independent altered copies exited 1: modified bytes, deleted `complete`,
+  and a falsified BH value with all affected file/manifest/completion digests
+  updated. The final case passed byte integrity and failed independent BH
+  arithmetic. Original artifacts were unchanged and failure reports retained.
 
-唯一实际收尾缺口是消费端核验入口的准备顺序，现已增加启动前预检。没有发现
-需要改变 Core、增加 MCP/HTTP 或扩大 Agent 权限的缺口。03 后把已经单独实跑的
-原生模型观察串入驱动；本轮没有因此重跑 200 次拟合，原完整驱动回执保留其实际版本。
+Acceptance covers actual batch analysis, wait continuation, recorded provenance,
+readable artifacts and the numerical scope above. It does not establish interactive
+R-memory recovery, R recovery after Host crash or complete application integration.
+Researchers retain responsibility for further applicability of the public data.
 
-后续先完善 R 批分析配方与科学产物完整性／来源／取回这两项领域职责；Rscript、
-RDS、manifest 和普通文件工具已经承载本次流程。只有新的真实请求证明不足时才
-新增会话适配或保留机制。插件和应用旧代码已备份，实际重建另按选定切片启动。
+## Component follow-up
+
+The observed finalization gap was checker preparation order; startup preflight
+now checks the verifier. No shared Core gap was demonstrated. The separately
+executed native-model observation was subsequently added to the driver without
+rerunning the 200 fits; original full-driver receipts retain their actual version.
+
+R batch recipes and artifact integrity/provenance/retrieval remain concrete domain
+responsibilities. Rscript, RDS, manifests and ordinary files supported this flow.
+New session or retention mechanisms require a concrete missing guarantee.
+[Roadmap](../../docs/ROADMAP.md#scientific-component-work) selects the joint
+application flow; this record does not accept that future composition.

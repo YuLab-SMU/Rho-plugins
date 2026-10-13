@@ -1,10 +1,9 @@
 # Real R analysis: paired dexamethasone response
 
 This consumer belongs to the R/scientific owner in Rho-plugins. It uses an actual
-R process, the public airway RNA-seq data and DESeq2. It is separate from Core's
-Iris fixture. Core contributes process holding, request identity, bounded output
-and continuation through its existing CLI; it does not implement this method or
-certify the scientific interpretation.
+R process, the public airway RNA-seq data and DESeq2. Core contributes process
+holding, request identity, bounded output and continuation through its existing
+CLI; the scientific component owns the method and interpretation.
 
 The [fact acceptance](ACCEPTANCE.md) records the actual 2026-10-11 execution,
 numerical observations, original failures and verified limits.
@@ -127,7 +126,7 @@ disposable Host, submits the script, interrupts only its wait client, reconnects
 to the same request, checks duplicate delivery and retrieves the artifacts:
 
 ```sh
-python3 examples/real-r-analysis/run.py --binary /Users/xiayh/Projects/Rho-core/target/debug/rho-core --root /private/tmp/rho-airway-new --timeout 1800
+python3 examples/real-r-analysis/run.py --binary /absolute/rho-core --root /private/tmp/rho-airway-new --timeout 1800
 ```
 
 `--root` must be new. The consumer records a Core-free input read from the
@@ -230,9 +229,9 @@ or estimate.
 The scientific owner must review the chosen counts, model, outliers, donor
 sensitivity, figure and interpretation. No automated success marker substitutes
 for that review. This is a public-data reanalysis of four cultured donor cell
-lines, not an analysis of patient clinical response, new wet-lab validation, an
-official application integration, or evidence that every old plugin should be
-rebuilt. Observed execution and data-access gaps determine subsequent owner work.
+lines. Patient clinical response, new wet-lab validation and application
+integration are outside this analysis's acceptance. Observed gaps determine
+subsequent component work.
 
 ## Rejected artifact counterexamples
 

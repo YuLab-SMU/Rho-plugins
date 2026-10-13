@@ -1,42 +1,32 @@
-# Rho plugins
+# Rho-plugins
 
-This repository owns Rho's actual functional components: Agents, editors, file
-operations, tables, plots, scientific methods, evaluation and other selected
-capabilities. Components retain their native conditions, semantics, results and
-checks; CLI, Skills, MCP and UI are optional entry points to the same functionality.
-[Rho-core](https://github.com/YuLab-SMU/Rho-core) is the intelligent system's
-foundation, providing generic managed execution through its public CLI; the
-[Rho application](https://github.com/YuLab-SMU/Rho) is the application container,
-owning component selection, assembly and presentation.
+Rho-plugins owns the functional components used by the Rho intelligent system:
+Agents, editors, file operations, tables, plots, scientific methods, evaluation
+and other concrete capabilities. Each component owns its behavior, native
+preconditions, resources, results and checks.
 
-`main` contains the selected rebuilt work. The complete former implementation is
-preserved on the published
-[`codex/legacy-plugins-before-rebuild`](https://github.com/YuLab-SMU/Rho-plugins/tree/codex/legacy-plugins-before-rebuild)
-branch. Its sixteen packages, Core dependency snapshots, build tools, Jet source
-and patches are historical references, not dependencies of this branch or a list
-of features to restore.
+[Rho-core](https://github.com/YuLab-SMU/Rho-core) supplies the execution foundation.
+[Rho](https://github.com/YuLab-SMU/Rho) assembles components into an application.
+A component can serve headless callers and application users through optional
+CLI, Skills, MCP or UI entries to the same functionality.
 
-## Available work
+## Available components
 
-| Entry | What it does | Current boundary |
+| Component | Available behavior | Acceptance |
 | --- | --- | --- |
-| [Agent evaluation plugin](plugins/agent-eval/README.md) | Runs explicit public Core CLI trials, invokes domain-owned checkers and regrades retained evidence | Reusable Python source plugin; no application installation or automatic improvement loop |
-| [Real R analysis recipe](examples/real-r-analysis/README.md) | Paired airway/GSE52778 DESeq2 analysis, donor sensitivity, conditional simulations and artifact checks | Real batch consumer and domain acceptance; no interactive R-memory recovery |
+| [Agent evaluation](plugins/agent-eval/README.md) | Isolated public Core CLI trials, domain-owned checks and offline regrading | [Recorded execution](plugins/agent-eval/ACCEPTANCE.md) |
+| [Paired airway analysis](examples/real-r-analysis/README.md) | DESeq2 analysis, donor sensitivity, conditional simulations and artifact checks | [Scientific and execution facts](examples/real-r-analysis/ACCEPTANCE.md) |
 
-The [component architecture](docs/ARCHITECTURE.md) records the selected shared
-action/resource/selection/view semantics and headless/application consumption.
-The [current status](docs/STATUS.md) distinguishes implementation, verification
-and selected design. The [rebuild plan](docs/REBUILD.md) retains domain evidence
-and ownership. Execution success, domain checks and model judgments remain
-separate facts. There is no implemented general component runtime or application
-integration on this branch.
+These Python and R consumers run today. Editor, file, table, plot and Agent UI
+components, general component loading and application assembly are selected
+work, not implemented products. [Status](docs/STATUS.md) records that boundary.
 
-## Run and verify
+## Use and verify
 
-The evaluation entry uses Python's standard library. Core trials require an
-explicitly selected public `rho-core` binary; model trials additionally use the
-caller's configured Claude Code CLI. Neither requires Core source, a legacy SDK,
-Rust build tools or the former plugin protocol.
+Evaluation uses Python's standard library. Core trials take an explicitly
+selected public `rho-core` binary. Model trials also require the configured
+Claude Code CLI and model gateway described in the consumer documentation.
+The R recipe uses existing R packages and ordinary files.
 
 ```sh
 python3 plugins/agent-eval/run.py --help
@@ -47,32 +37,28 @@ python3 -m unittest discover -s plugins/agent-eval -p 'test_*.py' -v
 RHO_EVAL_CORE_BINARY=/absolute/rho-core python3 -m unittest discover -s plugins/agent-eval/core-agent -p 'test_*.py' -v
 ```
 
-The R recipe documents its existing R/package prerequisites and native resource
-limits. Checks can read retained artifacts without rerunning analysis or starting
-Core. Outputs and local evidence stay in ignored `target/` or a caller-selected
-new directory; tracked acceptance records do not publish those private files.
-See [evaluation acceptance](plugins/agent-eval/ACCEPTANCE.md) and
-[R fact acceptance](examples/real-r-analysis/ACCEPTANCE.md) for actual checks,
-original failures and scientific limits.
+Each evaluation writes a new evidence directory. Retained artifact checks and
+regrading do not invoke a model or rerun the scientific analysis. Read each
+consumer's prerequisites, limits and evidence scope before execution.
 
-## Selected next composition
+## Build the shared experience
 
-Rho's selected direction is an Electron + React/TypeScript/Vite container with
-Dockview. Selected first-party views use CodeMirror 6, AG Grid Community and
-ECharts; Agent-composed views use a typed component catalog, with json-render as
-the initial candidate. Independent HTML views may use isolated MCP Apps when
-needed. These are design choices, not installed packages or delivered UI.
+Scientific code/data/plots, freely composed views and Agent-driven interaction
+evolve in one application flow. Rho's selected container uses Electron,
+React/TypeScript, Vite and Dockview. Selected views use CodeMirror 6, AG Grid
+Community and ECharts. Agent-composed UI uses a typed json-render catalog;
+independent HTML views may use isolated MCP Apps when needed.
 
-The first integrated flow combines natural-language actions, actual script/table/
-plot resources, linked selection, docking/detachment and continuation of the
-original managed task. These experiences evolve together. Native functionality
-remains usable headlessly; Core does not load UI or acquire the Agent's model loop.
-See [integrated acceptance](docs/ARCHITECTURE.md#first-integrated-acceptance).
+[Architecture](docs/ARCHITECTURE.md) defines component responsibilities and the
+proposed Action, Resource, Selection and View concepts.
+[Roadmap](docs/ROADMAP.md) defines the first joint acceptance flow.
+These documents select implementation direction; no SDK, universal loader or
+runnable application composition is delivered by these choices alone.
 
-R batch recipes, scientific artifact checks and bounded evaluation remain real
-component work. Candidate optimization, Git rollback, development/validation/
-blind-test management, uniform loading and application integration are still
-unimplemented. Select concrete behavior and fix its actual Owner.
+Execution completion, artifact completeness, domain checks and model judgments
+are distinct facts. Existing authorization is checked at the actual boundary;
+models and retrieved content cannot broaden its scope.
 
-Source is licensed under [AGPL-3.0](LICENSE). Current handling and reporting rules
-are in [Privacy](PRIVACY.md) and [Security](SECURITY.md).
+See [Privacy](PRIVACY.md), [Security](SECURITY.md) and
+[contribution instructions](AGENTS.md). Source is licensed under
+[AGPL-3.0](LICENSE).

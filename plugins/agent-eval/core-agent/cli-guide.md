@@ -1,20 +1,20 @@
-# Core CLI evaluation adapter
+# Restricted Core CLI trial entry
 
-This guide describes the plugin's restricted test entry, not a new Core contract.
-`CONTRACT.md` is read from the selected binary's public `capability --contract`.
-The controller supplies the test socket and caller; each command invokes the
-real public CLI and preserves its exit code and raw response.
+The selected binary supplies `CONTRACT.md` through its public
+`capability --contract`. The controller supplies the owned test Host and caller.
+Each entry command invokes the real public CLI and retains its exit code and raw
+response. This guide defines trial restrictions, not another Core contract.
 
-Use one complete `./rho-core` command per Bash call. Commands, predeclared jobs
-and report requirements appear in the trial prompt. `lookup` adds `--record` to
-retrieve actual execution facts. `submit` accepts only the existing jobs; it
-does not authorize arbitrary code, another executor or another caller.
+Use one complete `./rho-core` command per Bash call. The trial prompt defines
+commands, predefined jobs and report requirements. `lookup --record` retrieves
+actual execution facts. `submit` accepts only the declared jobs; it grants no
+authority to submit arbitrary code, choose another executor or change the caller.
 
 Exit 3 means the request was not delivered. Exit 4 means the reply was lost after
-sending; look up the original request before deciding how to continue. A command
-sequence is not a transaction. Neither a missing reply nor a failed later command
-authorizes replaying earlier effects under a new identity.
+sending; query the original request before choosing continuation. Command sequences
+are not transactions. A missing reply or later failure does not authorize replay
+of earlier effects under a new identity.
 
-The plugin starts and closes only its own disposable Host. The Agent cannot
-start, stop or replace a Host. Capability checks are mechanical observations;
-they do not establish scientific correctness or open-ended summary quality.
+The controller starts and closes only its disposable Host. The Agent cannot
+start, stop or replace Hosts. Capability queries are mechanical observations,
+with no claim of scientific correctness or open-ended summary quality.

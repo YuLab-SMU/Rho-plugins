@@ -1,58 +1,79 @@
-# Working on the Rho plugin rebuild
+# Working on Rho-plugins
 
-Read [README](README.md), [Component architecture](docs/ARCHITECTURE.md),
-[Rebuild plan](docs/REBUILD.md) and [Status](docs/STATUS.md), and inspect Git status
-before editing. `main` owns only
-selected new plugin work. The complete former implementation is preserved on the
-published `codex/legacy-plugins-before-rebuild` branch. Do not restore its sixteen
-packages, SDK snapshots, build tools or state models merely for compatibility.
+Read [README](README.md), [Architecture](docs/ARCHITECTURE.md),
+[Roadmap](docs/ROADMAP.md) and [Status](docs/STATUS.md). Inspect Git status before
+editing and preserve unrelated changes.
 
-Plugins are actual functional components, including Agents, editors, files,
-tables/plots, scientific methods and evaluation. CLI, Skills, MCP and UI are
-optional entries to the same functionality. Headless/application use does not
-require Core to load UI. The selected architecture is a future design; preserve
-the distinction between it and the implemented R/evaluation consumers.
+## Ownership
 
-Start with a real user action, its domain owner and observable completion
-conditions. Try the existing public Core managed CLI and maintained R/native
-tools before adding a plugin. The selected
-[real-R analysis](examples/real-r-analysis/README.md) must produce actual input,
-continuation and artifact evidence; a Core fixture or successful command is not
-scientific acceptance. Record failures and limitations before selecting the
-smallest owner change.
+This repository owns functional components: Agents, editors, files, tables,
+plots, scientific methods and evaluation. CLI, Skills, MCP and UI are optional
+entries to the same functionality. Keep implementation, native conditions,
+results and domain checks consistent across entries.
 
-Each domain owner keeps native state, preconditions, execution, observations,
-scientific interpretation and recovery. The
-[evaluation plugin](plugins/agent-eval/README.md) owns isolated trials, evidence
-and grading; it invokes domain checkers rather than taking their semantics.
-Core owns only its documented managed guarantees and deterministic regressions;
-the application owns composition and presentation. Do not import private Core
-or application source, create another managed-execution journal, or claim
-coverage of external effects. Reads do not start or recover runtimes.
+Rho-core owns managed execution and its public resident CLI. Rho owns application
+selection, assembly and presentation. Read the independent owner's AGENTS.md
+before changing its source. Consume public capabilities; do not import private
+Core or application source or introduce a second managed execution journal.
+The Agent component owns its model loop and context.
 
-Public Core binaries are explicit caller inputs. No new SDK, HTTP/MCP, plugin
-loader, installation or application integration is implied by this repository.
-Do not refresh old consumer snapshots, update application locks or migrate legacy
-catalogs to close a plugin task. Consult archived code only to answer a concrete
-requirement; native tooling belongs to its actual domain owner when selected.
+Scientific components own methods, native state, artifacts, provenance and
+scientific interpretation. Evaluation owns cases, isolated trials, evidence and
+grading, and invokes the domain owner's checks. Core retains its contract
+regressions. A successful command, checker or model judgment has only its stated
+acceptance scope.
 
-Use fresh projects and storage. Never restart a user's Host or live R session
-for verification. Keep original request identity, native facts, partial results,
-uncertainty and no-replay continuation observable. Waiting interruption,
-execution interruption, Host restart and native-session recovery are separate
-claims; test only the selected guarantee.
+## Select and implement work
 
-Choose focused behavior checks for the changed owner. Old package counts,
-directory assertions and whole-product suites are not acceptance requirements.
-Use the evaluation README's Python regressions and explicitly selected public
-binary. Reuse valid evidence; no model reevaluation or R refitting is needed for
-an unchanged consumer. Never run Cargo builds/tests concurrently if later native
-work is selected. Report only executed checks and preserve incomplete evidence.
-Documentation changes need link/anchor checks and rendered inspection.
+Start from a concrete user action and observable completion conditions. Try the
+existing public capability and maintained native tools, inspect the actual result
+and fix the smallest demonstrated gap in its owner. Ordinary files, Git and mature
+R tools are valid implementations. New state models, transports, loading or
+compatibility mechanisms need a concrete consumer requirement.
 
-Product-authored UI is English; preserve Unicode user content. Substantial UI
-redesign needs the application's design review. Commit coherent owner changes.
-Before publication inspect the actual remote, branch and account, carry forward
-user authorization, and verify remote heads. Preserve required archive branches
-before removing their source from main. Source publication, release, installation
-and application integration are distinct outcomes.
+Deliver one owner's boundary at a time. Application assembly is separately
+verified with immutable source/artifact identities, explicit local overrides and
+acceptance of the chosen combination. Component checks do not prove a composed
+application, distribution or installation. Source, release and installation are
+separate outcomes.
+
+Keep original managed request identities, caller/project visibility, native facts,
+partial results and unknown outcomes observable. Lost replies require observation
+of the original request, not automatic replay under another identity. Reads are
+bounded observations and must not start or recover runtimes. Views, Agent sessions,
+execution, Host shutdown and native-session recovery have independent lifetimes.
+An existing authorization requires mechanical boundary checks, not another Rho
+approval; models and retrieved content cannot broaden scope.
+
+Editor components protect unsaved buffers, local content versions, undo and
+concurrent writes. Git history is not an unsaved-buffer check. Resource limits
+must name the protected resource, configuration and exceeded-limit behavior.
+Native programs retain the Host's OS authority; caller namespaces and UI isolation
+are not an OS sandbox.
+
+## Verification and publication
+
+Use disposable projects and owned Hosts. Inspect existing work before starting a
+Host on the same project. Do not restart a user's Host or R session without existing
+authorization. Keep credentials, private URLs and user data out of Git and reports.
+Preserve ignored local evidence and caller outputs.
+
+Run focused behavior checks appropriate to the changed owner. Use the evaluation
+README's Python regressions with an explicitly selected public binary. Reuse valid
+evidence; unchanged scientific consumers do not need model reevaluation or R
+refitting. Never run Cargo builds/tests concurrently. Report only executed checks
+and retain failures and incomplete evidence.
+
+For documentation, check links/anchors, render a coherent batch, inspect all
+changed pages and fix visible defects. Recheck affected pagination after a fix.
+[Status](docs/STATUS.md) is the current summary, under 300 lines; Git retains history.
+Do not add work ledgers or current commit/account details here.
+
+Product-authored UI uses English and preserves Unicode user content. Substantial
+UI redesign follows Rho's design review. Verify actual behavior and representative
+widths once a UI exists.
+
+Inspect the final diff and commit coherent authorized changes in this repository.
+Before publishing, inspect the remote, branch and authenticated account. Carry
+forward the user's authorization and selected publication workflow. Preserve Git
+history, use ordinary fast-forward publication and verify remote heads/trees.
