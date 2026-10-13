@@ -1,10 +1,17 @@
 # Working on the Rho plugin rebuild
 
-Read [README](README.md), [Rebuild plan](docs/REBUILD.md) and
-[Status](docs/STATUS.md), and inspect Git status before editing. `main` owns only
+Read [README](README.md), [Component architecture](docs/ARCHITECTURE.md),
+[Rebuild plan](docs/REBUILD.md) and [Status](docs/STATUS.md), and inspect Git status
+before editing. `main` owns only
 selected new plugin work. The complete former implementation is preserved on the
 published `codex/legacy-plugins-before-rebuild` branch. Do not restore its sixteen
 packages, SDK snapshots, build tools or state models merely for compatibility.
+
+Plugins are actual functional components, including Agents, editors, files,
+tables/plots, scientific methods and evaluation. CLI, Skills, MCP and UI are
+optional entries to the same functionality. Headless/application use does not
+require Core to load UI. The selected architecture is a future design; preserve
+the distinction between it and the implemented R/evaluation consumers.
 
 Start with a real user action, its domain owner and observable completion
 conditions. Try the existing public Core managed CLI and maintained R/native
