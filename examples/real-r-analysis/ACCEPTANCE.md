@@ -119,5 +119,5 @@ rerunning the 200 fits; original full-driver receipts retain their actual versio
 R batch recipes and artifact integrity/provenance/retrieval remain concrete domain
 responsibilities. Rscript, RDS, manifests and ordinary files supported this flow.
 New session or retention mechanisms require a concrete missing guarantee.
-[Roadmap](../../docs/ROADMAP.md#scientific-component-work) selects the joint
+[Roadmap](../../docs/ROADMAP.md#scientific-component-work) selects the integrated
 application flow; this record does not accept that future composition.

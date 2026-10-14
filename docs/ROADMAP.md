@@ -4,7 +4,7 @@ Rho-plugins develops concrete functional components for both headless callers an
 the Rho application. [Architecture](ARCHITECTURE.md) defines ownership;
 [Status](STATUS.md) records implemented behavior and unresolved limits.
 
-## First joint flow
+## First integrated flow
 
 The first application flow develops scientific workbench interaction, freely
 composed views and Agent-driven UI together. Its selected components cover an

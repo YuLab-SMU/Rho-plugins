@@ -51,7 +51,7 @@ independent HTML views may use isolated MCP Apps when needed.
 
 [Architecture](docs/ARCHITECTURE.md) defines component responsibilities and the
 proposed Action, Resource, Selection and View concepts.
-[Roadmap](docs/ROADMAP.md) defines the first joint acceptance flow.
+[Roadmap](docs/ROADMAP.md) defines the first integrated flow.
 These documents select implementation direction; no SDK, universal loader or
 runnable application composition is delivered by these choices alone.
 

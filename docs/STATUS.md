@@ -37,7 +37,7 @@ typed json-render catalog, with optional isolated MCP Apps for independent HTML.
 Those dependencies, component schemas, general loading and application assembly
 are not implemented in this repository.
 
-[The first joint flow](ROADMAP.md#first-joint-flow) combines natural-language
+[The first integrated flow](ROADMAP.md#first-integrated-flow) combines natural-language
 actions, actual script/table/plot resources, linked selection, docking/detachment,
 unsaved Unicode content and original-task continuation. It has not run. Runtime
 lifetime remains independent of views, and reads do not start or recover it.

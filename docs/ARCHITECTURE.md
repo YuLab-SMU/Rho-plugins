@@ -16,6 +16,11 @@ consumers need. Entries performing the same operation reuse its behavior and
 conditions; managed execution entries also preserve the original request identity.
 Skills supply instructions, and do not grant additional authority.
 
+A component's UI entry source, meaning its view implementation, typed properties
+and action bindings, is owned in this repository. Rho assembles those views into
+the application at explicit component versions and supplies theme, layout and
+routing. The selected editor, table and plot UI components are not implemented yet.
+
 R, Python, Rust, TypeScript and maintained CLIs are valid implementation choices.
 Headless consumers can use Core's public resident CLI without a UI dependency.
 Rho can assemble component views and interactions. Core owns execution guarantees;
@@ -94,14 +99,14 @@ interfaces do not replace native facts or Core request identity.
 Rho's [technology direction](https://github.com/YuLab-SMU/Rho/blob/main/docs/TECHSTACK.md)
 records library choices, licensing and official references.
 
-## Joint acceptance
+## Integrated acceptance
 
 Scientific workbench interaction, freely composed views and Agent-driven UI evolve
 in the same vertical flow: an Agent selects a component action, native execution
 produces real resources, script/table/plot views share selection, views detach
 without losing unsaved content, and observers reconnect to the original task.
 The Agent then composes a further view from the same catalog and references.
-[Roadmap](ROADMAP.md#first-joint-flow) defines the acceptance conditions.
+[Roadmap](ROADMAP.md#first-integrated-flow) defines the acceptance conditions.
 
 This flow has not run. Existing component evidence can be reused only within its
 recorded scope. Assembly records immutable component identities, explicit local
