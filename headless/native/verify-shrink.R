@@ -1,0 +1,12 @@
+args <- commandArgs(trailingOnly=TRUE)
+stopifnot(length(args)==3L)
+# Register S4 methods before the first generic dispatch on the saved object.
+stopifnot(requireNamespace("DESeq2", quietly=TRUE), requireNamespace("jsonlite", quietly=TRUE))
+out <- args[[1L]]; report <- args[[2L]]; baseline <- utils::read.csv(args[[3L]],na.strings=c("","NA"))
+tab <- utils::read.csv(file.path(out,"shrinkage.csv"),na.strings=c("","NA"))
+native <- readRDS(file.path(out,"shrinkage.rds"))
+stopifnot(identical(tab$gene_id,rownames(native)),identical(tab$gene_id,baseline$gene_id))
+fields <- intersect(names(native),names(tab))
+for (field in fields) stopifnot(isTRUE(all.equal(as.numeric(native[[field]]),tab[[field]],tolerance=1e-9)))
+for (field in c("pvalue","padj")) stopifnot(isTRUE(all.equal(tab[[field]],baseline[[field]],tolerance=1e-9)))
+jsonlite::write_json(list(state="passed",genes=nrow(tab),fields=fields,baseline_tests_unchanged=TRUE,scope="Read saved native shrinkage result and compare every exported numeric field and original Wald p-values; no refit and no independent statistical oracle."),report,auto_unbox=TRUE,pretty=TRUE)

@@ -1,0 +1,37 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
+import { retainAgentIntent } from '../../dist/index.js';
+test('MCP caller durably freezes identity and exact input before managed delivery', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-mcp-intent-'));
+  const c = { projectId: 'project', externalSessionId: 'external' }, descriptor = path.join(root, 'connection.json');
+  const input = { operationId: 'original', action: 'airway.analyze', input: { bootstrapReplicates: 1 } };
+  await retainAgentIntent(descriptor, c, 'action.submit', input);
+  await retainAgentIntent(descriptor, c, 'action.submit', structuredClone(input));
+  const directory = path.join(root, (await fs.readdir(root))[0]);
+  assert.equal((await fs.readdir(directory)).length, 1);
+  const file = path.join(directory, (await fs.readdir(directory))[0]);
+  assert.equal((await fs.stat(file)).mode & 0o077, 0);
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')).input, { ...input, projectId: 'project' });
+  await assert.rejects(retainAgentIntent(descriptor, c, 'action.submit', { ...input, input: { bootstrapReplicates: 2 } }), e => e.kind === 'conflict');
+  assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')).input.input, { bootstrapReplicates: 1 });
+});
+test('concurrent MCP deliveries cannot replace an earlier identity or evict it at the retention limit', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-mcp-race-'));
+  const c = { projectId: 'project', externalSessionId: 'external' }, descriptor = path.join(root, 'connection.json');
+  const input = { operationId: 'same', action: 'airway.analyze', input: { bootstrapReplicates: 1 } };
+  const competing = { ...input, input: { bootstrapReplicates: 2 } };
+  const results = await Promise.allSettled([retainAgentIntent(descriptor, c, 'action.submit', input, 1), retainAgentIntent(descriptor, c, 'action.submit', competing, 1)]);
+  assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
+  const rejected = results.find(r => r.status === 'rejected'); assert.ok(['conflict', 'limit'].includes(rejected.reason.kind));
+  const directory = path.join(root, (await fs.readdir(root))[0]);
+  assert.equal((await fs.readdir(directory)).length, 1);
+  const file = path.join(directory, (await fs.readdir(directory))[0]);
+  const retained = await fs.readFile(file, 'utf8');
+  const actual = JSON.parse(retained).input;
+  await retainAgentIntent(descriptor, c, 'action.submit', actual, 1);
+  await assert.rejects(retainAgentIntent(descriptor, c, 'action.submit', { ...input, operationId: 'new' }, 1), e => e.kind === 'limit');
+  assert.equal(await fs.readFile(file, 'utf8'), retained);
+});

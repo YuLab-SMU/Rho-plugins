@@ -15,11 +15,11 @@ CLI, Skills, MCP or UI entries to the same functionality.
 | Component | Available behavior | Acceptance |
 | --- | --- | --- |
 | [Agent evaluation](plugins/agent-eval/README.md) | Isolated public Core CLI trials, domain-owned checks and offline regrading | [Recorded execution](plugins/agent-eval/ACCEPTANCE.md) |
+| [Headless components](docs/HEADLESS.md) | Shared documents, dependency preparation, real table/plot data, apeglm action and stdio MCP adapter | [Component and integration scope](docs/HEADLESS.md#build-and-verify) |
 | [Paired airway analysis](examples/real-r-analysis/README.md) | DESeq2 analysis, donor sensitivity, conditional simulations and artifact checks | [Scientific and execution facts](examples/real-r-analysis/ACCEPTANCE.md) |
 
-These Python and R consumers run today. Editor, file, table, plot and Agent UI
-components, general component loading and application assembly are selected
-work, not implemented products. [Status](docs/STATUS.md) records that boundary.
+The Python/R consumers and Node headless component package run today. Editor,
+table, plot and Agent UI entries remain independent work. [Status](docs/STATUS.md) records that boundary.
 
 ## Use and verify
 
@@ -29,6 +29,8 @@ Claude Code CLI and model gateway described in the consumer documentation.
 The R recipe uses existing R packages and ordinary files.
 
 ```sh
+npm ci
+npm test
 python3 plugins/agent-eval/run.py --help
 python3 plugins/agent-eval/run.py core-agent --binary /absolute/rho-core --baseline --trials 1
 python3 plugins/agent-eval/run.py r-artifacts /absolute/airway/artifacts
@@ -44,16 +46,18 @@ consumer's prerequisites, limits and evidence scope before execution.
 ## Build the shared experience
 
 Scientific code/data/plots, freely composed views and Agent-driven interaction
-evolve in one application flow. Rho's selected container uses Electron,
-React/TypeScript, Vite and Dockview. Selected views use CodeMirror 6, AG Grid
+evolve in one application flow. Rho first delivers an npm local backend, then a
+React/TypeScript, Vite and Dockview WebUI in one browser window. Electron and
+cross-window movement follow later. Selected views use CodeMirror 6, AG Grid
 Community and ECharts. Agent-composed UI uses a typed json-render catalog;
 independent HTML views may use isolated MCP Apps when needed.
 
 [Architecture](docs/ARCHITECTURE.md) defines component responsibilities and the
-proposed Action, Resource, Selection and View concepts.
+Action, Resource, Selection and View boundaries. The finite headless catalog is
+implemented; UI rendering remains selected work.
 [Roadmap](docs/ROADMAP.md) defines the first integrated flow.
-These documents select implementation direction; no SDK, universal loader or
-runnable application composition is delivered by these choices alone.
+The [headless package](docs/HEADLESS.md) documents the implemented entries and
+actual Rho composition checks. There is no universal component loader.
 
 Execution completion, artifact completeness, domain checks and model judgments
 are distinct facts. Existing authorization is checked at the actual boundary;

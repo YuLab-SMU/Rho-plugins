@@ -28,9 +28,9 @@ it does not host React views or the Agent's model loop.
 
 ## Shared interaction concepts
 
-The initial composition uses four proposed concepts. Concrete schemas and
-versioning will be implemented with the selected consumer; no public SDK or universal
-loader is implied by this document.
+The initial composition uses four shared concepts. The [headless package](HEADLESS.md)
+implements a finite versioned catalog and owner APIs; Rho publishes the HTTP
+consumer schemas. A universal plugin loader remains outside this scope.
 
 | Concept | Component owns | Rho owns |
 | --- | --- | --- |
@@ -73,7 +73,8 @@ separate facts.
 
 ## Application surfaces
 
-The selected Rho container uses Electron, React/TypeScript, Vite and Dockview.
+The first Rho delivery is an npm local service and single-window browser WebUI
+with React/TypeScript, Vite and Dockview. Electron/native windows follow later.
 First-party components retain their source ownership and contribute trusted React
 views. Selected editing, table and plot views use CodeMirror 6, AG Grid Community
 and ECharts, preserving native scientific outputs and provenance. These choices
@@ -108,8 +109,10 @@ without losing unsaved content, and observers reconnect to the original task.
 The Agent then composes a further view from the same catalog and references.
 [Roadmap](ROADMAP.md#first-integrated-flow) defines the acceptance conditions.
 
-This flow has not run. Existing component evidence can be reused only within its
-recorded scope. Assembly records immutable component identities, explicit local
+The headless part of this flow has run through Rho HTTP, public Core CLI and a
+real external Claude Code adapter. Browser interaction, native input and rendering
+remain unverified. Existing component evidence is reused only within its recorded
+scope. See [Headless components](HEADLESS.md). Assembly records immutable component identities, explicit local
 overrides and actual acceptance of the combination. Measure protected resources
 and configure exceeded-limit behavior before making performance or containment
 claims.

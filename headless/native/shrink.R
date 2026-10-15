@@ -1,0 +1,31 @@
+options(stringsAsFactors=FALSE, warn=1)
+args <- commandArgs(trailingOnly=TRUE)
+stopifnot(length(args) == 3L)
+for (p in c("DESeq2", "apeglm", "jsonlite", "digest")) if (!requireNamespace(p, quietly=TRUE)) stop("missing installed package: ", p)
+out <- args[[1L]]
+cat(jsonlite::toJSON(list(pid=Sys.getpid(), action="airway.shrink"), auto_unbox=TRUE), "\n", file=paste0(out,".entries.jsonl"), append=TRUE)
+if (file.exists(out)) stop("output already exists; preserving original artifacts")
+stopifnot(dir.create(out, recursive=FALSE))
+write_json <- function(x, file) { tmp <- paste0(file,".partial"); writeLines(jsonlite::toJSON(x,auto_unbox=TRUE,pretty=TRUE,na="null",null="null",digits=NA),tmp); stopifnot(file.rename(tmp,file)) }
+tryCatch({
+  dds <- readRDS(args[[2L]])
+  baseline <- utils::read.csv(args[[3L]], na.strings=c("", "NA"), check.names=FALSE)
+  stopifnot(identical(rownames(dds), baseline$gene_id), nrow(dds)==16139L, "dex_trt_vs_untrt" %in% DESeq2::resultsNames(dds))
+  native <- DESeq2::results(dds, contrast=c("dex","trt","untrt"), independentFiltering=FALSE, alpha=.05, pAdjustMethod="BH")
+  stopifnot(isTRUE(all.equal(as.numeric(native$log2FoldChange),baseline$log2FoldChange,tolerance=1e-9)))
+  # apeglm requires a named coefficient. DESeq2 returns log2-scale estimates.
+  # https://bioconductor.org/packages/release/bioc/vignettes/DESeq2/inst/doc/DESeq2.html
+  shrunk <- DESeq2::lfcShrink(dds, coef="dex_trt_vs_untrt", res=native, type="apeglm", parallel=FALSE)
+  tab <- data.frame(gene_id=rownames(shrunk), symbol=baseline$symbol, as.data.frame(shrunk), check.names=FALSE)
+  utils::write.csv(tab,file.path(out,"shrinkage.csv"),row.names=FALSE,na="")
+  saveRDS(shrunk,file.path(out,"shrinkage.rds"))
+  grDevices::pdf(file.path(out,"shrinkage.pdf"),width=8,height=6,useDingbats=FALSE)
+  DESeq2::plotMA(shrunk, main="Donor-adjusted dexamethasone response · apeglm")
+  grDevices::dev.off()
+  write_json(list(schema_version=1L, method="DESeq2::lfcShrink/type=apeglm", coefficient="dex_trt_vs_untrt", contrast=c("dex","trt","untrt"), model_sha256=digest::digest(file=args[[2L]],algo="sha256"), baseline_sha256=digest::digest(file=args[[3L]],algo="sha256"), genes=nrow(tab), finite_effects=sum(is.finite(tab$log2FoldChange)), missing_effects=sum(!is.finite(tab$log2FoldChange)), versions=list(DESeq2=as.character(packageVersion("DESeq2")),apeglm=as.character(packageVersion("apeglm"))), scope="Posterior effect estimates conditional on the selected paired DESeq2 model; p-values remain the baseline Wald tests."),file.path(out,"summary.json"))
+  utils::capture.output(sessionInfo(),file=file.path(out,"sessionInfo.txt"))
+  files <- sort(list.files(out,full.names=TRUE))
+  manifest <- data.frame(path=basename(files),bytes=as.numeric(file.info(files)$size),sha256=vapply(files,function(p)digest::digest(file=p,algo="sha256"),""))
+  utils::write.csv(manifest,file.path(out,"artifact_manifest.csv"),row.names=FALSE)
+  write_json(list(schema_version=1L,state="complete",summary_sha256=digest::digest(file=file.path(out,"summary.json"),algo="sha256"),manifest_sha256=digest::digest(file=file.path(out,"artifact_manifest.csv"),algo="sha256")),file.path(out,"complete.json"))
+},error=function(e) { write_json(list(state="failed",error=conditionMessage(e)),file.path(out,"failure.json")); quit(status=1L) })

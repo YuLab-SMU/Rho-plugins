@@ -18,7 +18,7 @@ Agent, script editing, tables, plots and one real scientific method.
    as separate facts, including failures and partial results.
 3. Selecting a stable domain object in a table or plot updates participating
    views and the Agent's explicit context within the same resource version.
-4. Views dock and detach across windows while retaining selection, Unicode input,
+4. Views dock, split and move within one browser window while retaining Unicode input,
    unsaved content and undo. Agent edits respect buffer ownership and conflicts.
 5. Closing an observer and reconnecting find the original task and its actual
    output. Missing acknowledgements preserve the original request identity and
@@ -26,12 +26,14 @@ Agent, script editing, tables, plots and one real scientific method.
 6. The Agent composes another view using the same typed catalog, resources and
    actions. Invalid, stale or out-of-scope references produce an observable result.
 
-Rho's selected implementation uses Electron, React/TypeScript, Vite and Dockview.
+Rho first delivers an npm local service and React/TypeScript, Vite and Dockview
+WebUI. Electron and cross-window movement belong to a later client.
 Functional views select CodeMirror 6, AG Grid Community and ECharts; Agent-composed
 views use a json-render catalog. MCP Apps is optional for an isolated independent
 HTML consumer. [Rho's technology direction](https://github.com/YuLab-SMU/Rho/blob/main/docs/TECHSTACK.md)
-is the application selection reference. No runnable composition or component SDK
-currently exists.
+is the application selection reference. The [headless component package](HEADLESS.md)
+and its Rho HTTP/Core/Agent composition have been implemented and checked. UI
+assembly remains pending.
 
 Acceptance also covers input methods, keyboard access, missing components, stale
 resources, failed view restoration and version mismatch. Record the actual chosen

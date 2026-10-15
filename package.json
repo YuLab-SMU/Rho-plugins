@@ -1,0 +1,14 @@
+{
+  "name": "@rho-workspace/headless",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Headless Rho document, scientific data and external Agent components",
+  "license": "AGPL-3.0-only",
+  "engines": { "node": ">=22.22.0 <23" },
+  "exports": { ".": "./dist/index.js", "./mcp": "./dist/mcp.js" },
+  "bin": { "rho-agent-mcp": "./dist/mcp.js" },
+  "files": ["dist", "headless/native", "examples/real-r-analysis/analyze.R", "examples/real-r-analysis/verify.py", "examples/real-r-analysis/inspect-models.R", "LICENSE"],
+  "scripts": { "build": "tsc -p headless/tsconfig.json", "test": "npm run build && node --test headless/test/*.test.mjs", "prepack": "npm run build" },
+  "dependencies": { "@modelcontextprotocol/sdk": "1.29.0", "csv-parse": "7.0.3" },
+  "devDependencies": { "@types/node": "22.20.0", "typescript": "5.9.3" }
+}

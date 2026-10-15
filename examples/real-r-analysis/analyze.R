@@ -266,7 +266,9 @@ main <- function() {
     x <- z$log2FoldChange[is.finite(z$log2FoldChange) & z$beta_converged %in% TRUE]
     qs <- bootstrap_summary[bootstrap_summary$symbol == symbol, ]
     if (length(x)) {
-      hist(x, breaks = "FD", col = "#b9d3e8", border = "white", xlab = "Estimated log2 fold change",
+      # nclass.FD requires at least two observations. One replicate is an
+      # intentional, supported smoke run; retain its actual single value.
+      hist(x, breaks = if (length(x) == 1L) 1L else "FD", col = "#b9d3e8", border = "white", xlab = "Estimated log2 fold change",
            main = paste0(symbol, " (", length(x), " valid)"))
       abline(v = qs$full_log2FoldChange, col = "#c54939", lwd = 2)
       abline(v = c(qs$q025, qs$q975), lty = 2, col = "#367bad")
@@ -284,6 +286,9 @@ main <- function() {
   write_csv(versions, file.path(out, "versions.csv"))
   script_arg <- grep("^--file=", commandArgs(), value = TRUE)
   script_path <- if (length(script_arg) == 1L) sub("^--file=", "", script_arg) else NA_character_
+  # Rscript encodes spaces in its --file argument as ~+~. Preserve literal
+  # paths when they already exist; otherwise decode the native argument.
+  if (!is.na(script_path) && !file.exists(script_path)) script_path <- gsub("~+~", " ", script_path, fixed = TRUE)
   script_sha <- if (!is.na(script_path) && file.exists(script_path)) digest::digest(file = script_path, algo = "sha256") else NA_character_
   summary <- list(schema_version = 1L, analysis = "airway paired dexamethasone response",
                   dataset = list(package = "airway", version = as.character(utils::packageVersion("airway")),

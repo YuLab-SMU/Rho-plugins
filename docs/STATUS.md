@@ -1,8 +1,15 @@
 # Current status
 
-Updated: 2026-10-13.
+Updated: 2026-10-15.
 
 ## Implemented components
+
+- [Headless components 0.1](HEADLESS.md) exports persistent shared documents,
+  action-local R dependency checks/preparation, actual resource/data readers,
+  a finite typed catalog, apeglm shrinkage and a project-scoped stdio MCP adapter.
+  Eight focused tests pass. Rho separately exercised the actual HTTP/public Core
+  CLI composition, real Claude Code handoff and 16,139-gene analysis/comparison.
+  UI entry points remain unavailable; the external client owns its model loop.
 
 - [Agent evaluation](../plugins/agent-eval/README.md) runs isolated public Core CLI
   trials, invokes domain-owned checkers and regrades retained model evidence.
@@ -31,19 +38,28 @@ Rho-core supplies public managed execution; Rho owns selection, assembly and
 presentation. [Architecture](ARCHITECTURE.md) defines proposed Action, Resource,
 Selection and View concepts and their ownership.
 
-The selected container is Electron + React/TypeScript + Vite + Dockview. Selected
+The first application delivery is npm + local service + a single-window browser
+WebUI with React/TypeScript, Vite and Dockview. Electron follows later. Selected
 views use CodeMirror 6, AG Grid Community and ECharts; Agent-composed UI uses a
 typed json-render catalog, with optional isolated MCP Apps for independent HTML.
-Those dependencies, component schemas, general loading and application assembly
-are not implemented in this repository.
+View library dependencies and browser UI assembly are not implemented. The
+headless package supplies concrete finite schemas and owner APIs, not a universal
+loader.
 
 [The first integrated flow](ROADMAP.md#first-integrated-flow) combines natural-language
-actions, actual script/table/plot resources, linked selection, docking/detachment,
-unsaved Unicode content and original-task continuation. It has not run. Runtime
+actions, actual script/table/plot resources, linked selection, docking and splits,
+unsaved Unicode content and original-task continuation. Its headless portion has
+run in Rho; actual browser interaction remains pending. Runtime
 lifetime remains independent of views, and reads do not start or recover it.
 
 ## Implementation limits
 
+- The new bounded smoke analysis uses one conditional simulation. Original
+  200-simulation evidence remains separate. The first singleton plot failure and
+  first shrink checker S4-load failure remain recorded with their repairs. The
+  installed-path trial also exposed Rscript's `~+~` space encoding in `--file`;
+  decoding a nonexistent raw path now preserves the actual script digest, with
+  a native R regression under a spaced Chinese path.
 - Editor, file, table, plot and Agent UI components and cross-view interaction
   remain selected work.
 - Candidate optimization, candidate comparison/rollback, development/validation/

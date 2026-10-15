@@ -1,4 +1,6 @@
 target/
+dist/
+*.tgz
 /work/
 node_modules/
 /.rho/
