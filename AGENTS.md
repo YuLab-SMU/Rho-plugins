@@ -11,6 +11,12 @@ plots, scientific methods and evaluation. CLI, Skills, MCP and UI are optional
 entries to the same functionality. Keep implementation, native conditions,
 results and domain checks consistent across entries.
 
+Follow the [reusable plugin model](docs/PLUGIN-MODEL.md). Fixed analysis workflows
+are project recipes or acceptance examples, not plugin registrations or base
+dependencies. Keep dataset, contrast, column names and pipeline sequencing out of
+generic capability contracts and application routing. A view is a plugin entry;
+several views can share one capability/state owner.
+
 Rho-core owns managed execution and its public resident CLI. Rho owns application
 selection, assembly and presentation. Read the independent owner's AGENTS.md
 before changing its source. Consume public capabilities; do not import private

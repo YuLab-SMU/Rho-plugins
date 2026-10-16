@@ -1,9 +1,13 @@
 # Real R analysis: paired dexamethasone response
 
-This consumer belongs to the R/scientific owner in Rho-plugins. It uses an actual
+This is an example and scientific acceptance consumer, not a plugin. It belongs
+to the R/scientific owner in Rho-plugins and uses an actual
 R process, the public airway RNA-seq data and DESeq2. Core contributes process
 holding, request identity, bounded output and continuation through its existing
-CLI; the scientific component owns the method and interpretation.
+CLI; this recipe owns the method and interpretation. Reusable system capabilities
+are defined by the [plugin model](../../docs/PLUGIN-MODEL.md). The current headless
+0.1 prototype still bundles this example and workflow-specific actions; extracting
+them from the base catalog/package remains required work.
 
 The [fact acceptance](ACCEPTANCE.md) records the actual 2026-10-11 execution,
 numerical observations, original failures and verified limits.

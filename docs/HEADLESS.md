@@ -6,6 +6,13 @@ locked in the package. There is no React/DOM dependency or UI implementation.
 The Rho service consumes the exported API and publishes its
 [versioned consumer contract](https://github.com/YuLab-SMU/Rho/blob/main/docs/HEADLESS.md).
 
+This prototype mixes reusable document/Agent behavior with workflow-specific
+requirements, actions and data readers. Its catalog is not the selected reusable
+plugin model. The [plugin boundary](PLUGIN-MODEL.md) requires removing the paired
+recipe from base registration/packaging and checking the same capabilities with
+a non-gene consumer before plugin UI acceptance. That extraction is pending;
+the API description below records actual 0.1 behavior.
+
 ## Entries and owners
 
 | Entry | Functional behavior |

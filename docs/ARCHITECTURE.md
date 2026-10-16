@@ -8,8 +8,16 @@ callers and application users while retaining the same native behavior and facts
 ## Components and entries
 
 A component provides a concrete capability such as an Agent, editor, file
-operation, table, plot, scientific method or evaluation. It owns its implementation,
+operation, table, plot, reusable native method or evaluation. It owns its implementation,
 inputs, native preconditions, effects, resources, results and checks.
+
+The [reusable plugin model](PLUGIN-MODEL.md) selects the capability boundaries.
+Documents/code, files/artifacts, R execution/objects, requirements, tables, media,
+charts and Agent integration can be reused by different workflows. A plugin can
+contribute multiple views over the same state owner. A fixed scientific workflow
+is project code or an acceptance example, not a plugin. Its dataset, design,
+contrast and sequencing must not enter generic contracts or Rho routing. A
+domain extension needs an independently reusable operation or resource adapter.
 
 CLI, Skills, MCP and UI are optional entries. A component provides the entries its
 consumers need. Entries performing the same operation reuse its behavior and
@@ -30,7 +38,10 @@ it does not host React views or the Agent's model loop.
 
 The initial composition uses four shared concepts. The [headless package](HEADLESS.md)
 implements a finite versioned catalog and owner APIs; Rho publishes the HTTP
-consumer schemas. A universal plugin loader remains outside this scope.
+consumer schemas. That 0.1 catalog and its readers remain coupled to the airway
+example. Extraction and a non-gene consumer are required before the model is
+treated as a reusable UI boundary. A universal plugin loader remains outside
+this scope.
 
 | Concept | Component owns | Rho owns |
 | --- | --- | --- |
@@ -39,9 +50,10 @@ consumer schemas. A universal plugin loader remains outside this scope.
 | Selection | Stable domain objects in a specific resource/content version | Linked views and explicit Agent context |
 | View | Rendering, actions, subscriptions and release behavior | Placement, focus, layout and windows |
 
-Selection refers to domain identities, such as genes in an analysis result,
-rather than a row's current display position. Owners validate resource identity
-and freshness before applying actions. Buffer versions and artifact digests serve
+Selection refers to provider-declared stable identities in an exact resource
+version, rather than a row's current display position. Linking resources requires
+an explicit mapping; a gene ID is one consumer's example. Owners validate resource
+identity and freshness before applying actions. Buffer versions and artifact digests serve
 their own resources; there is no global scientific revision.
 
 ## State and lifetimes
@@ -110,9 +122,11 @@ The Agent then composes a further view from the same catalog and references.
 [Roadmap](ROADMAP.md#first-integrated-flow) defines the acceptance conditions.
 
 The headless part of this flow has run through Rho HTTP, public Core CLI and a
-real external Claude Code adapter. Browser interaction, native input and rendering
-remain unverified. Existing component evidence is reused only within its recorded
-scope. See [Headless components](HEADLESS.md). Assembly records immutable component identities, explicit local
+real external Claude Code adapter with the paired scientific example. It proves
+that composition's behavior; reusable plugin extraction, browser interaction,
+native input and rendering remain unverified. Existing component evidence is
+reused only within its recorded scope. See [Headless components](HEADLESS.md).
+Assembly records immutable component identities, explicit local
 overrides and actual acceptance of the combination. Measure protected resources
 and configure exceeded-limit behavior before making performance or containment
 claims.

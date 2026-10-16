@@ -4,11 +4,36 @@ Rho-plugins develops concrete functional components for both headless callers an
 the Rho application. [Architecture](ARCHITECTURE.md) defines ownership;
 [Status](STATUS.md) records implemented behavior and unresolved limits.
 
+## Reusable foundation before plugin UI
+
+The [plugin model](PLUGIN-MODEL.md) separates reusable capability plugins, their
+optional entries and project workflows. The existing headless 0.1 package is a
+working vertical prototype with scientific coupling. Its checks remain valid for
+that composition; they do not accept a reusable plugin foundation.
+
+1. Remove the fixed paired recipe from base catalog/packaging. Keep the example,
+   scientific checks and historical evidence as an explicit consumer.
+2. Extract declared script execution, requirement providers, artifact readers and
+   checks behind reusable owners. Rho keeps request mapping and the Core bridge.
+3. Declare table types/keys, chart field mappings, media resources and bounded
+   object snapshots. Remove gene/fold-change/model assumptions from generic readers
+   and application routing. Live R inspection requires its own native adapter.
+4. Deliver versioned capability/view contracts, client and fixtures with explicit
+   compatibility for old records. Restore missing entries without execution.
+5. Verify the base install without scientific example dependencies, an ordinary
+   non-gene R project and the paired recipe through the same capabilities. Then
+   implement and accept browser entries against those contracts.
+
+The [application extraction plan](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
+records owners, source locations, migration and completion conditions. This work
+precedes plugin UI acceptance, including the second consumer below.
+
 ## First integrated flow
 
 The first application flow develops scientific workbench interaction, freely
 composed views and Agent-driven UI together. Its selected components cover an
-Agent, script editing, tables, plots and one real scientific method.
+Agent bridge, document/code, runtime, requirements, table, media and chart
+capabilities, exercised by an explicitly selected project recipe.
 
 1. A user gives an analysis request. The Agent selects the component's action
    and shows its parameters through a registered UI component. Headless and UI
@@ -32,8 +57,8 @@ Functional views select CodeMirror 6, AG Grid Community and ECharts; Agent-compo
 views use a json-render catalog. MCP Apps is optional for an isolated independent
 HTML consumer. [Rho's technology direction](https://github.com/YuLab-SMU/Rho/blob/main/docs/TECHSTACK.md)
 is the application selection reference. The [headless component package](HEADLESS.md)
-and its Rho HTTP/Core/Agent composition have been implemented and checked. UI
-assembly remains pending.
+and its Rho HTTP/Core/Agent composition have been implemented and checked for the
+paired example. Reusable foundation extraction and UI assembly remain pending.
 
 Acceptance also covers input methods, keyboard access, missing components, stale
 resources, failed view restoration and version mismatch. Record the actual chosen
@@ -42,14 +67,20 @@ not accept the combination. Set and measure limits for the actual protected
 processes, output retention, buffer sizes, subscriptions and rendered resources;
 name configuration and exceeded-limit behavior.
 
-## Scientific component work
+<a id="scientific-component-work"></a>
 
-The [paired airway recipe](../examples/real-r-analysis/README.md) supplies real
-batch execution, conditional simulation, ordinary artifacts and native/independent
+## Scientific recipes and domain extensions
+
+The [paired airway recipe](../examples/real-r-analysis/README.md) is an example,
+not a plugin. It supplies real batch execution, conditional simulation, ordinary
+artifacts and native/independent
 checks. Reuse its evidence within the [recorded acceptance](../examples/real-r-analysis/ACCEPTANCE.md).
 Existing R tools, RDS, manifests and ordinary file operations remain valid paths.
 Scientific owners retain method choice, model assumptions and interpretation.
 
+Reusable domain extensions may contribute parameterized native operations and
+object adapters when a demonstrated consumer needs them. Dataset/design/contrast
+choices and workflow sequencing stay in recipes and do not become base contracts.
 Extend a recipe or add native-session support only for a demonstrated user need.
 A request requiring interactive R memory must specify object identity, lifetime,
 input and recovery guarantees before implementation. Waiting continuation does not
@@ -87,8 +118,8 @@ user runtimes.
 
 ## Subsequent composition
 
-A second domain component tests whether shared actions, resource references,
-selection and views remain useful beyond the first method. Add interoperability
-adapters only for a selected consumer. Deliver owner changes independently, then
-accept their actual application combination. Distribution and installation have
+A second non-gene consumer is an extraction gate before plugin UI work; it is not
+deferred to a later scientific plugin. Subsequent domain extensions and
+interoperability adapters require a selected consumer. Deliver owner changes
+independently, then accept their actual application combination. Distribution and installation have
 separate acceptance and do not follow automatically from source publication.

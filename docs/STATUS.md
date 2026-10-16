@@ -1,15 +1,17 @@
 # Current status
 
-Updated: 2026-10-15.
+Updated: 2026-10-16.
 
-## Implemented components
+## Implemented prototype and consumers
 
 - [Headless components 0.1](HEADLESS.md) exports persistent shared documents,
   action-local R dependency checks/preparation, actual resource/data readers,
   a finite typed catalog, apeglm shrinkage and a project-scoped stdio MCP adapter.
   Eight focused tests pass. Rho separately exercised the actual HTTP/public Core
   CLI composition, real Claude Code handoff and 16,139-gene analysis/comparison.
-  UI entry points remain unavailable; the external client owns its model loop.
+  This 0.1 prototype still mixes reusable behavior with workflow-specific actions,
+  package requirements, column readers and bindings. UI entry points remain
+  unavailable; the external client owns its model loop.
 
 - [Agent evaluation](../plugins/agent-eval/README.md) runs isolated public Core CLI
   trials, invokes domain-owned checkers and regrades retained model evidence.
@@ -17,7 +19,8 @@ Updated: 2026-10-15.
   files. The recorded acceptance includes 43 regressions, eight real CLI baseline
   cases, six optional library-fixture cases and one real-model execute trial.
   The retained full-model evidence remains 15/16, including its failure.
-- [Paired airway analysis](../examples/real-r-analysis/README.md) uses
+- [Paired airway analysis](../examples/real-r-analysis/README.md) is an example
+  and acceptance consumer, not a plugin. It uses
   airway/GSE52778, donor-paired DESeq2, four donor-omission fits and 200 conditional
   simulations. The recorded R execution took 562.6595 seconds. Wait-client
   interruption retained the original run/PID and one native entry. Original and
@@ -30,10 +33,27 @@ check scopes and incomplete guarantees. Source-only execution with a copied Core
 binary passed the eight CLI baseline cases without a Core checkout. Recorded
 runs establish only those subjects and environments.
 
+## Current focus: reusable capability extraction
+
+The [plugin model](PLUGIN-MODEL.md) selects documents/code, files/artifacts,
+R execution/objects, requirements, tables, media, charts and Agent integration as
+reusable capability boundaries. Several views can share one capability/state
+owner. A fixed analysis workflow stays in project code or an example. Domain
+extensions require a reusable native operation or resource adapter; Agent
+evaluation remains a separate development tool.
+
+The current catalog still registers `airway.analyze`/`airway.shrink`; the base
+package includes the example. Readers still know `gene_id`, scientific columns
+and model pairing. Extraction into explicit providers and generic contracts is
+pending, as are a base install without the example and a second non-gene consumer.
+These gates precede plugin UI acceptance. The
+[Rho extraction plan](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
+records source locations, owner changes and compatibility requirements. Current
+scientific/headless passes retain their actual scope and do not accept this model.
+
 ## Selected application direction
 
-Components include Agents, editors, files, tables, plots, scientific methods and
-evaluation. CLI, Skills, MCP and UI are optional entries to the same functionality.
+CLI, Skills, MCP and UI are optional entries to reusable capabilities.
 Rho-core supplies public managed execution; Rho owns selection, assembly and
 presentation. [Architecture](ARCHITECTURE.md) defines proposed Action, Resource,
 Selection and View concepts and their ownership.
@@ -60,11 +80,14 @@ lifetime remains independent of views, and reads do not start or recover it.
   installed-path trial also exposed Rscript's `~+~` space encoding in `--file`;
   decoding a nonexistent raw path now preserves the actual script digest, with
   a native R regression under a spaced Chinese path.
-- Editor, file, table, plot and Agent UI components and cross-view interaction
-  remain selected work.
+- Generic resource/key/field contracts, recipe-free base packaging and typed
+  capability/view contributions are not yet extracted from the 0.1 prototype.
+  Editor, file, table, media/chart, object and Agent UI entries remain work.
 - Candidate optimization, candidate comparison/rollback, development/validation/
   blind-test management and hillclimbing are not implemented.
-- The R batch consumer does not recover interactive R memory after Host replacement.
+- The R batch consumer supplies no general live-variable inspection or interactive
+  R-memory recovery after Host replacement. The selected initial object view
+  contract consumes explicit exported snapshots; that generic entry is pending.
   Its numerical checks do not independently validate every model assumption.
 - Core execution success, checker results, model judgment and scientific validity
   remain separate. Current evidence does not establish autonomous scientific

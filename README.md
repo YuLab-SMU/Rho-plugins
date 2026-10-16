@@ -1,22 +1,37 @@
 # Rho-plugins
 
-Rho-plugins owns the functional components used by the Rho intelligent system:
-Agents, editors, file operations, tables, plots, scientific methods, evaluation
-and other concrete capabilities. Each component owns its behavior, native
-preconditions, resources, results and checks.
+Rho-plugins owns reusable functional capabilities: documents/code, files and
+artifacts, runtime adapters and object inspection, requirements, tables, media,
+charts and Agent integration. Each capability owns its behavior, native
+preconditions, resources, results and checks. Project analysis workflows compose
+these capabilities; they are not plugins.
 
 [Rho-core](https://github.com/YuLab-SMU/Rho-core) supplies the execution foundation.
 [Rho](https://github.com/YuLab-SMU/Rho) assembles components into an application.
 A component can serve headless callers and application users through optional
 CLI, Skills, MCP or UI entries to the same functionality.
 
-## Available components
+## Plugin boundary
 
-| Component | Available behavior | Acceptance |
+The [reusable plugin model](docs/PLUGIN-MODEL.md) defines capability ownership,
+headless and UI entries, resource/selection contracts and extraction acceptance.
+A plugin can contribute several views over one state owner. Rho selects and
+arranges those entries; a workflow's dataset, method choices and sequencing stay
+in project code or an example. The model is selected architecture; extraction
+from the current headless prototype remains pending.
+
+## Current implementations and consumers
+
+| Implementation | Available behavior | Acceptance |
 | --- | --- | --- |
-| [Agent evaluation](plugins/agent-eval/README.md) | Isolated public Core CLI trials, domain-owned checks and offline regrading | [Recorded execution](plugins/agent-eval/ACCEPTANCE.md) |
-| [Headless components](docs/HEADLESS.md) | Shared documents, dependency preparation, real table/plot data, apeglm action and stdio MCP adapter | [Component and integration scope](docs/HEADLESS.md#build-and-verify) |
-| [Paired airway analysis](examples/real-r-analysis/README.md) | DESeq2 analysis, donor sensitivity, conditional simulations and artifact checks | [Scientific and execution facts](examples/real-r-analysis/ACCEPTANCE.md) |
+| [Headless prototype](docs/HEADLESS.md) | Shared documents and MCP adapter; dependency/data readers and scientific actions still coupled to the paired example | [Component and integration scope](docs/HEADLESS.md#build-and-verify) |
+| [Agent evaluation](plugins/agent-eval/README.md) | Separate development tool: isolated public Core CLI trials, domain-owned checks and offline regrading | [Recorded execution](plugins/agent-eval/ACCEPTANCE.md) |
+
+The [paired airway analysis](examples/real-r-analysis/README.md) is a scientific
+example and acceptance consumer: DESeq2 analysis, donor sensitivity, simulations
+and artifact checks. Its [scientific/execution record](examples/real-r-analysis/ACCEPTANCE.md)
+is retained. It is not a plugin or a base-system requirement. The current 0.1
+package still bundles it; separating that dependency is required work.
 
 The Python/R consumers and Node headless component package run today. Editor,
 table, plot and Agent UI entries remain independent work. [Status](docs/STATUS.md) records that boundary.
@@ -53,8 +68,10 @@ Community and ECharts. Agent-composed UI uses a typed json-render catalog;
 independent HTML views may use isolated MCP Apps when needed.
 
 [Architecture](docs/ARCHITECTURE.md) defines component responsibilities and the
-Action, Resource, Selection and View boundaries. The finite headless catalog is
-implemented; UI rendering remains selected work.
+Action, Resource, Selection and View boundaries. The finite 0.1 headless catalog
+is implemented but contains workflow-specific actions and bindings. Reusable
+capability extraction and a second non-gene consumer precede plugin UI acceptance;
+UI rendering remains selected work.
 [Roadmap](docs/ROADMAP.md) defines the first integrated flow.
 The [headless package](docs/HEADLESS.md) documents the implemented entries and
 actual Rho composition checks. There is no universal component loader.
