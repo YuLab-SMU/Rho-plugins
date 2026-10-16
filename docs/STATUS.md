@@ -2,6 +2,22 @@
 
 Updated: 2026-10-16.
 
+## Headless collaboration extension
+
+Nine owner packages now include the minimal `annotations` capability. All ship
+versioned operation declarations and digest-checked Skills in the actual compiled
+entry; Rho checks business-schema parity. The shared MCP adapter intersects the
+live catalog with grants and optional plugin filters before listing/calling tools.
+Annotations freezes Documents UTF-16 excerpts or Tables stable-key entities and
+submitted Documents drafts; replies explicitly link messages. Agent contexts
+separately record preparation, fetch and explicit reply observations. No UI or
+new execution journal is introduced. See [Collaboration](COLLABORATION.md).
+
+Fourteen owner tests pass, including new annotations/entry checks. Source Rho
+integration and actual Claude Code 2.1.302 collaboration passed without Host starts
+or native dispatches. Installed application evidence remains the application's
+responsibility; the earlier eight-plugin installation below is historical.
+
 ## Implemented capabilities and consumers
 
 [Eight independent headless plugins 0.4](PLUGIN-PACKAGES.md) supply one generic `r.execute` action,

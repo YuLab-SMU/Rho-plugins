@@ -20,15 +20,26 @@ async function invoke(method: string, input: Record<string, unknown> = {}) {
 const schema = await invoke('protocol.describe');
 if (!schema.ok) throw new Error('Rho protocol is unavailable.');
 const allowed: string[] = c.methods;
+async function available() {
+  const catalog = await invoke('capability.list');
+  if (!catalog.ok) throw new Error('Project catalog is unavailable.');
+  // A provisioned entry filter can only narrow the authenticated grant. Query
+  // every time so a cached tools/list cannot bypass project configuration.
+  return allowed.filter(method => {
+    const operation = catalog.value.operations?.find((op: any) => op.method === method);
+    return operation?.authorized && operation.state === 'available' &&
+      (!c.pluginFilter || !operation.owner || c.pluginFilter.includes(operation.owner));
+  });
+}
 const server = new Server({ name: 'rho-project', version: '0.4.0' }, { capabilities: { tools: {} } });
-server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: allowed.map(method => {
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: (await available()).map(method => {
   const source = structuredClone(schema.value.operations[method]);
   delete source.properties.projectId;
   source.required = source.required.filter((p: string) => p !== 'projectId');
   return { name: 'rho_' + method.replaceAll('.', '_'), description: schema.value.descriptions[method] ?? method, inputSchema: source };
 }) }));
 server.setRequestHandler(CallToolRequestSchema, async request => {
-  const method = allowed.find(m => 'rho_' + m.replaceAll('.', '_') === request.params.name);
+  const method = (await available()).find(m => 'rho_' + m.replaceAll('.', '_') === request.params.name);
   if (!method) return { content: [{ type: 'text', text: 'Unsupported project operation.' }], isError: true };
   try {
     await retainAgentIntent(descriptor, c, method, request.params.arguments ?? {}, Number(process.env.RHO_MAX_AGENT_INTENTS ?? 256));

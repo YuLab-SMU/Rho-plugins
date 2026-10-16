@@ -1,6 +1,9 @@
+import { operationContracts } from './operations.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
-import { digest, now, requireThat, canonical, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { digest, now, objectSchema as obj, requireThat, canonical, stateDirectory, text } from '@rho-workspace/plugin-contracts';
+
+const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 interface Environment { rscript: string; libraryPaths: string[] }
 export interface Requirement { package: string; source: 'cran' | 'bioconductor'; minimumVersion?: string }
 export function libraryPrefix(e: Environment) { return '.libPaths(c(c(' + e.libraryPaths.map(x => JSON.stringify(x)).join(',') + '), .libPaths()))\n'; }
@@ -49,4 +52,6 @@ export async function preparation(root: string, requirements: Requirement[], rsc
   return { code, args: [] as string[], source: { kind: 'dependency-preparation', requirements, library, before: check }, output: null };
 }
 
-export const plugin = { id: 'requirements', package: '@rho-workspace/plugin-requirements', version: '0.4.0', requires: [], capabilities: ['requirements'] };
+const requirementsSkill = declaredSkill('requirements.workspace', 'Use capability.list to discover requirements.check and requirements.prepare. Checks are bounded observations; preparation is an explicit native plan and never silently installs packages.');
+export const plugin = { entryVersion: '1.0', id: 'requirements', package: '@rho-workspace/plugin-requirements', version: '0.4.0', requires: [], capabilities: ['requirements'],
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [requirementsSkill] };

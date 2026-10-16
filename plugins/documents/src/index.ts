@@ -1,6 +1,9 @@
+import { operationContracts } from './operations.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory, objectSchema as obj, text } from '@rho-workspace/plugin-contracts';
+
+const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 
 async function fileDigest(file: string, maxBytes = 1024 * 1024): Promise<string | null> {
   try { requireThat((await fs.stat(file)).size <= maxBytes, 'limit', 'Disk document exceeds the bounded digest reader; the acknowledged buffer is retained.', { limit: 'maxBufferBytes', maximum: maxBytes }); return digest(await fs.readFile(file)); } catch (e: any) { if (e.code === 'ENOENT') return null; throw e; }
@@ -100,6 +103,12 @@ export class Documents {
     const doc = await this.current(id, expectedVersion);
     return { code: doc.content, sha256: digest(doc.content), source: { kind: 'buffer', documentId: id, version: doc.version, path: doc.path, dirty: doc.dirty } };
   }
+  async anchor(id: string, expectedVersion: number, from: number, to: number) {
+    const snapshot = await this.snapshot(id, expectedVersion);
+    const boundary = (n: number) => !(n > 0 && n < snapshot.code.length && /[\uD800-\uDBFF]/.test(snapshot.code[n - 1]!) && /[\uDC00-\uDFFF]/.test(snapshot.code[n]!));
+    requireThat(Number.isSafeInteger(from) && Number.isSafeInteger(to) && from >= 0 && to >= from && to <= snapshot.code.length && boundary(from) && boundary(to), 'invalid', 'Anchor must use complete UTF-16 character boundaries.');
+    return { kind: 'document', source: snapshot.source, sha256: snapshot.sha256, from, to, text: snapshot.code.slice(from, to) };
+  }
   async restore(imported: DocumentState, author: string) {
     requireThat(!imported.path.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal state is not an editable document.');
     const target = await confined(this.root, imported.path, true);
@@ -115,4 +124,12 @@ export class Documents {
   }
 }
 
-export const plugin = { id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.0', requires: [], capabilities: ['documents'], components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };
+const documentRef = obj({ documentId: text });
+const documentSkill = declaredSkill('documents.workspace', 'Use capability.list to discover document.open, document.read, document.edit, document.undo and document.save. Preserve UTF-16 ranges, expected versions, undo groups and disk write conditions.');
+export const plugin = {
+  entryVersion: '1.0',
+  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.0', requires: [], capabilities: ['documents'],
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
+  skills: [documentSkill],
+  components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]
+};

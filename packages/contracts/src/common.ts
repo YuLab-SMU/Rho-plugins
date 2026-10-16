@@ -57,3 +57,16 @@ export const text = { type: 'string', minLength: 1 };
 export const version = { type: 'string', pattern: '^[a-f0-9]{64}$' };
 export const refSchema = objectSchema({ id: text, version });
 export interface ResourceRef { id: string; version: string }
+
+// These declarations are shipped by each owner package. Rho adds project and
+// caller checks around them, but does not replace the owner's business
+// contract with a generic execution escape hatch.
+export interface OperationDeclaration {
+  method: string;
+  version: '2.0';
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  requires: string[];
+  effect: 'read' | 'metadata' | 'document' | 'file' | 'native';
+}
+export interface SkillDeclaration { id: string; version: string; content: string; digest: string }

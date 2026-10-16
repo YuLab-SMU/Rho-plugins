@@ -1,3 +1,4 @@
+import { operationContracts } from './operations.js';
 import { publicResource, objectSchema as obj, text, type ResourceRef, type ResourceStore, type DocumentSnapshotSource, type ActionPlan } from '@rho-workspace/plugin-contracts';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -36,6 +37,8 @@ export async function planExecution(root: string, input: any, operationId: strin
   return { code: ('.libPaths(c(c(' + environment.libraryPaths.map(x => JSON.stringify(x)).join(',') + '), .libPaths()))\n') + snapshot.code, args, source: { ...snapshot.source, sha256: snapshot.sha256, inputs, artifacts: input.artifacts, completion: input.completion, requirements: input.requirements }, output: path.relative(root, output), completion: completionPath && path.relative(root, completionPath) };
 }
 import { createExecutionInputSchema } from './contract.js';
+
+const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 export { createExecutionInputSchema, scriptSchema } from './contract.js';
 export const actions = [{ id: 'r.execute', version: '0.2.0', owner: 'rho-plugins.r', requires: ['requirements'], capabilities: ['r-execution'], effects: ['native-execution', 'create-declared-artifacts'], cancellation: 'Core cancellation request; native stop requires observation', inputSchema: createExecutionInputSchema() }];
 
@@ -52,4 +55,7 @@ export class Objects {
     return { resource: publicResource(r), observation: 'exported-snapshot', value: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)) };
   }
 }
-export const plugin = { id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.0', requires: ['files'], capabilities: ['r-objects'], actions, components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };
+const rSkill = declaredSkill('r.workspace', 'Use capability.list to discover object.read and action.submit. Reads address exported snapshots; native execution is explicit and retains its original operation identity.');
+export const plugin = { entryVersion: '1.0', id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.0', requires: ['files'], capabilities: ['r-objects'], actions,
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
+  skills: [rSkill], components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };

@@ -1,4 +1,7 @@
-import { objectSchema as obj, text, requireThat, publicResource, validateDeclarationEnvelope, type Declaration, type ResourceRef, type ResourceStore } from '@rho-workspace/plugin-contracts';
+import { operationContracts } from './operations.js';
+import { objectSchema as obj, text, requireThat, publicResource, validateDeclarationEnvelope, type Declaration, type ResourceRef, type ResourceStore, digest } from '@rho-workspace/plugin-contracts';
+
+const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 export function validateMediaDeclaration(d: Declaration) {
   validateDeclarationEnvelope(d); requireThat(d.kind === 'media', 'invalid', 'Select a media declaration.');
   const f = d.format as any;
@@ -25,4 +28,7 @@ export class Media {
     return { ...region, resource: ref, mapping: 'original-media-coordinates' };
   }
 }
-export const plugin = { id: 'media', package: '@rho-workspace/plugin-media', version: '0.4.0', requires: ['files'], capabilities: ['media'], components: [{ id: 'rho.media', version: '0.2.0', owner: 'rho-plugins.media', bindings: { data: 'media' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };
+const mediaSkill = declaredSkill('media.workspace', 'Use capability.list to discover media.describe. Preserve the original resource version and declared coordinates; rendering is optional and does not change source bytes.');
+export const plugin = { entryVersion: '1.0', id: 'media', package: '@rho-workspace/plugin-media', version: '0.4.0', requires: ['files'], capabilities: ['media'],
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [mediaSkill],
+  components: [{ id: 'rho.media', version: '0.2.0', owner: 'rho-plugins.media', bindings: { data: 'media' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };

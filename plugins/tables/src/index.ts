@@ -1,6 +1,9 @@
+import { operationContracts } from './operations.js';
 import { parse } from 'csv-parse/sync';
 import { atomicJson, canonical, confined, digest, publicResource, requireThat, stateDirectory, validateDeclarationEnvelope as validateEnvelope, type Declaration, type Resource, type ResourceRef, type ResourceStore } from '@rho-workspace/plugin-contracts';
 import type { TableFormat } from './contract.js';
+
+const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 export type { TableFormat } from './contract.js';
 export const tableLimits = { maxRows: 100000, maxPageRows: 1000 };
 export function validateTableDeclaration(d: Declaration) {
@@ -12,6 +15,11 @@ export function validateTableDeclaration(d: Declaration) {
 }
 export const declarationValidator = { kind: 'table', validate: validateTableDeclaration };
 export class Tables {
+  async anchor(ref: import('@rho-workspace/plugin-contracts').ResourceRef, entities: string[]) {
+    const data = await this.rows(ref);
+    requireThat(data.entityKey && Array.isArray(entities) && entities.length > 0 && new Set(entities).size === entities.length && entities.every(id => typeof id === 'string' && data.rows.some(row => row[data.entityKey!] === id)), 'invalid', 'Choose unique stable entity keys present in the exact table version.');
+    return { kind: 'table', resource: ref, namespace: data.namespace, entityKey: data.entityKey, rows: data.rows.filter(row => entities.includes(row[data.entityKey!])) };
+  }
   limits: typeof tableLimits;
   constructor(public files: Pick<ResourceStore, 'root' | 'bytes' | 'resolve' | 'register'>, limits: Partial<typeof tableLimits> = {}) { this.limits = { ...tableLimits, ...limits }; }
   async rows(ref: ResourceRef): Promise<{ resource: Resource; rows: Record<string, any>[]; columns: TableFormat['columns']; entityKey: string | null; namespace: string | null }> {
@@ -80,4 +88,7 @@ export class Tables {
     return publicResource(await this.files.register(relative, { operationId: 'comparison:' + key, inputs: [left, right], transform: options, sources: [a.resource.provenance, b.resource.provenance] }, 'available', { total: rows.length, missingX: rows.filter(r => r.x === null).length, missingY: rows.filter(r => r.y === null).length }, { path: relative, kind: 'table', format }));
   }
 }
-export const plugin = { id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.0', requires: ['files'], capabilities: ['tables'], components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };
+const tablesSkill = declaredSkill('tables.workspace', 'Use capability.list to discover data.page and data.compare. Bind stable resource versions and entity keys; do not infer identity from row position.');
+export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.0', requires: ['files'], capabilities: ['tables'],
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [tablesSkill],
+  components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

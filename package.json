@@ -29,6 +29,7 @@
     "plugins/tables",
     "plugins/media",
     "plugins/charts",
-    "plugins/agent"
+    "plugins/agent",
+    "plugins/annotations"
   ]
 }

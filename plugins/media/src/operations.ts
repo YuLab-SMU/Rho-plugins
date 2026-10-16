@@ -1,0 +1,149 @@
+// Owner business contracts. Application project/authentication fields are separate.
+export const operationContracts = {
+  "media.describe": {
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "resource": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ]
+        }
+      },
+      "required": [
+        "resource"
+      ]
+    },
+    "outputSchema": {
+      "type": "object",
+      "properties": {
+        "resource": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "owner": {
+              "type": "string",
+              "minLength": 1
+            },
+            "kind": {
+              "enum": [
+                "file",
+                "table",
+                "media",
+                "object",
+                "plot",
+                "model"
+              ]
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1
+            },
+            "bytes": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "provenance": {
+              "type": "object"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "availability": {
+              "enum": [
+                "available",
+                "partial",
+                "missing",
+                "unknown"
+              ]
+            },
+            "format": {
+              "anyOf": [
+                {
+                  "type": "object"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "version",
+            "projectId",
+            "owner",
+            "kind",
+            "path",
+            "bytes",
+            "provenance",
+            "coverage",
+            "availability"
+          ]
+        },
+        "original": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "version": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "id",
+            "version"
+          ]
+        },
+        "mimeType": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rendering": {
+          "const": "unavailable"
+        }
+      },
+      "required": [
+        "resource",
+        "original",
+        "mimeType",
+        "rendering"
+      ],
+      "additionalProperties": true
+    },
+    "requires": [
+      "files"
+    ],
+    "effect": "read"
+  }
+} as const;

@@ -29,4 +29,7 @@ export interface TableReader {
 export interface PluginDescriptor {
   id: string; package: string; version: string; requires: string[]; capabilities: string[];
   actions?: any[]; components?: any[]; agent?: Record<string, unknown>;
+  entryVersion: '1.0';
+  operations: import('./common.js').OperationDeclaration[];
+  skills: import('./common.js').SkillDeclaration[];
 }

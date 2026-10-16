@@ -18,6 +18,11 @@ try {
 import { plugin } from '${item.package}';
 assert.equal(plugin.id, '${item.id}');
 assert.equal(plugin.version, '${item.version}');
+assert.equal(plugin.entryVersion, '1.0');
+assert.ok(plugin.operations.length > 0);
+assert.ok(plugin.skills.length > 0);
+const { createHash } = await import('node:crypto');
+for (const skill of plugin.skills) assert.equal(createHash('sha256').update(skill.content).digest('hex'), skill.digest);
 ${['files', 'tables', 'media', 'r', 'requirements'].includes(item.id) ? `assert.ok(Object.keys(await import('${item.package}/contract')).length > 0);` : ''}
 `;
     const file = path.join(directory, 'check.mjs'); await fs.writeFile(file, script);

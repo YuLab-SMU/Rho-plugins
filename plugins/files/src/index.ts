@@ -1,7 +1,10 @@
+import { operationContracts } from './operations.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { atomicBytes, atomicJson, canonical, confined, digest, Fault, now, readJson, requireThat, stateDirectory, type ResourceRef } from '@rho-workspace/plugin-contracts';
+import { atomicBytes, atomicJson, canonical, confined, digest, Fault, now, readJson, requireThat, stateDirectory, type ResourceRef, objectSchema as obj, text } from '@rho-workspace/plugin-contracts';
 import { validateDeclarationEnvelope, publicResource, type Resource, type ResourceStore, type Declaration } from '@rho-workspace/plugin-contracts';
+
+const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 export const fileLimits = { maxFileBytes: 64 * 1024 * 1024, maxResources: 1024, maxArtifactBytes: 512 * 1024 * 1024, maxReadBytes: 65536 };
 export class Files {
   limits: typeof fileLimits;
@@ -145,4 +148,10 @@ export async function verifyArtifacts(root: string, run: any, resources: Resourc
   return { ...facts, integrity: { ...facts.integrity, state: 'verified', files: declared.length, checkedAt: now(), manifestDigest: digest(JSON.stringify(manifest)) } };
 }
 
-export const plugin = { id: 'files', package: '@rho-workspace/plugin-files', version: '0.4.0', requires: [], capabilities: ['files'] };
+const filesSkill = declaredSkill('files.workspace', 'Use capability.list to discover resource.list, resource.read, resource.register and artifact.check. Keep resource versions and provenance explicit; reads never start a runtime.');
+export const plugin = {
+  entryVersion: '1.0',
+  id: 'files', package: '@rho-workspace/plugin-files', version: '0.4.0', requires: [], capabilities: ['files'],
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
+  skills: [filesSkill]
+};

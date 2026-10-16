@@ -1,4 +1,7 @@
-import { objectSchema as obj, text, publicResource, requireThat, type ResourceRef, type TableReader } from '@rho-workspace/plugin-contracts';
+import { operationContracts } from './operations.js';
+import { objectSchema as obj, text, publicResource, requireThat, type ResourceRef, type TableReader, digest } from '@rho-workspace/plugin-contracts';
+
+const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 export const chartLimits = { maxPoints: 20000 };
 export class Charts {
   limits: typeof chartLimits;
@@ -17,4 +20,7 @@ export function validateComponentBindings(id: string, props: Record<string, unkn
   const f = resources.data?.format as { key?: unknown; columns: { name: string; type: string }[] } | undefined;
   requireThat(f?.key && [props.x, props.y].every(name => f.columns.some(c => c.name === name && c.type === 'number')), 'condition', 'Scatter entries require an explicit entity key and two declared numeric columns.');
 }
-export const plugin = { id: 'charts', package: '@rho-workspace/plugin-charts', version: '0.4.0', requires: ['tables'], capabilities: ['charts'], components: [{ id: 'rho.scatter', version: '0.2.0', owner: 'rho-plugins.scatter', bindings: { data: 'table' }, ui: 'unavailable', propsSchema: obj({ title: text, x: text, y: text }) }] };
+const chartsSkill = declaredSkill('charts.workspace', 'Use capability.list to discover data.plot. Bind an immutable table resource version and explicit numeric columns; plotting does not execute code.');
+export const plugin = { entryVersion: '1.0', id: 'charts', package: '@rho-workspace/plugin-charts', version: '0.4.0', requires: ['tables'], capabilities: ['charts'],
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [chartsSkill],
+  components: [{ id: 'rho.scatter', version: '0.2.0', owner: 'rho-plugins.scatter', bindings: { data: 'table' }, ui: 'unavailable', propsSchema: obj({ title: text, x: text, y: text }) }] };
