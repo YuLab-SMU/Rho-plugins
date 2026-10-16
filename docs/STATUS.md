@@ -31,16 +31,21 @@ renderers. There is no marketplace or dynamic loader.
   four sample rows, real linear-model coefficients, PNG/PDF and an exported model
   snapshot. Identifiers `001` and literal `NA` remain strings.
 - The [paired analysis](../examples/real-r-analysis/README.md) is an explicit
-  scientific consumer. Rho's new source trial completed five DESeq2 fits,
+  scientific consumer. Rho's actual installed 0.3 trial completed five DESeq2 fits,
   16,139-row typed results, independent arithmetic/native checks, apeglm shrinkage
   and a comparison recording both input versions.
 - Both projects use the same action, requirements, declaration, reader and
-  composition contracts. Rho separately verifies the actual public Core bridge,
-  recovery, frozen v1 observations and the npm installation.
+  composition contracts. Rho's full 0.3 installation passes both consumers and
+  recovery; a separate reduced installation physically includes only Contracts,
+  Documents and Files. Missing optional packages remain unavailable while Unicode
+  documents and export work without R or a Host. Removal/reselection retains
+  bytes, drafts/undo, selection intent, view references and original requests.
 - Actual Claude Code 2.1.301 through MCP SDK 1.29.0 fetched v2 context and changed
   the same unsaved Chinese/emoji buffer, without starting a Host.
 
-Application results, current installation evidence and retained failures are in
+Application results and current installation evidence are in
+[Rho's plugin split acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-SPLIT-ACCEPTANCE.md).
+Earlier evidence and retained failures remain in
 [Rho's extraction acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/EXTRACTION-ACCEPTANCE.md).
 The earlier [scientific record](../examples/real-r-analysis/ACCEPTANCE.md) remains
 a separate 200-simulation result: five saved models, 121/121 native observations,
