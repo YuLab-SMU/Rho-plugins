@@ -21,6 +21,10 @@ only Agent installs the MCP SDK. Root is a private source workspace. See
 unavailable. Those descriptors validate props/bindings without implementing
 renderers. There is no marketplace or dynamic loader.
 
+The [public interface reference](PUBLIC-INTERFACES.md) enumerates the eight Node
+APIs, dependency ports, schema subpaths and missing capabilities. Browser consumers
+use Rho's versioned HTTP/SSE contract; no browser SDK or renderer is supplied.
+
 - Twelve focused capability tests pass: document/undo budgets, immutable MCP intents,
   typed strings/nulls and entity namespaces, joins/provenance, resource freshness,
   script/argument snapshots, requirement probes, byte completion and containment.
@@ -81,7 +85,7 @@ extraction. See [Roadmap](ROADMAP.md#first-integrated-flow).
 R execution is batch Rscript. Objects are explicit exported snapshots, with
 provenance and bounded JSON previews; there is no live variable inspection or
 R-memory recovery after Host replacement. A Core Host is not an R interpreter.
-Reads start no Host or R process. Media returns original bytes and metadata,
+Document/resource reads start no Host or R process. Media returns original bytes and metadata,
 without image decoding, PDF rendering or browser interaction.
 
 Execution success, byte integrity, domain checks and model judgments remain

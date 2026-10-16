@@ -5,6 +5,9 @@ There is no aggregate runtime package. `@rho-workspace/plugins-source` is privat
 and rejects root packing. Examples and the separate Agent evaluator remain source
 consumers, outside every capability tarball.
 
+The [public interface reference](PUBLIC-INTERFACES.md) lists the exact package
+exports, injected ports and unimplemented capabilities for all eight owners.
+
 ## Inventory
 
 All packages are version **0.4.0**. Each capability exports its own `plugin`
