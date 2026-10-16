@@ -23,6 +23,10 @@ for (const id of ['contracts', ...selected]) {
   const manifest = JSON.parse(await fs.readFile(path.join(root, folder, 'package.json'), 'utf8'));
   const result = JSON.parse(run(['pack', '--workspace', folder, '--ignore-scripts', '--json', '--pack-destination', destination]))[0];
   if (result.files.some(f => !/^(dist\/|package.json$|README.md$|LICENSE$)/.test(f.path) || /\.R$/.test(f.path))) throw new Error('Unexpected packaged input: ' + id);
+  for (const file of result.files.filter(f => /^dist\/.*\.(js|json)$/.test(f.path))) {
+    const code = await fs.readFile(path.join(root, folder, file.path), 'utf8');
+    if (/DESeq2|airway|apeglm|dexamethasone|real-r-analysis|agent-eval/i.test(code)) throw new Error('Project/evaluation code leaked into ' + id + ': ' + file.path);
+  }
   packages.push({ id, package: manifest.name, version: manifest.version, filename: result.filename, bytes: result.size, sha256: createHash('sha256').update(await fs.readFile(path.join(destination, result.filename))).digest('hex'), integrity: result.integrity, files: result.files.map(f => f.path) });
 }
 await fs.writeFile(path.join(destination, 'plugins.json'), JSON.stringify({ selected, packages }, null, 2) + '\n');

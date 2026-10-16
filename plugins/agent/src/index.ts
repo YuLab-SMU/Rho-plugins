@@ -6,7 +6,7 @@ export { retainAgentIntent } from './agent-intents.js';
 export const agentLimits = { maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024 };
 export interface ContextSources {
   documents?: DocumentSnapshotSource;
-  files?: ResourceStore;
+  files?: Pick<ResourceStore, 'resolve' | 'read'>;
   tables?: TableReader;
   media?: { region(ref: ResourceRef, region: any): Promise<any> };
 }
@@ -95,4 +95,4 @@ export class AgentContext {
     await atomicJson(file, context); return { contextId, ...context };
   }
 }
-export const plugin = { id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.3.0', requires: [], capabilities: ['agent-context'], agent: { id: 'claude-code-mcp', transport: 'stdio', modelLoop: 'external-client', contextDelivery: 'pull-tool-result', proactivePush: 'unsupported' } };
+export const plugin = { id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.0', requires: [], capabilities: ['agent-context'], agent: { id: 'claude-code-mcp', transport: 'stdio', modelLoop: 'external-client', contextDelivery: 'pull-tool-result', proactivePush: 'unsupported' } };

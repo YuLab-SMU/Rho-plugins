@@ -88,3 +88,19 @@ test('empty and base-R requirements need no add-on package; script and argument 
   const d = await new Documents(root).open('script.R', 'test');
   await assert.rejects(planExecution(root, { script: { kind: 'buffer', documentId: d.id, version: 9 }, artifacts: [], args: [], completion: null }, 'op', check.environment, data, new Documents(root)), { kind: 'stale' });
 });
+
+test('R script limits do not depend on Documents selection or its buffer budget', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-r-budget-'));
+  const files = new Files(root, 'test'), documents = new Documents(root, { maxBufferBytes: 1 });
+  const code = 'cat("ordinary project")\n';
+  await fs.writeFile(path.join(root, 'run.R'), code);
+  const input = { script: { kind: 'disk', path: 'run.R', digest: digest(code) }, args: [], artifacts: [], requirements: [], completion: null };
+  const environment = { rscript: 'Rscript', libraryPaths: [] };
+  const withDocuments = await planExecution(root, input, 'one', environment, files, documents);
+  const withoutDocuments = await planExecution(root, input, 'two', environment, files);
+  assert.equal(withDocuments.code, withoutDocuments.code);
+  await assert.rejects(planExecution(root, input, 'three', environment, files, documents, { maxScriptBytes: 1 }), e => e.kind === 'limit' && e.details.limit === 'maxScriptBytes');
+  // Planning does not start a runtime, and document buffers keep their own limit.
+  await assert.rejects(documents.open('run.R', 'test'), { kind: 'limit' });
+  await assert.rejects(fs.stat(path.join(root, '.rho/core')));
+});

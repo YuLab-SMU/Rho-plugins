@@ -1,5 +1,7 @@
 import { parse } from 'csv-parse/sync';
-import { atomicJson, canonical, confined, digest, publicResource, requireThat, stateDirectory, validateDeclaration as validateEnvelope, type Declaration, type Resource, type ResourceRef, type ResourceStore, type TableFormat } from '@rho-workspace/plugin-contracts';
+import { atomicJson, canonical, confined, digest, publicResource, requireThat, stateDirectory, validateDeclarationEnvelope as validateEnvelope, type Declaration, type Resource, type ResourceRef, type ResourceStore } from '@rho-workspace/plugin-contracts';
+import type { TableFormat } from './contract.js';
+export type { TableFormat } from './contract.js';
 export const tableLimits = { maxRows: 100000, maxPageRows: 1000 };
 export function validateTableDeclaration(d: Declaration) {
   validateEnvelope(d); requireThat(d.kind === 'table', 'invalid', 'Select a table declaration.');
@@ -11,7 +13,7 @@ export function validateTableDeclaration(d: Declaration) {
 export const declarationValidator = { kind: 'table', validate: validateTableDeclaration };
 export class Tables {
   limits: typeof tableLimits;
-  constructor(public files: ResourceStore, limits: Partial<typeof tableLimits> = {}) { this.limits = { ...tableLimits, ...limits }; }
+  constructor(public files: Pick<ResourceStore, 'root' | 'bytes' | 'resolve' | 'register'>, limits: Partial<typeof tableLimits> = {}) { this.limits = { ...tableLimits, ...limits }; }
   async rows(ref: ResourceRef): Promise<{ resource: Resource; rows: Record<string, any>[]; columns: TableFormat['columns']; entityKey: string | null; namespace: string | null }> {
     const { r, data } = await this.files.bytes(ref);
     requireThat(r.kind === 'table' && typeof r.format === 'object', 'unavailable', 'Typed reads require an explicit table declaration. Historical bytes remain readable.');
@@ -78,4 +80,4 @@ export class Tables {
     return publicResource(await this.files.register(relative, { operationId: 'comparison:' + key, inputs: [left, right], transform: options, sources: [a.resource.provenance, b.resource.provenance] }, 'available', { total: rows.length, missingX: rows.filter(r => r.x === null).length, missingY: rows.filter(r => r.y === null).length }, { path: relative, kind: 'table', format }));
   }
 }
-export const plugin = { id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.3.0', requires: ['files'], capabilities: ['tables'], components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };
+export const plugin = { id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.0', requires: ['files'], capabilities: ['tables'], components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

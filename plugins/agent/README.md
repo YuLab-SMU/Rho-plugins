@@ -1,16 +1,16 @@
 # Agent bridge and context plugin
 
-`@rho-workspace/plugin-agent` 0.3.0 is an independently packed npm plugin.
+`@rho-workspace/plugin-agent` 0.4.0 is an independently packed npm plugin.
 
 Public entries: `AgentContext`, `retainAgentIntent`; `rho-agent-mcp` / `./mcp`.
 
 Scoped MCP tools, durable original caller intents, versioned explicit context, bindings and tool-fetch receipts.
 
-Selected services: Only the sources actually used by a context: documents, files, tables or media.
+Selected services: Only the read-only sources actually used by a context: documents, files, tables or media.
 
 Only this plugin depends on the MCP SDK. The external client owns the conversation/model loop.
 
-The package depends on `@rho-workspace/plugin-contracts` 0.3.0 for wire types
+The package depends on `@rho-workspace/plugin-contracts` 0.4.0 for generic envelopes and service ports
 and ordinary file primitives; that package contains no capability implementation.
 Service ports do not install or start other plugins. Rho explicitly selects and
 connects providers. `plugin` describes this package and its selected-service

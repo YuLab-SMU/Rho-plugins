@@ -52,9 +52,6 @@ export async function stateDirectory(root: string, relative: string) {
   await fs.mkdir(p, { recursive: true, mode: 0o700 });
   return await confined(root, relative);
 }
-export async function fileDigest(file: string, maxBytes = 1024 * 1024): Promise<string | null> {
-  try { requireThat((await fs.stat(file)).size <= maxBytes, 'limit', 'Disk document exceeds the bounded digest reader; the acknowledged buffer is retained.', { limit: 'maxBufferBytes', maximum: maxBytes }); return digest(await fs.readFile(file)); } catch (e: any) { if (e.code === 'ENOENT') return null; throw e; }
-}
 export const objectSchema = (properties: Record<string, unknown>, required = Object.keys(properties)) => ({ type: 'object', additionalProperties: false, properties, required });
 export const text = { type: 'string', minLength: 1 };
 export const version = { type: 'string', pattern: '^[a-f0-9]{64}$' };

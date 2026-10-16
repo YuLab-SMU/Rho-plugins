@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { digest, now, requireThat, canonical, stateDirectory } from '@rho-workspace/plugin-contracts';
-import type { Environment } from '@rho-workspace/plugin-contracts';
+interface Environment { rscript: string; libraryPaths: string[] }
 export interface Requirement { package: string; source: 'cran' | 'bioconductor'; minimumVersion?: string }
 export function libraryPrefix(e: Environment) { return '.libPaths(c(c(' + e.libraryPaths.map(x => JSON.stringify(x)).join(',') + '), .libPaths()))\n'; }
 export async function checkRequirements(root: string, requirements: Requirement[], rscript: string) {
@@ -49,4 +49,4 @@ export async function preparation(root: string, requirements: Requirement[], rsc
   return { code, args: [] as string[], source: { kind: 'dependency-preparation', requirements, library, before: check }, output: null };
 }
 
-export const plugin = { id: 'requirements', package: '@rho-workspace/plugin-requirements', version: '0.3.0', requires: [], capabilities: ['requirements'] };
+export const plugin = { id: 'requirements', package: '@rho-workspace/plugin-requirements', version: '0.4.0', requires: [], capabilities: ['requirements'] };

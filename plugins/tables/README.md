@@ -1,16 +1,19 @@
 # Typed tables and comparison plugin
 
-`@rho-workspace/plugin-tables` 0.3.0 is an independently packed npm plugin.
+`@rho-workspace/plugin-tables` 0.4.0 is an independently packed npm plugin.
 
 Public entries: `Tables`, `tableLimits`, `declarationValidator`.
 
 Typed CSV/JSON rows, bounded pages/sort/filter, stable keys/namespaces and an explicit two-input join.
 
-Selected services: A ResourceStore supplied by the files plugin.
+The pure `./contract` entry exports this owner's JSON schema without importing
+its implementation or native/parser dependencies.
+
+Selected services: Only the root, bytes, resolve and register ports of Files; no editor or R service.
 
 Only this plugin depends on csv-parse. No scientific column assumptions or chart renderer.
 
-The package depends on `@rho-workspace/plugin-contracts` 0.3.0 for wire types
+The package depends on `@rho-workspace/plugin-contracts` 0.4.0 for generic envelopes and service ports
 and ordinary file primitives; that package contains no capability implementation.
 Service ports do not install or start other plugins. Rho explicitly selects and
 connects providers. `plugin` describes this package and its selected-service

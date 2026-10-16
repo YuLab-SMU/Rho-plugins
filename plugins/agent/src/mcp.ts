@@ -20,7 +20,7 @@ async function invoke(method: string, input: Record<string, unknown> = {}) {
 const schema = await invoke('protocol.describe');
 if (!schema.ok) throw new Error('Rho protocol is unavailable.');
 const allowed: string[] = c.methods;
-const server = new Server({ name: 'rho-project', version: '0.3.0' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'rho-project', version: '0.4.0' }, { capabilities: { tools: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: allowed.map(method => {
   const source = structuredClone(schema.value.operations[method]);
   delete source.properties.projectId;

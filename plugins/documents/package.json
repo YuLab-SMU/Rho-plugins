@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-documents",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Rho documents plugin",
   "license": "AGPL-3.0-only",
@@ -19,6 +19,6 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@rho-workspace/plugin-contracts": "0.3.0"
+    "@rho-workspace/plugin-contracts": "0.4.0"
   }
 }

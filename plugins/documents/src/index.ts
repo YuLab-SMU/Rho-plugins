@@ -1,6 +1,10 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { atomicBytes, atomicJson, confined, digest, fileDigest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+
+async function fileDigest(file: string, maxBytes = 1024 * 1024): Promise<string | null> {
+  try { requireThat((await fs.stat(file)).size <= maxBytes, 'limit', 'Disk document exceeds the bounded digest reader; the acknowledged buffer is retained.', { limit: 'maxBufferBytes', maximum: maxBytes }); return digest(await fs.readFile(file)); } catch (e: any) { if (e.code === 'ENOENT') return null; throw e; }
+}
 
 export interface DocumentState {
   id: string; path: string; version: number; content: string; diskDigest: string | null;
@@ -111,4 +115,4 @@ export class Documents {
   }
 }
 
-export const plugin = { id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.3.0', requires: [], capabilities: ['documents'], components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };
+export const plugin = { id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.0', requires: [], capabilities: ['documents'], components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

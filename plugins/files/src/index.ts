@@ -1,13 +1,13 @@
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { atomicBytes, atomicJson, canonical, confined, digest, Fault, now, readJson, requireThat, stateDirectory, type ResourceRef } from '@rho-workspace/plugin-contracts';
-import { validateDeclaration, publicResource, type Resource, type ResourceStore, type Declaration } from '@rho-workspace/plugin-contracts';
+import { validateDeclarationEnvelope, publicResource, type Resource, type ResourceStore, type Declaration } from '@rho-workspace/plugin-contracts';
 export const fileLimits = { maxFileBytes: 64 * 1024 * 1024, maxResources: 1024, maxArtifactBytes: 512 * 1024 * 1024, maxReadBytes: 65536 };
 export class Files {
   limits: typeof fileLimits;
   constructor(public root: string, public projectId: string, limits: Partial<typeof fileLimits> = {}, public validators: DeclarationValidator[] = []) { this.limits = { ...fileLimits, ...limits }; }
   validateDeclaration(declaration: Declaration) {
-    validateDeclaration(declaration);
+    validateDeclarationEnvelope(declaration);
     if (declaration.kind === 'file') {
       requireThat(typeof (declaration.format as any).mimeType === 'string' && (declaration.format as any).mimeType.length > 0, 'invalid', 'Declare the original file media type.');
       return;
@@ -145,4 +145,4 @@ export async function verifyArtifacts(root: string, run: any, resources: Resourc
   return { ...facts, integrity: { ...facts.integrity, state: 'verified', files: declared.length, checkedAt: now(), manifestDigest: digest(JSON.stringify(manifest)) } };
 }
 
-export const plugin = { id: 'files', package: '@rho-workspace/plugin-files', version: '0.3.0', requires: [], capabilities: ['files'] };
+export const plugin = { id: 'files', package: '@rho-workspace/plugin-files', version: '0.4.0', requires: [], capabilities: ['files'] };

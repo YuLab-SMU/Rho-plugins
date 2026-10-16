@@ -1,16 +1,25 @@
 # R execution and exported objects plugin
 
-`@rho-workspace/plugin-r` 0.3.0 is an independently packed npm plugin.
+`@rho-workspace/plugin-r` 0.4.0 is an independently packed npm plugin.
 
-Public entries: `planExecution`, `Objects`, `declarationValidator`, `actions`.
+Public entries: `planExecution`, `Objects`, `declarationValidator`, `actions`, `executionLimits`.
 
 Plan an explicitly selected saved/buffer script; freeze code, args and declared outputs. Read bounded exported JSON object snapshots.
 
-Selected services: Files and requirements in the Rho composition. Buffer execution additionally needs a document snapshot source.
+Selected services: Files for object reads and resource resolution. Only the
+`r.execute` action requires Requirements; buffer scripts additionally need a
+document snapshot source. Objects remain readable with both providers absent.
+
+The pure `./contract` entry exports script/object schemas and
+`createExecutionInputSchema`. Foreign declaration/requirement schemas are supplied
+by the consumer composition, with native validation retained by their owners.
+`executionLimits.maxScriptBytes` defaults to 1 MiB for disk and buffer snapshots;
+exceeding it rejects planning before dispatch. It is independent of Documents
+selection and `maxBufferBytes`. Rho configures it through `r.maxScriptBytes`.
 
 No Host lifecycle, request journal, project recipe or live R interpreter.
 
-The package depends on `@rho-workspace/plugin-contracts` 0.3.0 for wire types
+The package depends on `@rho-workspace/plugin-contracts` 0.4.0 for generic envelopes and service ports
 and ordinary file primitives; that package contains no capability implementation.
 Service ports do not install or start other plugins. Rho explicitly selects and
 connects providers. `plugin` describes this package and its selected-service

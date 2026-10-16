@@ -1,6 +1,6 @@
 # Documents and code plugin
 
-`@rho-workspace/plugin-documents` 0.3.0 is an independently packed npm plugin.
+`@rho-workspace/plugin-documents` 0.4.0 is an independently packed npm plugin.
 
 Public entries: `Documents`, `documentLimits`.
 
@@ -10,7 +10,7 @@ Selected services: None.
 
 No language runtime, table parser or Agent SDK.
 
-The package depends on `@rho-workspace/plugin-contracts` 0.3.0 for wire types
+The package depends on `@rho-workspace/plugin-contracts` 0.4.0 for generic envelopes and service ports
 and ordinary file primitives; that package contains no capability implementation.
 Service ports do not install or start other plugins. Rho explicitly selects and
 connects providers. `plugin` describes this package and its selected-service

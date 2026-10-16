@@ -1,23 +1,28 @@
-import { publicResource, objectSchema as obj, text, version, refSchema, declarationSchema, type ResourceRef, type ResourceStore, type DocumentSnapshotSource, type Environment, type ActionPlan } from '@rho-workspace/plugin-contracts';
+import { publicResource, objectSchema as obj, text, type ResourceRef, type ResourceStore, type DocumentSnapshotSource, type ActionPlan } from '@rho-workspace/plugin-contracts';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
-import { confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
-import { validateDeclaration, type Declaration } from '@rho-workspace/plugin-contracts';
+import { confined, digest, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { validateDeclarationEnvelope, type Declaration } from '@rho-workspace/plugin-contracts';
 
-export async function planExecution(root: string, input: any, operationId: string, environment: Environment, resources: ResourceStore, documents?: DocumentSnapshotSource): Promise<ActionPlan> {
+export interface Environment { rscript: string; libraryPaths: string[] }
+export const executionLimits = { maxScriptBytes: 1024 * 1024 };
+
+export async function planExecution(root: string, input: any, operationId: string, environment: Environment, resources: Pick<ResourceStore, 'resolve' | 'validateDeclaration'>, documents?: DocumentSnapshotSource, limits: Partial<typeof executionLimits> = {}): Promise<ActionPlan> {
+  const maximum = limits.maxScriptBytes ?? executionLimits.maxScriptBytes;
   root = await fs.realpath(root);
   let snapshot;
   if (input.script.kind === 'buffer') { requireThat(documents, 'unavailable', 'The documents plugin is required for buffer execution.'); snapshot = await documents.snapshot(input.script.documentId, input.script.version); }
   else {
     requireThat(!input.script.path.split('/').some((p: string) => ['.rho', '.git'].includes(p)), 'scope', 'Select a script outside internal owner state.');
     const file = await confined(root, input.script.path);
-    requireThat((await fs.stat(file)).size <= (documents?.limits.maxBufferBytes ?? 1024 * 1024), 'limit', 'Saved script exceeds the buffer byte limit.', { limit: 'maxBufferBytes' });
+    requireThat((await fs.stat(file)).size <= maximum, 'limit', 'Saved script exceeds the R script byte limit.', { limit: 'maxScriptBytes', maximum });
     let code: string;
     try { code = new TextDecoder('utf-8', { fatal: true }).decode(await fs.readFile(file)); }
     catch { requireThat(false, 'invalid', 'Saved script is not valid UTF-8.'); }
     requireThat(digest(code) === input.script.digest, 'stale', 'Saved script bytes changed before submission.');
     snapshot = { code, sha256: digest(code), source: { kind: 'disk', path: input.script.path } };
   }
+  requireThat(Buffer.byteLength(snapshot.code) <= maximum, 'limit', 'Script snapshot exceeds the R script byte limit.', { limit: 'maxScriptBytes', maximum });
   const parent = await stateDirectory(root, '.rho/plugins/runs/' + digest(operationId));
   const output = path.join(parent, 'artifacts');
   requireThat(new Set(input.artifacts.map((d: Declaration) => d.path)).size === input.artifacts.length, 'invalid', 'Output paths must be unique.');
@@ -30,16 +35,16 @@ export async function planExecution(root: string, input: any, operationId: strin
   }
   return { code: ('.libPaths(c(c(' + environment.libraryPaths.map(x => JSON.stringify(x)).join(',') + '), .libPaths()))\n') + snapshot.code, args, source: { ...snapshot.source, sha256: snapshot.sha256, inputs, artifacts: input.artifacts, completion: input.completion, requirements: input.requirements }, output: path.relative(root, output), completion: completionPath && path.relative(root, completionPath) };
 }
-import { executionInputSchema } from '@rho-workspace/plugin-contracts/execution';
-export { executionInputSchema, scriptSchema } from '@rho-workspace/plugin-contracts/execution';
-export const actions = [{ id: 'r.execute', version: '0.2.0', owner: 'rho-plugins.r', effects: ['native-execution', 'create-declared-artifacts'], cancellation: 'Core cancellation request; native stop requires observation', inputSchema: executionInputSchema }];
+import { createExecutionInputSchema } from './contract.js';
+export { createExecutionInputSchema, scriptSchema } from './contract.js';
+export const actions = [{ id: 'r.execute', version: '0.2.0', owner: 'rho-plugins.r', requires: ['requirements'], capabilities: ['r-execution'], effects: ['native-execution', 'create-declared-artifacts'], cancellation: 'Core cancellation request; native stop requires observation', inputSchema: createExecutionInputSchema() }];
 
 export function validateObjectDeclaration(d: Declaration) {
-  validateDeclaration(d); requireThat(d.kind === 'object' && (d.format as any).encoding === 'json' && (d.format as any).observation === 'exported-snapshot' && Array.isArray((d.format as any).classes), 'invalid', 'Objects must be explicit exported JSON snapshots.');
+  validateDeclarationEnvelope(d); requireThat(d.kind === 'object' && (d.format as any).encoding === 'json' && (d.format as any).observation === 'exported-snapshot' && Array.isArray((d.format as any).classes), 'invalid', 'Objects must be explicit exported JSON snapshots.');
 }
 export const declarationValidator = { kind: 'object', validate: validateObjectDeclaration };
 export class Objects {
-  constructor(public files: ResourceStore) {}
+  constructor(public files: Pick<ResourceStore, 'bytes'> & { limits: { maxReadBytes: number } }) {}
   async read(ref: ResourceRef) {
     const { r, data } = await this.files.bytes(ref);
     requireThat(r.kind === 'object' && typeof r.format === 'object' && r.format.observation === 'exported-snapshot', 'invalid', 'Select an exported object snapshot.');
@@ -47,4 +52,4 @@ export class Objects {
     return { resource: publicResource(r), observation: 'exported-snapshot', value: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)) };
   }
 }
-export const plugin = { id: 'r', package: '@rho-workspace/plugin-r', version: '0.3.0', requires: ['files', 'requirements'], capabilities: ['r-execution'], actions, components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };
+export const plugin = { id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.0', requires: ['files'], capabilities: ['r-objects'], actions, components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };

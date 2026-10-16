@@ -1,0 +1,2 @@
+import { objectSchema as obj, text } from '@rho-workspace/plugin-contracts';
+export const declarationSchema = obj({ path: text, kind: { const: 'media' }, format: obj({ mimeType: { enum: ['image/png', 'image/jpeg', 'image/svg+xml', 'application/pdf'] }, pages: { type: 'integer', minimum: 1 }, width: { type: 'number', exclusiveMinimum: 0 }, height: { type: 'number', exclusiveMinimum: 0 } }, ['mimeType']) });

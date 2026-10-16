@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-tables",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Rho tables plugin",
   "license": "AGPL-3.0-only",
@@ -8,7 +8,8 @@
     "node": ">=22.22.0 <23"
   },
   "exports": {
-    ".": "./dist/index.js"
+    ".": "./dist/index.js",
+    "./contract": "./dist/contract.js"
   },
   "files": [
     "dist",
@@ -19,7 +20,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@rho-workspace/plugin-contracts": "0.3.0",
+    "@rho-workspace/plugin-contracts": "0.4.0",
     "csv-parse": "7.0.3"
   }
 }

@@ -18,6 +18,7 @@ try {
 import { plugin } from '${item.package}';
 assert.equal(plugin.id, '${item.id}');
 assert.equal(plugin.version, '${item.version}');
+${['files', 'tables', 'media', 'r', 'requirements'].includes(item.id) ? `assert.ok(Object.keys(await import('${item.package}/contract')).length > 0);` : ''}
 `;
     const file = path.join(directory, 'check.mjs'); await fs.writeFile(file, script);
     const result = spawnSync(process.execPath, [file], { cwd: directory, encoding: 'utf8' });

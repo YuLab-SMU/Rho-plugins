@@ -3,7 +3,7 @@ export * from './declarations.js';
 import type { ResourceRef } from './common.js';
 import type { Declaration } from './declarations.js';
 export interface Resource {
-  id: string; version: string; projectId: string; owner: string; kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model'; path: string; bytes: number;
+  id: string; version: string; projectId: string; owner: string; kind: string; path: string; bytes: number;
   provenance: Record<string, any>; coverage: Record<string, any>; availability: 'available' | 'partial' | 'missing' | 'unknown'; storage: string; format?: Record<string, any> | string;
 }
 export const publicResource = ({ storage, ...resource }: Resource) => resource;
@@ -20,13 +20,11 @@ export interface ResourceStore {
   restore(metadata: Resource, data: Uint8Array): Promise<any>;
 }
 export interface DocumentSnapshotSource {
-  limits: { maxBufferBytes: number };
   snapshot(id: string, expectedVersion: number): Promise<{ code: string; sha256: string; source: Record<string, any> }>;
 }
-export interface Environment { rscript: string; libraryPaths: string[] }
 export interface ActionPlan { code: string; args: string[]; source: Record<string, any>; output: string | null; completion?: string | null }
 export interface TableReader {
-  rows(ref: ResourceRef): Promise<{ resource: Resource; rows: Record<string, any>[]; columns: import('./declarations.js').Column[]; entityKey: string | null; namespace: string | null }>;
+  rows(ref: ResourceRef): Promise<{ resource: Resource; rows: Record<string, any>[]; columns: { name: string; type: 'string' | 'number' | 'boolean' }[]; entityKey: string | null; namespace: string | null }>;
 }
 export interface PluginDescriptor {
   id: string; package: string; version: string; requires: string[]; capabilities: string[];
