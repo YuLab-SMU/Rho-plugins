@@ -38,10 +38,10 @@ it does not host React views or the Agent's model loop.
 
 The initial composition uses four shared concepts. The [headless package](HEADLESS.md)
 implements a finite versioned catalog and owner APIs; Rho publishes the HTTP
-consumer schemas. That 0.1 catalog and its readers remain coupled to the airway
-example. Extraction and a non-gene consumer are required before the model is
-treated as a reusable UI boundary. A universal plugin loader remains outside
-this scope.
+consumer schemas. The 0.2 catalog takes explicit scripts, requirements and
+resource declarations. An ordinary R project and the original scientific example
+use the same owners without workflow branches. Browser entries require separate
+acceptance; a universal plugin loader remains outside this scope.
 
 | Concept | Component owns | Rho owns |
 | --- | --- | --- |
@@ -121,11 +121,12 @@ without losing unsaved content, and observers reconnect to the original task.
 The Agent then composes a further view from the same catalog and references.
 [Roadmap](ROADMAP.md#first-integrated-flow) defines the acceptance conditions.
 
-The headless part of this flow has run through Rho HTTP, public Core CLI and a
-real external Claude Code adapter with the paired scientific example. It proves
-that composition's behavior; reusable plugin extraction, browser interaction,
-native input and rendering remain unverified. Existing component evidence is
-reused only within its recorded scope. See [Headless components](HEADLESS.md).
+The 0.2 headless extraction runs an ordinary base-R project and the original paired
+analysis through the same Rho HTTP actions and public Core CLI. The external
+Claude Code adapter also exercises the shared document contract. These checks
+cover reusable backend capabilities; browser interaction, native input and
+rendering remain unverified. Existing component evidence is reused only within
+its recorded scope. See [Headless components](HEADLESS.md).
 Assembly records immutable component identities, explicit local
 overrides and actual acceptance of the combination. Measure protected resources
 and configure exceeded-limit behavior before making performance or containment

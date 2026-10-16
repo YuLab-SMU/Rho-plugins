@@ -1,0 +1,198 @@
+{
+  "schemaVersion": 1,
+  "name": "ordinary",
+  "files": [
+    "analysis.R",
+    "check.R"
+  ],
+  "runs": [
+    {
+      "id": "analysis",
+      "script": "analysis.R",
+      "args": [],
+      "requirements": [],
+      "artifacts": [
+        {
+          "path": "observations.csv",
+          "kind": "table",
+          "format": {
+            "encoding": "csv",
+            "columns": [
+              {
+                "name": "sample_id",
+                "type": "string",
+                "nullValues": []
+              },
+              {
+                "name": "label",
+                "type": "string",
+                "nullValues": []
+              },
+              {
+                "name": "time",
+                "type": "number",
+                "nullValues": [
+                  ""
+                ]
+              },
+              {
+                "name": "value",
+                "type": "number",
+                "nullValues": [
+                  ""
+                ]
+              }
+            ],
+            "key": {
+              "column": "sample_id",
+              "namespace": "ordinary-samples"
+            }
+          }
+        },
+        {
+          "path": "fitted.csv",
+          "kind": "table",
+          "format": {
+            "encoding": "csv",
+            "columns": [
+              {
+                "name": "record_id",
+                "type": "string",
+                "nullValues": []
+              },
+              {
+                "name": "fitted",
+                "type": "number",
+                "nullValues": [
+                  ""
+                ]
+              }
+            ],
+            "key": {
+              "column": "record_id",
+              "namespace": "ordinary-records"
+            }
+          }
+        },
+        {
+          "path": "model.rds",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "response.png",
+          "kind": "media",
+          "format": {
+            "mimeType": "image/png",
+            "width": 640,
+            "height": 480
+          }
+        },
+        {
+          "path": "response.pdf",
+          "kind": "media",
+          "format": {
+            "mimeType": "application/pdf",
+            "pages": 1,
+            "width": 576,
+            "height": 432
+          }
+        },
+        {
+          "path": "object.json",
+          "kind": "object",
+          "format": {
+            "encoding": "json",
+            "observation": "exported-snapshot",
+            "classes": [
+              "lm"
+            ]
+          }
+        },
+        {
+          "path": "sessionInfo.txt",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        }
+      ],
+      "completion": "result.json"
+    },
+    {
+      "id": "check",
+      "script": "check.R",
+      "args": [
+        {
+          "run": "analysis",
+          "artifact": "model.rds"
+        },
+        {
+          "run": "analysis",
+          "artifact": "observations.csv"
+        }
+      ],
+      "requirements": [],
+      "artifacts": [
+        {
+          "path": "check.json",
+          "kind": "object",
+          "format": {
+            "encoding": "json",
+            "observation": "exported-snapshot",
+            "classes": [
+              "project-check"
+            ]
+          }
+        }
+      ],
+      "completion": "result.json"
+    }
+  ],
+  "tables": [
+    {
+      "run": "analysis",
+      "artifact": "observations.csv",
+      "rows": 4,
+      "key": "sample_id",
+      "namespace": "ordinary-samples",
+      "entity": "001",
+      "x": "time",
+      "y": "value",
+      "literal": {
+        "column": "label",
+        "value": "NA"
+      }
+    }
+  ],
+  "comparison": {
+    "left": {
+      "run": "analysis",
+      "artifact": "observations.csv"
+    },
+    "right": {
+      "run": "analysis",
+      "artifact": "fitted.csv"
+    },
+    "options": {
+      "leftKey": "sample_id",
+      "rightKey": "record_id",
+      "leftNamespace": "ordinary-samples",
+      "rightNamespace": "ordinary-records",
+      "mapping": "equal-string",
+      "leftField": "value",
+      "rightField": "fitted",
+      "join": "left"
+    }
+  },
+  "reports": [
+    {
+      "run": "check",
+      "artifact": "check.json",
+      "field": "state",
+      "value": "passed"
+    }
+  ]
+}

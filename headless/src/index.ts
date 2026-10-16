@@ -1,5 +1,6 @@
 export * from './common.js';
 export * from './catalog.js';
+export * from './declarations.js';
 export * from './documents.js';
 export * from './requirements.js';
 export * from './resources.js';

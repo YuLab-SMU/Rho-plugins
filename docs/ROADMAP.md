@@ -7,9 +7,10 @@ the Rho application. [Architecture](ARCHITECTURE.md) defines ownership;
 ## Reusable foundation before plugin UI
 
 The [plugin model](PLUGIN-MODEL.md) separates reusable capability plugins, their
-optional entries and project workflows. The existing headless 0.1 package is a
-working vertical prototype with scientific coupling. Its checks remain valid for
-that composition; they do not accept a reusable plugin foundation.
+optional entries and project workflows. The headless 0.2 package extracts the
+reusable foundation; its source trials use both an ordinary R project and the
+paired example. The following gates define the delivered headless boundary and
+the remaining UI acceptance.
 
 1. Remove the fixed paired recipe from base catalog/packaging. Keep the example,
    scientific checks and historical evidence as an explicit consumer.
@@ -25,8 +26,9 @@ that composition; they do not accept a reusable plugin foundation.
    implement and accept browser entries against those contracts.
 
 The [application extraction plan](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
-records owners, source locations, migration and completion conditions. This work
-precedes plugin UI acceptance, including the second consumer below.
+records owners, source locations, migration and completion conditions. Actual
+source and installation evidence lives in Rho's extraction acceptance. Browser
+entries remain pending.
 
 ## First integrated flow
 
@@ -57,8 +59,8 @@ Functional views select CodeMirror 6, AG Grid Community and ECharts; Agent-compo
 views use a json-render catalog. MCP Apps is optional for an isolated independent
 HTML consumer. [Rho's technology direction](https://github.com/YuLab-SMU/Rho/blob/main/docs/TECHSTACK.md)
 is the application selection reference. The [headless component package](HEADLESS.md)
-and its Rho HTTP/Core/Agent composition have been implemented and checked for the
-paired example. Reusable foundation extraction and UI assembly remain pending.
+and its Rho HTTP/Core/Agent composition have been checked with two explicit R
+projects. UI assembly remains pending.
 
 Acceptance also covers input methods, keyboard access, missing components, stale
 resources, failed view restoration and version mismatch. Record the actual chosen
@@ -118,8 +120,7 @@ user runtimes.
 
 ## Subsequent composition
 
-A second non-gene consumer is an extraction gate before plugin UI work; it is not
-deferred to a later scientific plugin. Subsequent domain extensions and
+A second non-gene consumer is delivered as an ordinary base-R project. Subsequent domain extensions and
 interoperability adapters require a selected consumer. Deliver owner changes
 independently, then accept their actual application combination. Distribution and installation have
 separate acceptance and do not follow automatically from source publication.

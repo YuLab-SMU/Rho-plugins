@@ -17,21 +17,22 @@ The [reusable plugin model](docs/PLUGIN-MODEL.md) defines capability ownership,
 headless and UI entries, resource/selection contracts and extraction acceptance.
 A plugin can contribute several views over one state owner. Rho selects and
 arranges those entries; a workflow's dataset, method choices and sequencing stay
-in project code or an example. The model is selected architecture; extraction
-from the current headless prototype remains pending.
+in project code or an example. The 0.2 headless implementation extracts those
+capabilities; browser entries remain separate work.
 
 ## Current implementations and consumers
 
 | Implementation | Available behavior | Acceptance |
 | --- | --- | --- |
-| [Headless prototype](docs/HEADLESS.md) | Shared documents and MCP adapter; dependency/data readers and scientific actions still coupled to the paired example | [Component and integration scope](docs/HEADLESS.md#build-and-verify) |
+| [Headless capabilities 0.2](docs/HEADLESS.md) | Shared documents, explicit R execution/requirements, declared files/tables/media/object snapshots, keyed comparisons and MCP | [Component and integration scope](docs/HEADLESS.md#build-and-verify) |
 | [Agent evaluation](plugins/agent-eval/README.md) | Separate development tool: isolated public Core CLI trials, domain-owned checks and offline regrading | [Recorded execution](plugins/agent-eval/ACCEPTANCE.md) |
 
 The [paired airway analysis](examples/real-r-analysis/README.md) is a scientific
 example and acceptance consumer: DESeq2 analysis, donor sensitivity, simulations
 and artifact checks. Its [scientific/execution record](examples/real-r-analysis/ACCEPTANCE.md)
-is retained. It is not a plugin or a base-system requirement. The current 0.1
-package still bundles it; separating that dependency is required work.
+is retained. Neither it nor the [ordinary base-R project](examples/ordinary-r-project/README.md)
+is shipped in the base package. Both explicitly declare scripts, requirements,
+artifacts and checks to the same `r.execute` capability.
 
 The Python/R consumers and Node headless component package run today. Editor,
 table, plot and Agent UI entries remain independent work. [Status](docs/STATUS.md) records that boundary.
@@ -46,6 +47,7 @@ The R recipe uses existing R packages and ordinary files.
 ```sh
 npm ci
 npm test
+npm run test:examples
 python3 plugins/agent-eval/run.py --help
 python3 plugins/agent-eval/run.py core-agent --binary /absolute/rho-core --baseline --trials 1
 python3 plugins/agent-eval/run.py r-artifacts /absolute/airway/artifacts
@@ -68,10 +70,10 @@ Community and ECharts. Agent-composed UI uses a typed json-render catalog;
 independent HTML views may use isolated MCP Apps when needed.
 
 [Architecture](docs/ARCHITECTURE.md) defines component responsibilities and the
-Action, Resource, Selection and View boundaries. The finite 0.1 headless catalog
-is implemented but contains workflow-specific actions and bindings. Reusable
-capability extraction and a second non-gene consumer precede plugin UI acceptance;
-UI rendering remains selected work.
+Action, Resource, Selection and View boundaries. The finite 0.2 headless catalog
+uses declared types, entity namespaces and fields without scientific workflow
+branches. Both R projects have passed actual headless execution in Rho. Browser
+rendering, input and layout remain selected work.
 [Roadmap](docs/ROADMAP.md) defines the first integrated flow.
 The [headless package](docs/HEADLESS.md) documents the implemented entries and
 actual Rho composition checks. There is no universal component loader.

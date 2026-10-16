@@ -2,11 +2,12 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { parse } from 'csv-parse/sync';
 import { atomicBytes, atomicJson, canonical, confined, digest, Fault, now, readJson, requireThat, stateDirectory, type ResourceRef } from './common.js';
+import { validateDeclaration, type Declaration, type TableFormat } from './declarations.js';
 export interface Resource {
-  id: string; version: string; projectId: string; owner: string; kind: 'file' | 'table' | 'plot' | 'model'; path: string; bytes: number;
-  provenance: Record<string, any>; coverage: Record<string, any>; availability: 'available' | 'partial' | 'missing' | 'unknown'; storage: string; format?: string;
+  id: string; version: string; projectId: string; owner: string; kind: 'file' | 'table' | 'media' | 'object' | 'plot' | 'model'; path: string; bytes: number;
+  provenance: Record<string, any>; coverage: Record<string, any>; availability: 'available' | 'partial' | 'missing' | 'unknown'; storage: string; format?: Record<string, any> | string;
 }
-export const publicResource = ({ storage, format, ...resource }: Resource) => resource;
+export const publicResource = ({ storage, ...resource }: Resource) => resource;
 export const resourceLimits = { maxFileBytes: 64 * 1024 * 1024, maxResources: 1024, maxArtifactBytes: 512 * 1024 * 1024, maxRows: 100000, maxPageRows: 1000, maxPoints: 20000, maxReadBytes: 65536 };
 export class Resources {
   limits: typeof resourceLimits;
@@ -59,13 +60,16 @@ export class Resources {
     requireThat(data.length <= this.limits.maxFileBytes && digest(data) === r.version, 'condition', 'Stored resource bytes failed integrity verification.');
     return { r, data };
   }
-  async register(relative: string, provenance: Record<string, any>, availability: Resource['availability'], coverage: Record<string, any> = {}) {
+  async register(relative: string, provenance: Record<string, any>, availability: Resource['availability'], coverage: Record<string, any> = {}, declaration: Declaration = { path: relative, kind: 'file', format: { mimeType: 'application/octet-stream' } }, expectedDigest?: string) {
+    validateDeclaration(declaration);
     const source = await confined(this.root, relative);
     const stat = await fs.stat(source);
     requireThat(stat.isFile() && stat.size <= this.limits.maxFileBytes, 'limit', 'Artifact exceeds the configured read limit.', { limit: 'maxFileBytes', maximum: this.limits.maxFileBytes });
     const data = await fs.readFile(source); const sha = digest(data);
+    requireThat(!expectedDigest || sha === expectedDigest, 'stale', 'File bytes changed before resource registration.');
     const registry = await this.list();
-    const id = digest(provenance.operationId + ':' + relative);
+    // Declaration identity is immutable even when equal bytes have different schemas.
+    const id = digest(canonical([provenance.operationId, relative, declaration]));
     const old = registry.find(r => r.id === id);
     requireThat(old || registry.length < this.limits.maxResources, 'limit', 'Resource catalog is full; retained artifacts are preserved.', { limit: 'maxResources' });
     const snapshots = await stateDirectory(this.root, '.rho/plugins/snapshots');
@@ -75,8 +79,7 @@ export class Resources {
       requireThat(await this.storedBytes() + data.length <= this.limits.maxArtifactBytes, 'limit', 'Registered artifact storage budget reached; earlier snapshots are retained.', { limit: 'maxArtifactBytes', maximum: this.limits.maxArtifactBytes });
       await atomicBytes(path.join(snapshots, sha), data);
     }
-    const kind = relative.endsWith('.csv') || relative.endsWith('.comparison.json') ? 'table' : relative.endsWith('.rds') ? 'model' : relative.endsWith('.pdf') ? 'plot' : 'file';
-    const resource: Resource = { id, version: sha, projectId: this.projectId, owner: 'rho-plugins.airway', kind, path: relative, bytes: data.length, provenance, coverage, availability, storage, format: relative.endsWith('.comparison.json') ? 'comparison' : undefined };
+    const resource: Resource = { id, version: sha, projectId: this.projectId, owner: 'rho-plugins.' + declaration.kind, kind: declaration.kind, path: relative, bytes: data.length, provenance, coverage, availability, storage, format: declaration.format };
     await atomicJson(await this.registryFile(), [...registry.filter(r => r.id !== id), resource]);
     return resource;
   }
@@ -87,64 +90,88 @@ export class Resources {
     const nextOffset = Math.min(data.length, offset + maxBytes);
     return { resource: publicResource(r), encoding: 'base64', data: data.subarray(offset, nextOffset).toString('base64'), offset, nextOffset, more: nextOffset < data.length };
   }
-  async rows(ref: ResourceRef): Promise<{ resource: Resource; rows: Record<string, any>[]; columns: { name: string; type: string }[]; entityKey: string | null }> {
+  async rows(ref: ResourceRef): Promise<{ resource: Resource; rows: Record<string, any>[]; columns: TableFormat['columns']; entityKey: string | null; namespace: string | null }> {
     const { r, data } = await this.bytes(ref);
-    requireThat(r.kind === 'table', 'invalid', 'This resource is not table data.');
-    if (r.format === 'comparison') {
-      const parsed = JSON.parse(data.toString());
-      // A comparison remains bound to BOTH current input versions.
-      for (const input of parsed.inputs) await this.resolve(input);
-      return { resource: r, rows: parsed.rows, columns: parsed.columns, entityKey: 'gene_id' };
+    requireThat(r.kind === 'table' && typeof r.format === 'object', 'unavailable', 'Typed reads require an explicit table declaration. Historical bytes remain readable.');
+    const f = r.format as TableFormat;
+    validateDeclaration({ path: r.path, kind: 'table', format: f });
+    let rows: Record<string, any>[];
+    if (f.encoding === 'json-rows') {
+      const parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data));
+      requireThat(Array.isArray(parsed.rows) && (!parsed.inputs || Array.isArray(parsed.inputs) && parsed.inputs.length <= 2), 'invalid', 'Invalid declared JSON rows.');
+      for (const input of parsed.inputs ?? []) await this.resolve(input);
+      rows = parsed.rows;
+    } else {
+      const records: string[][] = parse(data, { bom: true, skip_empty_lines: true, max_record_size: 1024 * 1024 });
+      const header = records.shift() ?? [];
+      requireThat(canonical(header) === canonical(f.columns.map(c => c.name)), 'condition', 'CSV headers do not match the declared columns.');
+      requireThat(records.length <= this.limits.maxRows, 'limit', 'Table exceeds the row reader budget.', { limit: 'maxRows' });
+      rows = records.map(values => Object.fromEntries(f.columns.map((c, i) => {
+        const value = values[i]!;
+        if (c.nullValues.includes(value)) return [c.name, null];
+        if (c.type === 'number') { requireThat(value.trim() !== '' && Number.isFinite(Number(value)), 'condition', 'A table value violates its declared numeric type.', { column: c.name }); return [c.name, Number(value)]; }
+        if (c.type === 'boolean') { requireThat(['TRUE', 'FALSE', 'true', 'false'].includes(value), 'condition', 'A table value violates its declared boolean type.', { column: c.name }); return [c.name, value.toLowerCase() === 'true']; }
+        return [c.name, value];
+      })));
     }
-    const strings: Record<string, string>[] = parse(data, { columns: true, bom: true, skip_empty_lines: true, max_record_size: 1024 * 1024 });
-    requireThat(strings.length <= this.limits.maxRows, 'limit', 'Table exceeds the bounded in-memory row reader.', { limit: 'maxRows' });
-    const names = strings.length ? Object.keys(strings[0]!) : [];
-    const columns = names.map(name => ({ name, type: ['gene_id', 'symbol', 'analysis_id', 'sample_id', 'cell', 'dex'].includes(name) ? 'string' : name === 'beta_converged' ? 'boolean' : strings.every(row => ['', 'NA'].includes(row[name]!) || Number.isFinite(Number(row[name]))) ? 'number' : 'string' }));
-    const rows = strings.map(row => Object.fromEntries(columns.map(col => [col.name, ['', 'NA'].includes(row[col.name]!) ? null : col.type === 'number' ? Number(row[col.name]) : col.type === 'boolean' ? row[col.name] === 'TRUE' : row[col.name]])));
-    const entityKey = names.includes('gene_id') && new Set(rows.map(r => r.gene_id)).size === rows.length && rows.every(r => typeof r.gene_id === 'string') ? 'gene_id' : null;
-    return { resource: r, rows, columns, entityKey };
+    requireThat(rows.length <= this.limits.maxRows, 'limit', 'Table exceeds the row reader budget.', { limit: 'maxRows' });
+    requireThat(rows.every(row => row && canonical(Object.keys(row).sort()) === canonical(f.columns.map(c => c.name).sort()) && f.columns.every(c => row[c.name] === null || typeof row[c.name] === c.type && (c.type !== 'number' || Number.isFinite(row[c.name])))), 'condition', 'Rows violate the declared table schema.');
+    if (f.key) requireThat(rows.every(row => typeof row[f.key!.column] === 'string' && row[f.key!.column].length > 0) && new Set(rows.map(row => row[f.key!.column])).size === rows.length, 'condition', 'Declared entity keys must be nonempty and unique.');
+    return { resource: r, rows, columns: f.columns, entityKey: f.key?.column ?? null, namespace: f.key?.namespace ?? null };
   }
   async page(ref: ResourceRef, offset: number, limit: number, sort?: any, filter?: any) {
-    requireThat(limit <= this.limits.maxPageRows, 'limit', 'Table page exceeds the row budget.', { limit: 'maxPageRows', maximum: this.limits.maxPageRows });
+    requireThat(Number.isSafeInteger(offset) && offset >= 0 && Number.isSafeInteger(limit) && limit > 0 && limit <= this.limits.maxPageRows, 'limit', 'Table page exceeds the row budget.', { limit: 'maxPageRows', maximum: this.limits.maxPageRows });
     const table = await this.rows(ref); let rows = table.rows;
     if (filter) {
       const col = table.columns.find(c => c.name === filter.column);
       requireThat(col, 'invalid', 'Filter column is unavailable.');
       requireThat(filter.op === 'isNull' || filter.value === null || typeof filter.value === col.type, 'invalid', 'Filter value does not match the column type.');
-      requireThat(!['lt', 'gt'].includes(filter.op) || col.type === 'number', 'invalid', 'Ordered filters require a numeric column.');
+      requireThat(!['lt', 'gt'].includes(filter.op) || col.type === 'number' && typeof filter.value === 'number', 'invalid', 'Ordered filters require a numeric column and value.');
       rows = rows.filter(r => filter.op === 'isNull' ? r[col.name] === null : filter.op === 'eq' ? r[col.name] === filter.value : r[col.name] !== null && (filter.op === 'lt' ? r[col.name] < filter.value : r[col.name] > filter.value));
     }
     if (sort) {
       requireThat(table.columns.some(c => c.name === sort.column), 'invalid', 'Sort column is unavailable.');
       rows = [...rows].sort((a, b) => {
         const x = a[sort.column], y = b[sort.column];
-        if (x === null || y === null) return x === y ? String(a.gene_id).localeCompare(String(b.gene_id)) : x === null ? 1 : -1;
-        return (x === y ? 0 : x < y ? -1 : 1) * (sort.direction === 'desc' ? -1 : 1) || String(a.gene_id).localeCompare(String(b.gene_id));
+        const tie = () => table.entityKey ? String(a[table.entityKey]).localeCompare(String(b[table.entityKey])) : 0;
+        if (x === null || y === null) return x === y ? tie() : x === null ? 1 : -1;
+        return (x === y ? 0 : x < y ? -1 : 1) * (sort.direction === 'desc' ? -1 : 1) || tie();
       });
     }
-    return { resource: publicResource(table.resource), columns: table.columns, total: table.rows.length, filtered: rows.length, offset, nextOffset: Math.min(rows.length, offset + limit), more: offset + limit < rows.length, rows: rows.slice(offset, offset + limit), entityKey: table.entityKey };
+    return { resource: publicResource(table.resource), columns: table.columns, total: table.rows.length, filtered: rows.length, offset, nextOffset: Math.min(rows.length, offset + limit), more: offset + limit < rows.length, rows: rows.slice(offset, offset + limit), entityKey: table.entityKey, namespace: table.namespace };
   }
-  async plot(ref: ResourceRef, maxPoints = this.limits.maxPoints) {
-    requireThat(maxPoints <= this.limits.maxPoints, 'limit', 'Plot request exceeds the point budget.', { limit: 'maxPoints', maximum: this.limits.maxPoints });
+  async plot(ref: ResourceRef, x: string, y: string, maxPoints = this.limits.maxPoints) {
+    requireThat(Number.isSafeInteger(maxPoints) && maxPoints > 0 && maxPoints <= this.limits.maxPoints, 'limit', 'Plot request exceeds the point budget.', { limit: 'maxPoints', maximum: this.limits.maxPoints });
     const table = await this.rows(ref);
-    requireThat(table.entityKey === 'gene_id', 'condition', 'Interactive gene plots require unique stable gene identities.');
-    const comparison = table.columns.some(c => c.name === 'y');
-    requireThat(comparison || table.columns.some(c => c.name === 'baseMean') && table.columns.some(c => c.name === 'log2FoldChange'), 'invalid', 'This table does not expose registered scatter coordinates.');
+    requireThat(table.entityKey, 'condition', 'Entity interaction requires an explicit unique key and namespace.');
+    requireThat([x, y].every(name => table.columns.some(c => c.name === name && c.type === 'number')), 'invalid', 'Declare numeric scatter coordinate fields.');
     const stride = Math.max(1, Math.ceil(table.rows.length / maxPoints));
-    return { resource: publicResource(table.resource), spec: { type: 'scatter', entityKey: 'gene_id', x: comparison ? 'x' : 'baseMean', y: comparison ? 'y' : 'log2FoldChange', missing: 'null', source: 'component-table-data' }, points: table.rows.filter((_, i) => i % stride === 0).map(r => ({ gene_id: r.gene_id, symbol: r.symbol, x: comparison ? r.x : r.baseMean, y: comparison ? r.y : r.log2FoldChange })), originalPoints: table.rows.length, downsampled: stride > 1, method: stride > 1 ? 'deterministic-stride' : 'none' };
+    return { resource: publicResource(table.resource), spec: { type: 'scatter', entityKey: table.entityKey, namespace: table.namespace, x, y, missing: 'null' }, points: table.rows.filter((_, i) => i % stride === 0).map(r => ({ key: r[table.entityKey!], x: r[x], y: r[y] })), originalPoints: table.rows.length, downsampled: stride > 1, method: stride > 1 ? 'deterministic-stride' : 'none' };
   }
-  async compare(baseline: ResourceRef, shrinkage: ResourceRef) {
-    const a = await this.rows(baseline), b = await this.rows(shrinkage);
-    requireThat(a.entityKey === 'gene_id' && b.entityKey === 'gene_id', 'condition', 'Comparison inputs require unique stable gene identities.');
-    requireThat(a.columns.some(c => c.name === 'log2FoldChange') && b.columns.some(c => c.name === 'log2FoldChange'), 'invalid', 'Both inputs must expose gene fold changes.');
-    requireThat(b.resource.provenance.baseline?.id === baseline.id && b.resource.provenance.baseline?.version === baseline.version, 'condition', 'Shrinkage was not derived from the selected baseline version.');
-    const byId = new Map(b.rows.map(r => [r.gene_id, r]));
-    const rows = a.rows.map(r => ({ gene_id: r.gene_id, symbol: r.symbol, x: r.log2FoldChange, y: byId.get(r.gene_id)?.log2FoldChange ?? null }));
-    const columns = [{ name: 'gene_id', type: 'string' }, { name: 'symbol', type: 'string' }, { name: 'x', type: 'number' }, { name: 'y', type: 'number' }];
-    const key = digest(canonical([baseline, shrinkage]));
-    const relative = '.rho/plugins/comparisons/' + key + '.comparison.json';
+  async compare(left: ResourceRef, right: ResourceRef, options: { leftKey: string; rightKey: string; leftNamespace: string; rightNamespace: string; mapping: 'equal-string'; leftField: string; rightField: string; join: 'left' | 'inner' | 'full' }) {
+    const a = await this.rows(left), b = await this.rows(right);
+    requireThat(options.mapping === 'equal-string' && a.entityKey && b.entityKey && a.entityKey === options.leftKey && b.entityKey === options.rightKey && a.namespace === options.leftNamespace && b.namespace === options.rightNamespace, 'condition', 'Comparison requires explicit keys and the current input namespaces.');
+    requireThat(['left', 'inner', 'full'].includes(options.join) && a.columns.some(c => c.name === options.leftField && c.type === 'number') && b.columns.some(c => c.name === options.rightField && c.type === 'number'), 'invalid', 'Declare a supported join and numeric comparison fields.');
+    const ar = new Map(a.rows.map(r => [r[a.entityKey!], r])), br = new Map(b.rows.map(r => [r[b.entityKey!], r]));
+    const keys = options.join === 'full' ? [...new Set([...ar.keys(), ...br.keys()])] : [...ar.keys()].filter(k => options.join !== 'inner' || br.has(k));
+    requireThat(keys.length <= this.limits.maxRows, 'limit', 'Comparison output exceeds the row budget.', { limit: 'maxRows' });
+    const rows = keys.map(key => ({ key, x: ar.get(key)?.[options.leftField] ?? null, y: br.get(key)?.[options.rightField] ?? null }));
+    const key = digest(canonical([left, right, options]));
+    const relative = '.rho/plugins/comparisons/' + key + '.json';
     await stateDirectory(this.root, '.rho/plugins/comparisons');
-    await atomicJson(await confined(this.root, relative, true), { inputs: [baseline, shrinkage], columns, rows });
-    return publicResource(await this.register(relative, { operationId: 'comparison:' + key, inputs: [baseline, shrinkage], contrast: 'dex:trt:untrt', models: [a.resource.provenance, b.resource.provenance] }, 'available', { total: rows.length, missingY: rows.filter(r => r.y === null).length }));
+    await atomicJson(await confined(this.root, relative, true), { inputs: [left, right], rows });
+    const format: TableFormat = { encoding: 'json-rows', columns: [{ name: 'key', type: 'string', nullValues: [] }, { name: 'x', type: 'number', nullValues: [] }, { name: 'y', type: 'number', nullValues: [] }], key: { column: 'key', namespace: 'comparison:' + key } };
+    return publicResource(await this.register(relative, { operationId: 'comparison:' + key, inputs: [left, right], transform: options, sources: [a.resource.provenance, b.resource.provenance] }, 'available', { total: rows.length, missingX: rows.filter(r => r.x === null).length, missingY: rows.filter(r => r.y === null).length }, { path: relative, kind: 'table', format }));
+  }
+  async object(ref: ResourceRef) {
+    const { r, data } = await this.bytes(ref);
+    requireThat(r.kind === 'object' && typeof r.format === 'object' && r.format.observation === 'exported-snapshot', 'invalid', 'Select an exported object snapshot.');
+    requireThat(data.length <= this.limits.maxReadBytes, 'limit', 'Object snapshot exceeds the structured read budget; bounded byte reads remain available.', { limit: 'maxReadBytes' });
+    return { resource: publicResource(r), observation: 'exported-snapshot', value: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)) };
+  }
+  async media(ref: ResourceRef) {
+    const r = await this.resolve(ref);
+    requireThat(r.kind === 'media' && typeof r.format === 'object', 'invalid', 'Select declared original media.');
+    return { resource: publicResource(r), original: ref, ...r.format, rendering: 'unavailable' };
   }
 }

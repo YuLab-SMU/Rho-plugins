@@ -5,9 +5,23 @@ to the R/scientific owner in Rho-plugins and uses an actual
 R process, the public airway RNA-seq data and DESeq2. Core contributes process
 holding, request identity, bounded output and continuation through its existing
 CLI; this recipe owns the method and interpretation. Reusable system capabilities
-are defined by the [plugin model](../../docs/PLUGIN-MODEL.md). The current headless
-0.1 prototype still bundles this example and workflow-specific actions; extracting
-them from the base catalog/package remains required work.
+are defined by the [plugin model](../../docs/PLUGIN-MODEL.md). The 0.2 base package
+does not contain this example, register its workflow or require its R packages.
+
+[project.json](project.json) explicitly declares the analysis, native/independent
+checks and apeglm shrinkage as project scripts for the same `r.execute` used by
+the [ordinary R project](../ordinary-r-project/README.md). From a Rho checkout:
+
+```sh
+node scripts/acceptance.mjs /absolute/new/evidence /absolute/Rho-plugins/examples/real-r-analysis
+```
+
+The manifest selects one simulation for the bounded backend trial; the original
+200-simulation record below is unchanged. [shrink.R](shrink.R),
+[verify-shrink.R](verify-shrink.R), [check-baseline.R](check-baseline.R) and
+[check-shrinkage.R](check-shrinkage.R) stay here with the scientific consumer.
+Generic byte completion is a separate sidecar outside the immutable producer
+directory. Scientific check reports remain distinct resources and facts.
 
 The [fact acceptance](ACCEPTANCE.md) records the actual 2026-10-11 execution,
 numerical observations, original failures and verified limits.

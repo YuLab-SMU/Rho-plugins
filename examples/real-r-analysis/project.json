@@ -1,0 +1,664 @@
+{
+  "schemaVersion": 1,
+  "name": "paired-response",
+  "files": [
+    "analyze.R",
+    "shrink.R",
+    "verify.py",
+    "inspect-models.R",
+    "verify-shrink.R",
+    "check-baseline.R",
+    "check-shrinkage.R"
+  ],
+  "runs": [
+    {
+      "id": "baseline",
+      "script": "analyze.R",
+      "args": [
+        "1"
+      ],
+      "requirements": [
+        {
+          "package": "DESeq2",
+          "source": "bioconductor"
+        },
+        {
+          "package": "airway",
+          "source": "bioconductor"
+        },
+        {
+          "package": "SummarizedExperiment",
+          "source": "bioconductor"
+        },
+        {
+          "package": "jsonlite",
+          "source": "cran"
+        },
+        {
+          "package": "digest",
+          "source": "cran"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "analysis_plan.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "bootstrap/dispersion.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "bootstrap/first-simulated-counts.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "bootstrap/marker-counts.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "bootstrap/marker-distributions.pdf",
+          "kind": "media",
+          "format": {
+            "mimeType": "application/pdf"
+          }
+        },
+        {
+          "path": "bootstrap/markers.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "bootstrap/means.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "bootstrap/plan.json",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "bootstrap/replicates.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "bootstrap/summary.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "input/counts.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "input/genes.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "input/prefilter.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "input/samples.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "known_genes.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "models/full.rds",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "models/without_N052611.rds",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "models/without_N061011.rds",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "models/without_N080611.rds",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "models/without_N61311.rds",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "normalization.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "plots/qc-and-response.pdf",
+          "kind": "media",
+          "format": {
+            "mimeType": "application/pdf"
+          }
+        },
+        {
+          "path": "results/full.csv",
+          "kind": "table",
+          "format": {
+            "encoding": "csv",
+            "columns": [
+              {
+                "name": "gene_id",
+                "type": "string",
+                "nullValues": []
+              },
+              {
+                "name": "symbol",
+                "type": "string",
+                "nullValues": []
+              },
+              {
+                "name": "baseMean",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "log2FoldChange",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "lfcSE",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "stat",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "pvalue",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "padj",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "dispersion",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "beta_converged",
+                "type": "boolean",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "max_cooks",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              }
+            ],
+            "key": {
+              "column": "gene_id",
+              "namespace": "airway:GSE52778:ensembl"
+            }
+          }
+        },
+        {
+          "path": "results/without_N052611.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "results/without_N061011.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "results/without_N080611.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "results/without_N61311.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "sensitivity.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "sessionInfo.txt",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "summary.json",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "versions.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "artifact_manifest.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "complete.json",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        }
+      ],
+      "completion": "result.json"
+    },
+    {
+      "id": "check-baseline",
+      "script": "check-baseline.R",
+      "args": [
+        {
+          "outputOf": "baseline"
+        },
+        {
+          "file": "inspect-models.R"
+        },
+        {
+          "file": "verify.py"
+        }
+      ],
+      "requirements": [
+        {
+          "package": "DESeq2",
+          "source": "bioconductor"
+        },
+        {
+          "package": "airway",
+          "source": "bioconductor"
+        },
+        {
+          "package": "SummarizedExperiment",
+          "source": "bioconductor"
+        },
+        {
+          "package": "jsonlite",
+          "source": "cran"
+        },
+        {
+          "package": "digest",
+          "source": "cran"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "native.json",
+          "kind": "object",
+          "format": {
+            "encoding": "json",
+            "observation": "exported-snapshot",
+            "classes": [
+              "native-check"
+            ]
+          }
+        },
+        {
+          "path": "arithmetic.json",
+          "kind": "object",
+          "format": {
+            "encoding": "json",
+            "observation": "exported-snapshot",
+            "classes": [
+              "arithmetic-check"
+            ]
+          }
+        }
+      ],
+      "completion": "result.json"
+    },
+    {
+      "id": "shrinkage",
+      "script": "shrink.R",
+      "args": [
+        {
+          "run": "baseline",
+          "artifact": "models/full.rds"
+        },
+        {
+          "run": "baseline",
+          "artifact": "results/full.csv"
+        }
+      ],
+      "requirements": [
+        {
+          "package": "DESeq2",
+          "source": "bioconductor"
+        },
+        {
+          "package": "apeglm",
+          "source": "bioconductor"
+        },
+        {
+          "package": "jsonlite",
+          "source": "cran"
+        },
+        {
+          "package": "digest",
+          "source": "cran"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "shrinkage.csv",
+          "kind": "table",
+          "format": {
+            "encoding": "csv",
+            "columns": [
+              {
+                "name": "gene_id",
+                "type": "string",
+                "nullValues": []
+              },
+              {
+                "name": "symbol",
+                "type": "string",
+                "nullValues": []
+              },
+              {
+                "name": "baseMean",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "log2FoldChange",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "lfcSE",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "pvalue",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              },
+              {
+                "name": "padj",
+                "type": "number",
+                "nullValues": [
+                  "",
+                  "NA"
+                ]
+              }
+            ],
+            "key": {
+              "column": "gene_id",
+              "namespace": "airway:GSE52778:ensembl"
+            }
+          }
+        },
+        {
+          "path": "shrinkage.rds",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "shrinkage.pdf",
+          "kind": "media",
+          "format": {
+            "mimeType": "application/pdf"
+          }
+        },
+        {
+          "path": "summary.json",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "sessionInfo.txt",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "artifact_manifest.csv",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        },
+        {
+          "path": "complete.json",
+          "kind": "file",
+          "format": {
+            "mimeType": "application/octet-stream"
+          }
+        }
+      ],
+      "completion": "result.json"
+    },
+    {
+      "id": "check-shrinkage",
+      "script": "check-shrinkage.R",
+      "args": [
+        {
+          "outputOf": "shrinkage"
+        },
+        {
+          "file": "verify-shrink.R"
+        },
+        {
+          "run": "baseline",
+          "artifact": "results/full.csv"
+        }
+      ],
+      "requirements": [
+        {
+          "package": "DESeq2",
+          "source": "bioconductor"
+        },
+        {
+          "package": "jsonlite",
+          "source": "cran"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "native.json",
+          "kind": "object",
+          "format": {
+            "encoding": "json",
+            "observation": "exported-snapshot",
+            "classes": [
+              "native-check"
+            ]
+          }
+        }
+      ],
+      "completion": "result.json"
+    }
+  ],
+  "tables": [
+    {
+      "run": "baseline",
+      "artifact": "results/full.csv",
+      "rows": 16139,
+      "key": "gene_id",
+      "namespace": "airway:GSE52778:ensembl",
+      "entity": "ENSG00000163884",
+      "x": "baseMean",
+      "y": "log2FoldChange",
+      "literal": {
+        "column": "symbol",
+        "value": "KLF15"
+      }
+    }
+  ],
+  "comparison": {
+    "left": {
+      "run": "baseline",
+      "artifact": "results/full.csv"
+    },
+    "right": {
+      "run": "shrinkage",
+      "artifact": "shrinkage.csv"
+    },
+    "options": {
+      "leftKey": "gene_id",
+      "rightKey": "gene_id",
+      "leftNamespace": "airway:GSE52778:ensembl",
+      "rightNamespace": "airway:GSE52778:ensembl",
+      "mapping": "equal-string",
+      "leftField": "log2FoldChange",
+      "rightField": "log2FoldChange",
+      "join": "left"
+    }
+  },
+  "reports": [
+    {
+      "run": "check-baseline",
+      "artifact": "native.json",
+      "field": "status",
+      "value": "passed"
+    },
+    {
+      "run": "check-baseline",
+      "artifact": "arithmetic.json",
+      "field": "passed",
+      "value": true
+    },
+    {
+      "run": "check-shrinkage",
+      "artifact": "native.json",
+      "field": "state",
+      "value": "passed"
+    }
+  ]
+}

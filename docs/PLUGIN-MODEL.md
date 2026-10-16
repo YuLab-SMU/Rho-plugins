@@ -8,12 +8,12 @@ an analysis workflow composes capabilities in a project. The paired dexamethason
 analysis is an example and acceptance consumer, and does not belong in the plugin
 catalog or the base application's dependency set.
 
-This is the target model. The [0.1 headless package](HEADLESS.md) still bundles
-workflow-specific actions, readers and checks. Its successful vertical trial
-does not establish the reusable plugin boundary. The
+The [0.2 headless package](HEADLESS.md) implements the bounded capability subset:
+explicit R scripts and requirements, declared files/tables/media/object snapshots,
+document state and scoped MCP tools. Its base tarball excludes project recipes.
+The broader UI and live-session entries below remain design requirements. The
 [application extraction plan](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
-records the implementation gaps and acceptance gates. No new entry below is
-claimed as an implemented API.
+records the extraction and acceptance gates; HEADLESS identifies the actual APIs.
 
 ## Capability, entry and workflow
 
@@ -180,8 +180,9 @@ checkers under `examples/real-r-analysis` or project-owned recipe material. The
 recipe supplies dependency declarations, script snapshots and output descriptors
 to reusable capabilities. Domain-specific serialization/readers stay with a
 selected domain provider. The base plugin catalog and package must work without
-installing airway, DESeq2 or apeglm and without shipping the example. The existing
-0.1 bundle does not yet meet that condition.
+installing airway, DESeq2 or apeglm and without shipping the example. The 0.2
+package enforces that inventory; scientific dependencies are declared only by the
+explicit example consumer.
 
 Before UI work treats the new boundaries as stable, prove these flows:
 
@@ -202,5 +203,8 @@ Before UI work treats the new boundaries as stable, prove these flows:
    original requests and resource references, report availability, and execute no
    new work. Then verify actual browser views, input and accessibility separately.
 
-These are new gates. Historical headless and scientific passes remain evidence
-for their recorded compositions; they do not mark this extraction complete.
+Headless source checks now exercise these boundaries with an ordinary base-R
+project and the original paired analysis through the same operations. Actual npm
+installation is recorded by the application acceptance. Browser views, input and
+accessibility in gate 5 remain pending. Historical headless/scientific evidence
+continues to identify its original composition.

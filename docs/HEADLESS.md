@@ -1,117 +1,129 @@
-# Headless components 0.1
+# Headless capabilities 0.2
 
-`@rho-workspace/headless` 0.1.0 supplies functional owners for the Rho local
-backend. Node 22.22.x, TypeScript 5.9.3, MCP SDK 1.29.0 and csv-parse 7.0.3 are
-locked in the package. There is no React/DOM dependency or UI implementation.
-The Rho service consumes the exported API and publishes its
-[versioned consumer contract](https://github.com/YuLab-SMU/Rho/blob/main/docs/HEADLESS.md).
+`@rho-workspace/headless` 0.2.0 supplies reusable functional owners to Rho.
+Node 22.22.x, TypeScript 5.9.3, MCP SDK 1.29.0 and csv-parse 7.0.3 remain locked.
+The npm package includes compiled capabilities and the stdio MCP entry; it
+contains no analysis recipe, scientific checker, native R script or UI code.
 
-This prototype mixes reusable document/Agent behavior with workflow-specific
-requirements, actions and data readers. Its catalog is not the selected reusable
-plugin model. The [plugin boundary](PLUGIN-MODEL.md) requires removing the paired
-recipe from base registration/packaging and checking the same capabilities with
-a non-gene consumer before plugin UI acceptance. That extraction is pending;
-the API description below records actual 0.1 behavior.
+The [plugin model](PLUGIN-MODEL.md) defines ownership.
+Rho publishes the [v2 consumer contract](https://github.com/YuLab-SMU/Rho/blob/main/protocol/v2.json)
+and routes requests through the public Core CLI. The former 0.1 scientific
+candidate retains its separate historical acceptance.
 
-## Entries and owners
+## Functional owners and entries
 
-| Entry | Functional behavior |
+| Export/entry | Implemented behavior |
 | --- | --- |
-| `Documents` | One persistent buffer per normalized project-relative path, UTF-16 transactions, Unicode validation, undo, snapshots and conditional save/restore. |
-| `checkRequirements`, `preparation` | Selected-action R/package observation; explicit project-library installation plan through BiocManager. No inferred project-wide dependency graph. |
-| `planAnalysis` | Frozen saved script or acknowledged buffer; actual airway analysis and apeglm shrinkage recipe. |
-| `collectArtifacts`, `verifyArtifacts` | Actual files and independent completion, byte-integrity, arithmetic and native-state facts. |
-| `Resources` | Digest-versioned artifacts, typed CSV pages, real plot data, stable gene selection and two-input comparisons preserving missing values. |
-| `catalog` | Two actions, four finite view registrations and one external Agent adapter descriptor. UI entries are unavailable. |
-| `rho-agent-mcp` | Granted Rho HTTP operations exposed as stdio MCP tools, with the credential's project injected mechanically. |
+| `Documents` | One persistent buffer/path; Unicode-safe UTF-16 transactions, undo, conditional save, snapshots and restoration. |
+| `checkRequirements`, `preparation` | Explicit R package/source/minimum-version declarations; bounded base-R probe and explicit project-library preparation through CRAN/BiocManager. Empty requirements need only base R. |
+| `planExecution` | Frozen saved/buffer R script, explicit arguments and immutable resource inputs, requirements and declared outputs. No default recipe or scientific branch. |
+| `collectArtifacts`, `verifyArtifacts` | Scoped declared bytes, partial/declared/verified inventory facts; domain checks stay separate project outputs. |
+| `Resources` | Explicit file/table/media/object declarations, digest snapshots, typed rows, stable keys/namespaces, numeric chart fields, joins retaining both inputs, original media and exported object previews. |
+| `catalog`, `validateComponentBindings` | `r.execute` 0.2.0 and five finite entry schemas. Scatter props name numeric x/y fields; bindings require the declared key. UI availability is explicit. |
+| `rho-agent-mcp` | Granted application methods over stdio, mechanically bound to one project; durable managed caller intents before delivery. |
 
-Components do not start Core Hosts or maintain a second execution journal. Rho
-owns credentials, project routing, durable application intents, composition and
-observation; Core remains the owner of managed execution. The adapter owns no
-model loop: Claude Code owns conversation, authentication/provider and inference.
-The actual Rho experiment used Claude Code 2.1.300, fetched explicit context and
-edited the same unsaved Chinese/emoji buffer as the human client. The MCP caller
-fsyncs immutable managed identity/input records before HTTP delivery, independent
-of conversation persistence. Write-once slots prevent concurrent replacement and
-bound retention. `RHO_MAX_AGENT_INTENTS` defaults to 256 per project/session;
-exhaustion rejects new intents while preserving previous identities.
+These modules are one npm package. Their behavior and state owners define
+capabilities; neither each panel nor each workflow becomes a package.
+Rho owns credentials, project scope, serialization/writer lease, durable
+application-to-Core mapping and workspace composition. Plugins does not start
+Hosts or maintain another managed-execution journal. The external Agent client
+owns its conversation and model loop.
 
-## Scientific case
+## Explicit resources and execution
 
-`airway.analyze` uses the existing [paired airway recipe](../examples/real-r-analysis/README.md)
-with donor-paired DESeq2, four donor-omission fits and selected conditional
-simulation count (1–1000). It returns real CSV, RDS, PDF, scripts, manifests and
-completion declarations. A saved script must match its digest; a buffer must
-match its exact document version. Submission preparation freezes the code bytes.
-Subsequent edits do not alter that snapshot.
+A resource declaration contains `path`, `kind` and `format`. Format is a MIME
+type for a file, typed CSV/JSON-row columns and an optional key for a table,
+original MIME/pages/dimensions for media, or JSON classes and
+`observation:"exported-snapshot"` for an object. Extensions and column names
+never select scientific semantics. Declared artifact paths cannot escape the
+output directory, including through symlinks.
 
-`airway.shrink` consumes the baseline full model and matching full table from one
-analysis. It executes `DESeq2::lfcShrink(type="apeglm", coef="dex_trt_vs_untrt")`.
-Original Wald p-values/padj are retained. A separate native checker compares the
-exported numbers to saved objects and the baseline. The derived comparison binds
-both exact input versions, left-joins stable `gene_id` and retains missing Y as
-null. The original scientific PDFs stay available alongside interactive data.
+Columns explicitly list string/number/boolean types and CSV null encodings.
+String `001` and literal `NA` are preserved. A stable key is a unique nonempty
+string column with an entity namespace. Unkeyed tables remain readable; entity
+interaction is unavailable. Comparison requires both versions, key/namespace/
+numeric-field declarations, explicit equal-string mapping and left/inner/full
+join policy. It preserves unmatched nulls and both input provenances. Scientific
+comparability belongs to the project.
 
-New integrated acceptance used R 4.5.2, DESeq2 1.48.2, airway 1.28.0, jsonlite
-2.0.0 and project-prepared apeglm. It observed 16,139 actual genes, including
-KLF15 / ENSG00000163884. The bounded smoke case used one conditional simulation;
-the earlier 200-simulation [scientific record](../examples/real-r-analysis/ACCEPTANCE.md)
-retains its own scope. Byte and numerical agreement do not validate every model
-assumption or establish biological/clinical validity.
+The selected R script receives the output path first and creates it. Further
+arguments are literals or checked immutable resource snapshots. The exact code
+and declarations remain frozen with the accepted request. The optional completion
+inventory is a run-relative sidecar, returned as `plan.completion`; placing it
+beside `artifacts` preserves the producer's own immutable inventory.
+Verification checks bytes only. A project can execute its scientific checker
+as another ordinary script and declare its report as a separate resource.
 
-The first bootstrap=1 run exposed the existing Freedman–Diaconis histogram's
-singleton failure after models/tables had been written. The recipe now selects
-one bin for that supported input. Both the failure and subsequent successful
-execution are retained by Rho; the focused regression invokes the actual R plot
-expression. The first shrinkage checker also exposed a missing DESeq2 namespace
-before S4 dispatch; explicit loading fixed the checker, and the actual saved
-objects subsequently passed. No original failure is relabeled successful.
+Media retains original bytes/version and provider-declared page/dimension facts.
+Rho validates rectangle context against those facts. There is no decoder or
+browser renderer here. Object previews read bounded exported JSON, never evaluate
+R expressions. A resident Core Host is not a persistent R interpreter.
 
-An installed analysis under a spaced Chinese path completed natively but the
-independent checker found an absent script digest. Rscript represents spaces in
-its `--file` argument as `~+~`; the recipe now decodes that representation only
-when the literal path does not exist. The native-path regression checks the
-actual recorded hash against the submitted file bytes.
+The finite entries are `rho.editor`, `rho.table`, `rho.scatter`, `rho.media`
+and `rho.object`, all 0.2.0 and UI-unavailable. The application validates the
+owner's schemas/bindings, retains missing entries and does not reconstruct a
+workspace by executing analysis.
 
-## Persistence and resource limits
+## Two explicit project consumers
 
-Component state lives below `.rho/plugins`, separate from `.rho/rho` coordination
-and Core's files. File fsync, rename and directory fsync precede acknowledgements.
-Rho supplies the single project-writer lease and serialized calls. A document
-save checks both the expected buffer version and the disk digest before atomic
-replacement; it does not claim filesystem CAS against uncooperative writers.
-Invalid UTF-8, surrogate splits, stale versions and external writes preserve the
-acknowledged buffer and undo. Internal `.rho`/`.git` files cannot become documents.
+[Ordinary R project](../examples/ordinary-r-project/README.md) uses base R to fit
+a small model and export tables with non-gene keys, PNG/PDF and an object snapshot.
+Its project-owned checker reads the actual saved model and observations.
 
-Every resource has its own digest/version, provenance and actual availability.
-A partial file is not marked complete without its native declaration; checks are
-separate. Source mutation makes an older reference stale. Restored bytes retain
-their identities and record rebased provenance. There is no global scientific
-revision or implied R-memory recovery after Host loss.
+[Paired analysis](../examples/real-r-analysis/README.md) supplies the original
+analysis, explicit package requirements/output declarations, shrinkage and
+independent/native checkers. These scripts remain under the example and are
+excluded from npm. Both consumers use the same Rho acceptance runner,
+`r.execute`, requirements, resource, data, context and workspace APIs.
+The original 200-simulation scientific evidence retains its stated scope; the
+extraction smoke case requests one simulation.
 
-Exported defaults are `documentLimits` and `resourceLimits`; constructors accept
-partial overrides. Documents default to 64 buffers, 1 MiB each, 8 MiB total
-content and 8 MiB undo per buffer. Resources default to 64 MiB per file, 1024
-registered resources, 512 MiB retained artifact bytes, 100,000 rows, 1000 rows/page,
-20,000 plot points and 64 KiB byte reads. Old retained snapshot bytes count toward
-the storage budget. Exceeding a limit rejects new work while keeping obtained
-content; sampled plot data explicitly reports the method. These bounds do not
-limit native R memory or confer an OS sandbox.
+## Compatibility and limits
+
+Historical frozen plans and registered resource bytes stay observable without
+the removed recipe. Generic typed reads require a declaration; they never guess
+a historical scientific schema. Historical checks requiring the old provider are
+unavailable for new execution, while recorded results remain. Rho preserves the
+v1 schema/candidate and offers an observation bridge for original identities.
+
+State stays under `.rho/plugins`; Rho coordination and Core state keep their
+owners. Mutation acknowledgement follows fsync/rename/directory fsync.
+Save checks the actual disk condition and preserves conflict content/undo; it is
+not CAS against outside writers. Source mutation makes a registered reference
+stale; restored bytes keep identities with explicit rebased provenance.
+
+Constructors accept `documentLimits`/`resourceLimits` overrides.
+Defaults: 64 buffers, 1 MiB each, 8 MiB content and undo/buffer; 64 MiB/resource,
+1024 resources, 512 MiB retained bytes, 100,000 rows, 1000 rows/page, 20,000 chart
+points and 64 KiB byte/object/completion reads. Earlier snapshots count toward
+storage. Excess rejects new work and preserves acknowledged facts; sampling is
+explicit. Dependency probes use 20 seconds/1 MiB. Native R memory/OS authority
+remain outside these limits.
+
+MCP persists original managed identity/input before HTTP delivery, independently
+of external conversation persistence. `RHO_MAX_AGENT_INTENTS` defaults to 256
+per project/session; changed reuse conflicts and exhaustion retains old intents.
+The connection descriptor selects API 2.0; older descriptors keep their API
+selection. Explicit tool-fetched context does not establish proactive delivery.
 
 ## Build and verify
 
 ```sh
 npm ci
-npm run build
 npm test
+npm run test:examples
 npm pack
 ```
 
-The eight focused tests cover shared Unicode/stale edits, undo/disk conflict and
-recovery, buffer budgets, the singleton R plot, spaced Unicode script paths,
-MCP caller identity/concurrent retention, actual typed data/missing values,
-stale two-input resources, retained snapshot budgets and invalid UTF-8.
-The full HTTP/Core/Agent/scientific/install composition is tested by Rho's
-[scripts and acceptance record](https://github.com/YuLab-SMU/Rho/blob/main/docs/BACKEND-ACCEPTANCE.md).
-It is distinct from this owner package's tests and from browser acceptance.
-No npm registry publication or signed delivery is claimed.
+Nine capability tests cover documents, durable/concurrent Agent intents,
+declared types/keys/nulls, explicit two-input mappings, stale resources, bounded
+storage, base-R probes and immutable producer inventories with escaping-path
+rejection. The two separate example tests retain native singleton-histogram and
+spaced-Unicode-path coverage. Examples are not capability test dependencies.
+
+Rho separately verifies real HTTP/Core execution, stdio MCP and external Claude
+handoff, both explicit projects, partial/unknown recovery and actual npm
+installation. [Application acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/EXTRACTION-ACCEPTANCE.md)
+records the chosen source/artifact identities, failures and exact scope.
+Browser input/rendering, live R memory, signed delivery and registry publication
+remain separate.

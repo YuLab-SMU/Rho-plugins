@@ -14,13 +14,13 @@ const c = JSON.parse(await fs.readFile(descriptor, 'utf8'));
 const endpoint = new URL(c.url);
 if (endpoint.protocol !== 'http:' || endpoint.hostname !== '127.0.0.1') throw new Error('Only the local Rho service is supported.');
 async function invoke(method: string, input: Record<string, unknown> = {}) {
-  const response = await fetch(new URL('/api/v1/' + method, endpoint), { method: 'POST', headers: { authorization: 'Bearer ' + c.token, 'content-type': 'application/json' }, body: JSON.stringify({ ...input, projectId: c.projectId }), signal: AbortSignal.timeout(30000) });
+  const response = await fetch(new URL('/api/v' + (c.apiVersion ?? '1.0').split('.')[0] + '/' + method, endpoint), { method: 'POST', headers: { authorization: 'Bearer ' + c.token, 'content-type': 'application/json' }, body: JSON.stringify({ ...input, projectId: c.projectId }), signal: AbortSignal.timeout(30000) });
   return response.json() as Promise<any>;
 }
 const schema = await invoke('protocol.describe');
 if (!schema.ok) throw new Error('Rho protocol is unavailable.');
 const allowed: string[] = c.methods;
-const server = new Server({ name: 'rho-project', version: '0.1.0' }, { capabilities: { tools: {} } });
+const server = new Server({ name: 'rho-project', version: '0.2.0' }, { capabilities: { tools: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: allowed.map(method => {
   const source = structuredClone(schema.value.operations[method]);
   delete source.properties.projectId;
@@ -35,7 +35,7 @@ server.setRequestHandler(CallToolRequestSchema, async request => {
     const result = await invoke(method, request.params.arguments);
     return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: !result.ok };
   } catch (e) {
-    if (e instanceof Fault) { const result = { apiVersion: '1.0', ok: false, error: { kind: e.kind, message: e.message, details: e.details, continuation: 'Observe the original intent and reconcile; do not replace its identity.' } }; return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: true }; }
+    if (e instanceof Fault) { const result = { apiVersion: c.apiVersion ?? '1.0', ok: false, error: { kind: e.kind, message: e.message, details: e.details, continuation: 'Observe the original intent and reconcile; do not replace its identity.' } }; return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result, isError: true }; }
     return { content: [{ type: 'text', text: 'Delivery is unknown. Query the original operationId; do not mint a replacement.' }], isError: true }; }
 });
 await server.connect(new StdioServerTransport());
