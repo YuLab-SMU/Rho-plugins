@@ -1,6 +1,6 @@
-# Headless plugins 0.3
+# Headless plugins 0.4
 
-Eight independent `@rho-workspace/plugin-*` 0.3.0 packages supply reusable
+Eight independent `@rho-workspace/plugin-*` 0.4.0 packages supply reusable
 functional owners to Rho. The [package inventory](PLUGIN-PACKAGES.md) records
 ownership, typed service ports, required providers and independent installation.
 Node 22.22.x, TypeScript 5.9.3, MCP SDK 1.29.0 and csv-parse 7.0.3 remain locked.
@@ -25,8 +25,11 @@ candidate retains its separate historical acceptance.
 | `rho-agent-mcp` | Granted application methods over stdio, mechanically bound to one project; durable managed caller intents before delivery. |
 
 Each capability is an independent npm package. The private root only coordinates
-source builds/tests and cannot be packed. Shared contracts supply schemas and
-file primitives, with no capability catalog, state owner or runtime dependency.
+source builds/tests and cannot be packed. Shared contracts supply generic envelopes, typed service ports and file
+primitives, with no capability catalog, format registry, state owner or runtime
+dependency. Each resource/requirement/script schema lives in its provider
+package's pure `./contract` entry. The R schema factory accepts foreign schemas
+from the consumer; pure contracts never load the provider implementation.
 Rho owns credentials, project scope, serialization/writer lease, durable
 application-to-Core mapping and workspace composition. Plugins does not start
 Hosts or maintain another managed-execution journal. The external Agent client
@@ -48,6 +51,10 @@ interaction is unavailable. Comparison requires both versions, key/namespace/
 numeric-field declarations, explicit equal-string mapping and left/inner/full
 join policy. It preserves unmatched nulls and both input provenances. Scientific
 comparability belongs to the project.
+
+Exported object reads need Files/R only. Requirements is an action-level
+dependency for `r.execute`; Documents is needed only for buffer scripts. A missing
+Requirements provider does not disable object snapshots or their entry.
 
 The selected R script receives the output path first and creates it. Further
 arguments are literals or checked immutable resource snapshots. The exact code
@@ -97,6 +104,8 @@ stale; restored bytes keep identities with explicit rebased provenance.
 
 Constructors accept `documentLimits`, `fileLimits`, `tableLimits` and
 `chartLimits` overrides for their own protected resources.
+R's `executionLimits.maxScriptBytes` independently limits saved/buffer snapshots
+to 1 MiB before dispatch; Documents selection and buffer limits cannot change it.
 Defaults: 64 buffers, 1 MiB each, 8 MiB content and undo/buffer; 64 MiB/resource,
 1024 resources, 512 MiB retained bytes, 100,000 rows, 1000 rows/page, 20,000 chart
 points and 64 KiB byte/object/completion reads. Earlier snapshots count toward
@@ -120,17 +129,18 @@ npm run pack:plugins -- --destination /absolute/plugin-tarballs
 npm run test:install -- /absolute/plugin-tarballs
 ```
 
-Ten capability tests cover documents, durable/concurrent Agent intents,
+Twelve owner tests cover documents, durable/concurrent Agent intents,
 declared types/keys/nulls, explicit two-input mappings, stale resources, bounded
 storage, base-R probes and immutable producer inventories with escaping-path
-rejection, provider-independent bytes and missing-provider context/collection.
+rejection, provider-independent bytes and missing-provider context/collection, architecture
+import/dependency guards, generic Contracts exports and independent R budgets.
 Eight isolated installations/imports verify independent package/dependency
 boundaries. The two separate example tests retain native singleton-histogram and
 spaced-Unicode-path coverage. Examples are not capability test dependencies.
 
 Rho separately verifies real HTTP/Core execution, stdio MCP and external Claude
 handoff, both explicit projects, partial/unknown recovery and actual npm
-installation. [Application acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/EXTRACTION-ACCEPTANCE.md)
+installation. [Boundary review acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-BOUNDARY-ACCEPTANCE.md)
 records the chosen source/artifact identities, failures and exact scope.
 Browser input/rendering, live R memory, signed delivery and registry publication
 remain separate.

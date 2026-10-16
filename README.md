@@ -17,14 +17,14 @@ The [reusable plugin model](docs/PLUGIN-MODEL.md) defines capability ownership,
 headless and UI entries, resource/selection contracts and extraction acceptance.
 A plugin can contribute several views over one state owner. Rho selects and
 arranges those entries; a workflow's dataset, method choices and sequencing stay
-in project code or an example. The 0.3 implementation ships those
+in project code or an example. The 0.4 implementation ships those
 capabilities as eight independent npm plugins; browser entries remain separate work.
 
 ## Current implementations and consumers
 
 | Implementation | Available behavior | Acceptance |
 | --- | --- | --- |
-| [Eight headless plugins 0.3](docs/PLUGIN-PACKAGES.md) | Shared documents, explicit R execution/requirements, declared files/tables/media/object snapshots, keyed comparisons and MCP | [Component and integration scope](docs/HEADLESS.md#build-and-verify) |
+| [Eight headless plugins 0.4](docs/PLUGIN-PACKAGES.md) | Shared documents, explicit R execution/requirements, declared files/tables/media/object snapshots, keyed comparisons and MCP | [Component and integration scope](docs/HEADLESS.md#build-and-verify) |
 | [Agent evaluation](plugins/agent-eval/README.md) | Separate development tool: isolated public Core CLI trials, domain-owned checks and offline regrading | [Recorded execution](plugins/agent-eval/ACCEPTANCE.md) |
 
 The [paired airway analysis](examples/real-r-analysis/README.md) is a scientific
@@ -72,7 +72,7 @@ Community and ECharts. Agent-composed UI uses a typed json-render catalog;
 independent HTML views may use isolated MCP Apps when needed.
 
 [Architecture](docs/ARCHITECTURE.md) defines component responsibilities and the
-Action, Resource, Selection and View boundaries. The selected 0.3 plugin composition
+Action, Resource, Selection and View boundaries. The selected 0.4 plugin composition
 uses declared types, entity namespaces and fields without scientific workflow
 branches. Both R projects have passed actual headless execution in Rho. Browser
 rendering, input and layout remain selected work.

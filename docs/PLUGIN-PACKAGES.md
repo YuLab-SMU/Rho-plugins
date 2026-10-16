@@ -1,4 +1,4 @@
-# Independent plugin packages 0.3
+# Independent plugin packages 0.4
 
 The source workspace builds eight independently installable capability plugins.
 There is no aggregate runtime package. `@rho-workspace/plugins-source` is private
@@ -7,7 +7,7 @@ consumers, outside every capability tarball.
 
 ## Inventory
 
-All packages are version **0.3.0**. Each capability exports its own `plugin`
+All packages are version **0.4.0**. Each capability exports its own `plugin`
 descriptor. Existing `r.execute` and view contracts retain version **0.2.0**;
 the package split does not redefine accepted actions or resource identities.
 
@@ -15,7 +15,7 @@ the package split does not redefine accepted actions or resource identities.
 | --- | --- | --- |
 | [documents](../plugins/documents/README.md) | `Documents`: one buffer, edits/undo, conditional save, frozen snapshots and restoration | None |
 | [files](../plugins/files/README.md) | `Files`, `collectArtifacts`, `verifyArtifacts`: contained immutable bytes, registration, inventory and integrity | None; typed declaration validators are injected |
-| [r](../plugins/r/README.md) | `planExecution`, `Objects`: explicit script/resource snapshots, argument plan, exported object reader; no managed journal or Host | Files, requirements; documents only for buffer scripts |
+| [r](../plugins/r/README.md) | `planExecution`, `Objects`: explicit script/resource snapshots, argument plan, exported object reader; no managed journal or Host | Files; requirements only for the execution action; documents only for buffer scripts |
 | [requirements](../plugins/requirements/README.md) | `checkRequirements`, `preparation`: bounded R probe and explicit project-library preparation plan | None |
 | [tables](../plugins/tables/README.md) | `Tables`: declared type/null/key semantics, pages, sorting/filtering, two-input keyed comparisons | Files |
 | [media](../plugins/media/README.md) | `Media`: original image/PDF metadata and checked coordinate context | Files |
@@ -23,7 +23,7 @@ the package split does not redefine accepted actions or resource identities.
 | [agent](../plugins/agent/README.md) | `AgentContext`, `retainAgentIntent`, `./mcp`: context/bindings/receipts and durable project-scoped stdio tools | None; context sources are injected as needed |
 
 The full npm name is `@rho-workspace/plugin-<suffix>`. Each depends on
-`@rho-workspace/plugin-contracts` 0.3.0. No plugin imports another plugin's
+`@rho-workspace/plugin-contracts` 0.4.0. No plugin imports another plugin's
 implementation. Rho explicitly connects the required service ports; missing
 providers make only the affected entries unavailable. Installing a package does
 not activate a service, grant authority, start R or start a Core Host.
@@ -33,11 +33,22 @@ Documents, files and media do not require the R adapter or R packages. Charts
 consume the table reader rather than taking ownership of parsing/storage. The
 Agent's external client continues to own its model loop and conversation.
 
-[Contracts](../packages/contracts/README.md) contains JSON schemas, typed service
+[Contracts](../packages/contracts/README.md) contains generic envelopes, typed service
 ports, faults, contained paths, hashing and durable ordinary-file primitives.
 It has no plugin descriptor, catalog, resource registry, document state, execution
 planner, native dependency probe, data parser, MCP server or renderer.
-Wire schemas may describe optional resource types without loading their providers.
+Each format schema is exported by its owner through a pure `./contract` entry:
+Files, Tables, Media and R own their respective resource declarations; Requirements
+owns package requirements, while R owns script selection and the execution-input
+factory. The factory accepts foreign schemas from its consumer. Contracts does not
+know those formats, native environments or CSV null encodings. Rho preserves its
+selected v2 wire vocabulary and checks parity with these provider contracts.
+
+In 0.4, object reads need Files and R only. Missing Requirements disables the
+`r.execute` action and its execution capability, while `r-objects` and the object
+entry remain available. R's `maxScriptBytes` protects frozen script bytes with an
+independent 1 MiB default. Documents' buffer budget cannot change saved execution.
+Media, object, Agent and R readers accept only the service methods they use.
 
 ## Selection, missing providers and state
 
@@ -80,10 +91,15 @@ owner code/types, README, package manifest and license. To use a local artifact,
 install its contracts tarball and the selected plugin tarball together; npm
 registry publication has not been performed.
 
-Ten owner tests and two separate native example tests pass. Eight isolated npm
+Twelve owner tests and two separate native example tests pass. The architecture
+check rejects sibling implementation imports and undeclared dependencies, and
+locks Contracts to its generic export surface. Builds clean each owner dist
+before compiling, so removed schemas cannot survive in tarballs. Packing checks
+compiled first-party code for the excluded analysis/evaluator consumers. Eight isolated npm
 installations/imports pass, each containing contracts plus exactly one plugin;
 CSV/MCP dependencies follow only their owners. Rho separately checks its actual
 assembly, provider removal/reselection, both R consumers, Core recovery and a
-fresh installed application. See the [application split acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-SPLIT-ACCEPTANCE.md).
+fresh installed application. See the [boundary review acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-BOUNDARY-ACCEPTANCE.md)
+and the earlier [split acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-SPLIT-ACCEPTANCE.md).
 Source publication, local packaging, installation and signed distribution remain
 separate evidence.

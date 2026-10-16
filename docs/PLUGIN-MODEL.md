@@ -8,7 +8,7 @@ an analysis workflow composes capabilities in a project. The paired dexamethason
 analysis is an example and acceptance consumer, and does not belong in the plugin
 catalog or the base application's dependency set.
 
-The [0.3 headless packages](PLUGIN-PACKAGES.md) implement the bounded capability subset:
+The [0.4 headless packages](PLUGIN-PACKAGES.md) implement the bounded capability subset:
 explicit R scripts and requirements, declared files/tables/media/object snapshots,
 document state and scoped MCP tools. Every capability tarball excludes project recipes.
 The broader UI and live-session entries below remain design requirements. The
@@ -180,7 +180,7 @@ checkers under `examples/real-r-analysis` or project-owned recipe material. The
 recipe supplies dependency declarations, script snapshots and output descriptors
 to reusable capabilities. Domain-specific serialization/readers stay with a
 selected domain provider. The base plugin catalog and package must work without
-installing airway, DESeq2 or apeglm and without shipping the example. The 0.3
+installing airway, DESeq2 or apeglm and without shipping the example. The 0.4
 packages enforce that inventory; scientific dependencies are declared only by the
 explicit example consumer.
 

@@ -7,7 +7,7 @@ the Rho application. [Architecture](ARCHITECTURE.md) defines ownership;
 ## Reusable foundation before plugin UI
 
 The [plugin model](PLUGIN-MODEL.md) separates reusable capability plugins, their
-optional entries and project workflows. The headless 0.3 plugins independently package the
+optional entries and project workflows. The headless 0.4 plugins independently package the
 reusable foundation; its source trials use both an ordinary R project and the
 paired example. The following gates define the delivered headless boundary and
 the remaining UI acceptance.

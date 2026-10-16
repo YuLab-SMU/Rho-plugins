@@ -4,7 +4,7 @@ Updated: 2026-10-16.
 
 ## Implemented capabilities and consumers
 
-[Eight independent headless plugins 0.3](PLUGIN-PACKAGES.md) supply one generic `r.execute` action,
+[Eight independent headless plugins 0.4](PLUGIN-PACKAGES.md) supply one generic `r.execute` action,
 explicit R requirements and preparation, shared documents, declared file/table/
 media/object resources, bounded readers and keyed comparisons, typed composition
 descriptors and project-scoped stdio MCP. The npm packages ship compiled
@@ -12,16 +12,21 @@ capabilities; no project recipe, native R script or scientific checker is bundle
 
 The [plugin model](PLUGIN-MODEL.md) defines ownership. Documents, files, R, requirements, tables, media, charts and Agent each own a
 package, descriptor and implementation. A thin contracts package has no catalog,
-capability state, R execution, CSV parser or MCP dependency. Rho selects and wires
+capability state, format registry, native plan, document budget, CSV parser or MCP
+dependency. Format/requirement/script schemas live in pure owner contract entries;
+import and export guards keep those boundaries explicit. Rho selects and wires
 services; plugins do not import one another. Only Tables installs csv-parse and
 only Agent installs the MCP SDK. Root is a private source workspace. See
 [package boundaries and selection](PLUGIN-PACKAGES.md). Five registered view descriptors report UI
 unavailable. Those descriptors validate props/bindings without implementing
 renderers. There is no marketplace or dynamic loader.
 
-- Ten focused capability tests pass: document/undo budgets, immutable MCP intents,
+- Twelve focused capability tests pass: document/undo budgets, immutable MCP intents,
   typed strings/nulls and entity namespaces, joins/provenance, resource freshness,
   script/argument snapshots, requirement probes, byte completion and containment.
+  R owns `maxScriptBytes`; saved-script execution does not borrow document limits.
+  Only the R execution action requires Requirements; exported objects remain
+  readable with Files/R alone, without Documents, Requirements, R or a Host.
 - All eight plugin tarballs passed isolated installation/import with only their
   contracts dependency and required external dependencies. No sibling plugin,
   aggregate package, native R script or example is installed.
@@ -31,20 +36,21 @@ renderers. There is no marketplace or dynamic loader.
   four sample rows, real linear-model coefficients, PNG/PDF and an exported model
   snapshot. Identifiers `001` and literal `NA` remain strings.
 - The [paired analysis](../examples/real-r-analysis/README.md) is an explicit
-  scientific consumer. Rho's actual installed 0.3 trial completed five DESeq2 fits,
+  scientific consumer. Rho's actual installed 0.4 trial completed five DESeq2 fits,
   16,139-row typed results, independent arithmetic/native checks, apeglm shrinkage
   and a comparison recording both input versions.
 - Both projects use the same action, requirements, declaration, reader and
-  composition contracts. Rho's full 0.3 installation passes both consumers and
-  recovery; a separate reduced installation physically includes only Contracts,
-  Documents and Files. Missing optional packages remain unavailable while Unicode
-  documents and export work without R or a Host. Removal/reselection retains
+  composition contracts. Rho's full 0.4 installation passes both consumers and
+  recovery. Two reduced installations physically include only Contracts/Documents/
+  Files or Contracts/Files/R. Unicode documents or exported objects work without
+  R or a Host; missing action dependencies remain unavailable before dispatch.
+  Removal/reselection retains
   bytes, drafts/undo, selection intent, view references and original requests.
 - Actual Claude Code 2.1.301 through MCP SDK 1.29.0 fetched v2 context and changed
   the same unsaved Chinese/emoji buffer, without starting a Host.
 
 Application results and current installation evidence are in
-[Rho's plugin split acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-SPLIT-ACCEPTANCE.md).
+[Rho's plugin boundary review](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-BOUNDARY-ACCEPTANCE.md).
 Earlier evidence and retained failures remain in
 [Rho's extraction acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/EXTRACTION-ACCEPTANCE.md).
 The earlier [scientific record](../examples/real-r-analysis/ACCEPTANCE.md) remains

@@ -38,7 +38,7 @@ it does not host React views or the Agent's model loop.
 
 The initial composition uses four shared concepts. The [headless plugins](HEADLESS.md)
 implements a finite versioned catalog and owner APIs; Rho publishes the HTTP
-consumer schemas. The 0.3 package composition preserves the 0.2 action/view contracts and takes explicit scripts, requirements and
+consumer schemas. The 0.4 package composition preserves the 0.2 action/view contracts and takes explicit scripts, requirements and
 resource declarations. An ordinary R project and the original scientific example
 use the same owners without workflow branches. Browser entries require separate
 acceptance; a universal plugin loader remains outside this scope.

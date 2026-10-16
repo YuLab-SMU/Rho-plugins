@@ -25,6 +25,7 @@ test('package imports stay within their owner and declared dependencies; contrac
         if (specifier) {
           assert.ok(ts.isStringLiteral(specifier), 'Only explicit imports: ' + file);
           const spec = specifier.text;
+          if (name === 'contract.ts') assert.equal(spec, '@rho-workspace/plugin-contracts', 'Pure contract entries cannot load owner implementations or native/parser dependencies: ' + file);
           if (spec.startsWith('.')) assert.ok(path.resolve(path.dirname(file), spec).startsWith(folder + path.sep), file + ': ' + spec);
           else if (spec.startsWith('node:')) {
             if (owner === 'packages/contracts') assert.ok(['node:fs/promises', 'node:path', 'node:crypto'].includes(spec), 'Contracts cannot execute native processes: ' + spec);
