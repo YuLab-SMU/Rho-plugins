@@ -1,0 +1,29 @@
+{
+  "name": "@rho-workspace/plugin-agent",
+  "version": "0.3.0",
+  "type": "module",
+  "description": "Rho agent plugin",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./mcp": "./dist/mcp.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@rho-workspace/plugin-contracts": "0.3.0",
+    "@modelcontextprotocol/sdk": "1.29.0"
+  },
+  "bin": {
+    "rho-agent-mcp": "./dist/mcp.js"
+  }
+}

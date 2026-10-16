@@ -36,9 +36,9 @@ it does not host React views or the Agent's model loop.
 
 ## Shared interaction concepts
 
-The initial composition uses four shared concepts. The [headless package](HEADLESS.md)
+The initial composition uses four shared concepts. The [headless plugins](HEADLESS.md)
 implements a finite versioned catalog and owner APIs; Rho publishes the HTTP
-consumer schemas. The 0.2 catalog takes explicit scripts, requirements and
+consumer schemas. The 0.3 package composition preserves the 0.2 action/view contracts and takes explicit scripts, requirements and
 resource declarations. An ordinary R project and the original scientific example
 use the same owners without workflow branches. Browser entries require separate
 acceptance; a universal plugin loader remains outside this scope.
@@ -121,7 +121,7 @@ without losing unsaved content, and observers reconnect to the original task.
 The Agent then composes a further view from the same catalog and references.
 [Roadmap](ROADMAP.md#first-integrated-flow) defines the acceptance conditions.
 
-The 0.2 headless extraction runs an ordinary base-R project and the original paired
+The headless extraction runs an ordinary base-R project and the original paired
 analysis through the same Rho HTTP actions and public Core CLI. The external
 Claude Code adapter also exercises the shared document contract. These checks
 cover reusable backend capabilities; browser interaction, native input and

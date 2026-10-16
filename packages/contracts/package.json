@@ -1,0 +1,23 @@
+{
+  "name": "@rho-workspace/plugin-contracts",
+  "version": "0.3.0",
+  "type": "module",
+  "description": "Shared Rho plugin wire contracts and file primitives; no capabilities",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./requirements": "./dist/requirements.js",
+    "./execution": "./dist/execution.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  }
+}

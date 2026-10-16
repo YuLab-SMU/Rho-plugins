@@ -1,0 +1,50 @@
+import { publicResource, objectSchema as obj, text, version, refSchema, declarationSchema, type ResourceRef, type ResourceStore, type DocumentSnapshotSource, type Environment, type ActionPlan } from '@rho-workspace/plugin-contracts';
+import * as fs from 'node:fs/promises';
+import path from 'node:path';
+import { confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { validateDeclaration, type Declaration } from '@rho-workspace/plugin-contracts';
+
+export async function planExecution(root: string, input: any, operationId: string, environment: Environment, resources: ResourceStore, documents?: DocumentSnapshotSource): Promise<ActionPlan> {
+  root = await fs.realpath(root);
+  let snapshot;
+  if (input.script.kind === 'buffer') { requireThat(documents, 'unavailable', 'The documents plugin is required for buffer execution.'); snapshot = await documents.snapshot(input.script.documentId, input.script.version); }
+  else {
+    requireThat(!input.script.path.split('/').some((p: string) => ['.rho', '.git'].includes(p)), 'scope', 'Select a script outside internal owner state.');
+    const file = await confined(root, input.script.path);
+    requireThat((await fs.stat(file)).size <= (documents?.limits.maxBufferBytes ?? 1024 * 1024), 'limit', 'Saved script exceeds the buffer byte limit.', { limit: 'maxBufferBytes' });
+    let code: string;
+    try { code = new TextDecoder('utf-8', { fatal: true }).decode(await fs.readFile(file)); }
+    catch { requireThat(false, 'invalid', 'Saved script is not valid UTF-8.'); }
+    requireThat(digest(code) === input.script.digest, 'stale', 'Saved script bytes changed before submission.');
+    snapshot = { code, sha256: digest(code), source: { kind: 'disk', path: input.script.path } };
+  }
+  const parent = await stateDirectory(root, '.rho/plugins/runs/' + digest(operationId));
+  const output = path.join(parent, 'artifacts');
+  requireThat(new Set(input.artifacts.map((d: Declaration) => d.path)).size === input.artifacts.length, 'invalid', 'Output paths must be unique.');
+  for (const d of input.artifacts) { resources.validateDeclaration(d); await confined(parent, 'artifacts/' + d.path, true); }
+  const completionPath = input.completion === null ? null : await confined(parent, input.completion, true);
+  const inputs = [], args = [output];
+  for (const arg of input.args) {
+    if (typeof arg === 'string') args.push(arg);
+    else { const r = await resources.resolve(arg.resource); inputs.push(arg.resource); args.push(await confined(root, r.storage)); }
+  }
+  return { code: ('.libPaths(c(c(' + environment.libraryPaths.map(x => JSON.stringify(x)).join(',') + '), .libPaths()))\n') + snapshot.code, args, source: { ...snapshot.source, sha256: snapshot.sha256, inputs, artifacts: input.artifacts, completion: input.completion, requirements: input.requirements }, output: path.relative(root, output), completion: completionPath && path.relative(root, completionPath) };
+}
+import { executionInputSchema } from '@rho-workspace/plugin-contracts/execution';
+export { executionInputSchema, scriptSchema } from '@rho-workspace/plugin-contracts/execution';
+export const actions = [{ id: 'r.execute', version: '0.2.0', owner: 'rho-plugins.r', effects: ['native-execution', 'create-declared-artifacts'], cancellation: 'Core cancellation request; native stop requires observation', inputSchema: executionInputSchema }];
+
+export function validateObjectDeclaration(d: Declaration) {
+  validateDeclaration(d); requireThat(d.kind === 'object' && (d.format as any).encoding === 'json' && (d.format as any).observation === 'exported-snapshot' && Array.isArray((d.format as any).classes), 'invalid', 'Objects must be explicit exported JSON snapshots.');
+}
+export const declarationValidator = { kind: 'object', validate: validateObjectDeclaration };
+export class Objects {
+  constructor(public files: ResourceStore) {}
+  async read(ref: ResourceRef) {
+    const { r, data } = await this.files.bytes(ref);
+    requireThat(r.kind === 'object' && typeof r.format === 'object' && r.format.observation === 'exported-snapshot', 'invalid', 'Select an exported object snapshot.');
+    requireThat(data.length <= this.files.limits.maxReadBytes, 'limit', 'Object snapshot exceeds the structured read budget; bounded byte reads remain available.', { limit: 'maxReadBytes' });
+    return { resource: publicResource(r), observation: 'exported-snapshot', value: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)) };
+  }
+}
+export const plugin = { id: 'r', package: '@rho-workspace/plugin-r', version: '0.3.0', requires: ['files', 'requirements'], capabilities: ['r-execution'], actions, components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };

@@ -1,0 +1,24 @@
+{
+  "name": "@rho-workspace/plugin-documents",
+  "version": "0.3.0",
+  "type": "module",
+  "description": "Rho documents plugin",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@rho-workspace/plugin-contracts": "0.3.0"
+  }
+}

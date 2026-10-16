@@ -7,7 +7,7 @@ the Rho application. [Architecture](ARCHITECTURE.md) defines ownership;
 ## Reusable foundation before plugin UI
 
 The [plugin model](PLUGIN-MODEL.md) separates reusable capability plugins, their
-optional entries and project workflows. The headless 0.2 package extracts the
+optional entries and project workflows. The headless 0.3 plugins independently package the
 reusable foundation; its source trials use both an ordinary R project and the
 paired example. The following gates define the delivered headless boundary and
 the remaining UI acceptance.
@@ -58,7 +58,7 @@ WebUI. Electron and cross-window movement belong to a later client.
 Functional views select CodeMirror 6, AG Grid Community and ECharts; Agent-composed
 views use a json-render catalog. MCP Apps is optional for an isolated independent
 HTML consumer. [Rho's technology direction](https://github.com/YuLab-SMU/Rho/blob/main/docs/TECHSTACK.md)
-is the application selection reference. The [headless component package](HEADLESS.md)
+is the application selection reference. The [headless plugin packages](PLUGIN-PACKAGES.md)
 and its Rho HTTP/Core/Agent composition have been checked with two explicit R
 projects. UI assembly remains pending.
 

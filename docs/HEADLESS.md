@@ -1,8 +1,10 @@
-# Headless capabilities 0.2
+# Headless plugins 0.3
 
-`@rho-workspace/headless` 0.2.0 supplies reusable functional owners to Rho.
+Eight independent `@rho-workspace/plugin-*` 0.3.0 packages supply reusable
+functional owners to Rho. The [package inventory](PLUGIN-PACKAGES.md) records
+ownership, typed service ports, required providers and independent installation.
 Node 22.22.x, TypeScript 5.9.3, MCP SDK 1.29.0 and csv-parse 7.0.3 remain locked.
-The npm package includes compiled capabilities and the stdio MCP entry; it
+Each npm package includes its compiled owner code and optional entries; it
 contains no analysis recipe, scientific checker, native R script or UI code.
 
 The [plugin model](PLUGIN-MODEL.md) defines ownership.
@@ -18,12 +20,13 @@ candidate retains its separate historical acceptance.
 | `checkRequirements`, `preparation` | Explicit R package/source/minimum-version declarations; bounded base-R probe and explicit project-library preparation through CRAN/BiocManager. Empty requirements need only base R. |
 | `planExecution` | Frozen saved/buffer R script, explicit arguments and immutable resource inputs, requirements and declared outputs. No default recipe or scientific branch. |
 | `collectArtifacts`, `verifyArtifacts` | Scoped declared bytes, partial/declared/verified inventory facts; domain checks stay separate project outputs. |
-| `Resources` | Explicit file/table/media/object declarations, digest snapshots, typed rows, stable keys/namespaces, numeric chart fields, joins retaining both inputs, original media and exported object previews. |
-| `catalog`, `validateComponentBindings` | `r.execute` 0.2.0 and five finite entry schemas. Scatter props name numeric x/y fields; bindings require the declared key. UI availability is explicit. |
+| `Files`, `Tables`, `Charts`, `Media`, `Objects` | Independent storage, typed parsing/joins, chart data, original media/region checks and exported object readers. Rho injects their service ports. |
+| Owner `plugin` descriptors and chart `validateComponentBindings` | `r.execute` 0.2.0 and five finite entry schemas. Scatter props name numeric x/y fields; bindings require the declared key. UI availability is explicit. |
 | `rho-agent-mcp` | Granted application methods over stdio, mechanically bound to one project; durable managed caller intents before delivery. |
 
-These modules are one npm package. Their behavior and state owners define
-capabilities; neither each panel nor each workflow becomes a package.
+Each capability is an independent npm package. The private root only coordinates
+source builds/tests and cannot be packed. Shared contracts supply schemas and
+file primitives, with no capability catalog, state owner or runtime dependency.
 Rho owns credentials, project scope, serialization/writer lease, durable
 application-to-Core mapping and workspace composition. Plugins does not start
 Hosts or maintain another managed-execution journal. The external Agent client
@@ -55,7 +58,7 @@ Verification checks bytes only. A project can execute its scientific checker
 as another ordinary script and declare its report as a separate resource.
 
 Media retains original bytes/version and provider-declared page/dimension facts.
-Rho validates rectangle context against those facts. There is no decoder or
+The Media owner validates rectangle context against those facts. There is no decoder or
 browser renderer here. Object previews read bounded exported JSON, never evaluate
 R expressions. A resident Core Host is not a persistent R interpreter.
 
@@ -92,7 +95,8 @@ Save checks the actual disk condition and preserves conflict content/undo; it is
 not CAS against outside writers. Source mutation makes a registered reference
 stale; restored bytes keep identities with explicit rebased provenance.
 
-Constructors accept `documentLimits`/`resourceLimits` overrides.
+Constructors accept `documentLimits`, `fileLimits`, `tableLimits` and
+`chartLimits` overrides for their own protected resources.
 Defaults: 64 buffers, 1 MiB each, 8 MiB content and undo/buffer; 64 MiB/resource,
 1024 resources, 512 MiB retained bytes, 100,000 rows, 1000 rows/page, 20,000 chart
 points and 64 KiB byte/object/completion reads. Earlier snapshots count toward
@@ -112,13 +116,16 @@ selection. Explicit tool-fetched context does not establish proactive delivery.
 npm ci
 npm test
 npm run test:examples
-npm pack
+npm run pack:plugins -- --destination /absolute/plugin-tarballs
+npm run test:install -- /absolute/plugin-tarballs
 ```
 
-Nine capability tests cover documents, durable/concurrent Agent intents,
+Ten capability tests cover documents, durable/concurrent Agent intents,
 declared types/keys/nulls, explicit two-input mappings, stale resources, bounded
 storage, base-R probes and immutable producer inventories with escaping-path
-rejection. The two separate example tests retain native singleton-histogram and
+rejection, provider-independent bytes and missing-provider context/collection.
+Eight isolated installations/imports verify independent package/dependency
+boundaries. The two separate example tests retain native singleton-histogram and
 spaced-Unicode-path coverage. Examples are not capability test dependencies.
 
 Rho separately verifies real HTTP/Core execution, stdio MCP and external Claude

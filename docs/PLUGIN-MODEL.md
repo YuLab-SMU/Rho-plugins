@@ -8,9 +8,9 @@ an analysis workflow composes capabilities in a project. The paired dexamethason
 analysis is an example and acceptance consumer, and does not belong in the plugin
 catalog or the base application's dependency set.
 
-The [0.2 headless package](HEADLESS.md) implements the bounded capability subset:
+The [0.3 headless packages](PLUGIN-PACKAGES.md) implement the bounded capability subset:
 explicit R scripts and requirements, declared files/tables/media/object snapshots,
-document state and scoped MCP tools. Its base tarball excludes project recipes.
+document state and scoped MCP tools. Every capability tarball excludes project recipes.
 The broader UI and live-session entries below remain design requirements. The
 [application extraction plan](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-EXTRACTION.md)
 records the extraction and acceptance gates; HEADLESS identifies the actual APIs.
@@ -27,8 +27,8 @@ records the extraction and acceptance gates; HEADLESS identifies the actual APIs
 A view is a contribution, not the definition of a plugin. Buttons, panels,
 sorting, undo and zoom do not each require a package. Group behavior when it
 shares a state owner, lifetime and consumer contract; split it when consumers
-need independent dependencies or activation. Package boundaries can follow real
-consumers later. An initial explicit module list is sufficient; this model does
+need independent dependencies or activation. The eight current npm boundaries follow consumers that need independent
+dependencies and activation; their services are connected through typed ports. An initial explicit module list is sufficient; this model does
 not require a marketplace, dynamic loader or workflow engine.
 
 Rho-core continues to own managed execution through its public CLI. Rho owns
@@ -38,8 +38,8 @@ copied into capability plugins.
 
 ## Initial capability boundaries
 
-Names in this table are descriptive design names, not newly registered IDs.
-The rows define responsibilities; they do not prescribe eight npm packages.
+Names in this table describe responsibilities. The [package inventory](PLUGIN-PACKAGES.md)
+records the eight implemented IDs and their selected service dependencies.
 
 | Capability | Headless responsibility | Possible UI entries |
 | --- | --- | --- |
@@ -180,8 +180,8 @@ checkers under `examples/real-r-analysis` or project-owned recipe material. The
 recipe supplies dependency declarations, script snapshots and output descriptors
 to reusable capabilities. Domain-specific serialization/readers stay with a
 selected domain provider. The base plugin catalog and package must work without
-installing airway, DESeq2 or apeglm and without shipping the example. The 0.2
-package enforces that inventory; scientific dependencies are declared only by the
+installing airway, DESeq2 or apeglm and without shipping the example. The 0.3
+packages enforce that inventory; scientific dependencies are declared only by the
 explicit example consumer.
 
 Before UI work treats the new boundaries as stable, prove these flows:

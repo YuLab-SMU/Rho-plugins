@@ -4,20 +4,27 @@ Updated: 2026-10-16.
 
 ## Implemented capabilities and consumers
 
-[Headless components 0.2](HEADLESS.md) supplies one generic `r.execute` action,
+[Eight independent headless plugins 0.3](PLUGIN-PACKAGES.md) supply one generic `r.execute` action,
 explicit R requirements and preparation, shared documents, declared file/table/
 media/object resources, bounded readers and keyed comparisons, typed composition
-descriptors and project-scoped stdio MCP. The npm package ships compiled
+descriptors and project-scoped stdio MCP. The npm packages ship compiled
 capabilities; no project recipe, native R script or scientific checker is bundled.
 
-The [plugin model](PLUGIN-MODEL.md) defines ownership. Eight descriptive capability
-groups share the current package; five registered view descriptors report UI
+The [plugin model](PLUGIN-MODEL.md) defines ownership. Documents, files, R, requirements, tables, media, charts and Agent each own a
+package, descriptor and implementation. A thin contracts package has no catalog,
+capability state, R execution, CSV parser or MCP dependency. Rho selects and wires
+services; plugins do not import one another. Only Tables installs csv-parse and
+only Agent installs the MCP SDK. Root is a private source workspace. See
+[package boundaries and selection](PLUGIN-PACKAGES.md). Five registered view descriptors report UI
 unavailable. Those descriptors validate props/bindings without implementing
 renderers. There is no marketplace or dynamic loader.
 
-- Nine focused capability tests pass: document/undo budgets, immutable MCP intents,
+- Ten focused capability tests pass: document/undo budgets, immutable MCP intents,
   typed strings/nulls and entity namespaces, joins/provenance, resource freshness,
   script/argument snapshots, requirement probes, byte completion and containment.
+- All eight plugin tarballs passed isolated installation/import with only their
+  contracts dependency and required external dependencies. No sibling plugin,
+  aggregate package, native R script or example is installed.
 - Two separate example tests pass: native singleton histogram behavior and exact
   script identity under a spaced Chinese path.
 - The [ordinary R project](../examples/ordinary-r-project/README.md) uses base R:
@@ -44,7 +51,7 @@ The new bounded integration uses one simulation and does not replace that record
 tool. Its recorded acceptance includes 43 regressions, eight actual CLI baseline
 cases, six optional library-fixture cases and one actual-model execution trial.
 Retained full-model evidence remains 15/16, including its failure. No evaluator is
-required by the base capability package.
+required by any capability package.
 
 ## Compatibility and remaining work
 

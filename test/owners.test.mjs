@@ -1,0 +1,40 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as fs from 'node:fs/promises';
+import path from 'node:path';
+import { tmpdir } from 'node:os';
+import { Files, collectArtifacts, verifyArtifacts } from '@rho-workspace/plugin-files';
+import { Media, declarationValidator as mediaValidator } from '@rho-workspace/plugin-media';
+import { Objects, declarationValidator as objectValidator } from '@rho-workspace/plugin-r';
+import { declarationValidator as tableValidator } from '@rho-workspace/plugin-tables';
+import { digest } from '@rho-workspace/plugin-contracts';
+import { AgentContext } from '@rho-workspace/plugin-agent';
+const ref = r => ({ id: r.id, version: r.version });
+test('file storage retains typed bytes without a reader; each resource/context owner applies its own conditions', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-owners-'));
+  const files = new Files(root, 'project', {}, [mediaValidator, objectValidator, tableValidator]);
+  await fs.writeFile(path.join(root, 'object.json'), '{"name":"中文","value":3}');
+  const object = await files.register('object.json', { operationId: 'one' }, 'available', {}, { path: 'object.json', kind: 'object', format: { encoding: 'json', observation: 'exported-snapshot', classes: ['list'] } });
+  assert.equal((await new Objects(files).read(ref(object))).value.name, '中文');
+  await fs.writeFile(path.join(root, 'figure.svg'), '<svg/>');
+  const image = await files.register('figure.svg', { operationId: 'one' }, 'available', {}, { path: 'figure.svg', kind: 'media', format: { mimeType: 'image/svg+xml', width: 100, height: 50 } });
+  const media = new Media(files), context = new AgentContext(root, 'project', { files, media });
+  const region = { page: 1, x: 10, y: 5, width: 20, height: 10, units: 'pixels' };
+  const selected = await context.createContext({ resource: ref(image), region }, 'agent');
+  assert.equal(selected.region.mapping, 'original-media-coordinates');
+  await assert.rejects(context.createContext({ resource: ref(image), region: { ...region, width: 200 } }, 'agent'), { kind: 'condition' });
+  await assert.rejects(media.region(ref(image), { ...region, x: -1 }), { kind: 'invalid' });
+  const bytesOnly = new Files(root, 'project');
+  assert.equal((await bytesOnly.bytes(ref(image))).data.toString(), '<svg/>');
+  await assert.rejects(bytesOnly.register('figure.svg', { operationId: 'new' }, 'available', {}, { path: 'figure.svg', kind: 'media', format: { mimeType: 'image/svg+xml' } }), { kind: 'unavailable' });
+  // A disabled reader cannot hide or replace artifacts already registered by an
+  // accepted request. Collection reports the missing provider separately.
+  const facts = await collectArtifacts(root, 'project', { operationId: 'one', plan: { code: '', output: '.', source: { artifacts: [{ path: 'figure.svg', kind: 'media', format: { mimeType: 'image/svg+xml', width: 100, height: 50 } }] } } }, bytesOnly);
+  assert.equal(facts.resources.length, 2); assert.equal(facts.integrity.unavailable[0].kind, 'media');
+  await fs.writeFile(path.join(root, 'complete.json'), JSON.stringify({ schemaVersion: 1, complete: true, artifacts: [{ path: 'figure.svg', bytes: 6, sha256: digest('<svg/>') }] }));
+  const verified = await verifyArtifacts(root, { operationId: 'one', plan: { code: '', output: '.', completion: 'complete.json', source: { artifacts: [{ path: 'figure.svg', kind: 'media', format: { mimeType: 'image/svg+xml' } }] } } }, bytesOnly);
+  assert.equal(verified.integrity.state, 'verified'); assert.equal(verified.integrity.unavailable[0].kind, 'media');
+  const noMedia = new AgentContext(root, 'project', { files });
+  await assert.rejects(noMedia.createContext({ resource: ref(image), region }, 'agent'), { kind: 'unavailable' });
+  assert.equal((await context.readContext(selected.contextId, 'agent')).delivery, 'tool-fetched');
+});
