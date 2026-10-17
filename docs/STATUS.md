@@ -1,6 +1,6 @@
 # Current status
 
-Updated: 2026-10-16.
+Updated: 2026-10-17.
 
 ## Headless collaboration extension
 
@@ -13,12 +13,19 @@ submitted Documents drafts; replies explicitly link messages. Agent contexts
 separately record preparation, fetch and explicit reply observations. No UI or
 new execution journal is introduced. See [Collaboration](COLLABORATION.md).
 
-Fourteen owner tests pass, including new annotations/entry checks. Source Rho
-integration and actual Claude Code 2.1.302 collaboration passed without Host starts
-or native dispatches. Installed application evidence remains the application's
-responsibility; the earlier eight-plugin installation below is historical.
+Fourteen owner tests and all nine isolated tarball installation/import checks
+pass, rechecked on 2026-10-17. They cover annotations, versioned entries and Skill
+digests as well as the existing owner boundaries. The two native example
+regressions also pass. Source Rho integration and actual Claude Code 2.1.302
+collaboration passed without Host starts
+or native dispatches. The [README](../README.md#implemented-capabilities) now lists
+all nine owners and their shipped entry/feedback scope separately from planned UI.
+Installed application evidence remains the application's responsibility: its
+[collaboration acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/COLLABORATION-ACCEPTANCE.md)
+records fixed Full and Collaboration-minimal installations. The earlier
+eight-plugin installation below is historical.
 
-## Implemented capabilities and consumers
+## Historical eight-plugin foundation and consumers
 
 [Eight independent headless plugins 0.4](PLUGIN-PACKAGES.md) supply one generic `r.execute` action,
 explicit R requirements and preparation, shared documents, declared file/table/
@@ -69,7 +76,7 @@ use Rho's versioned HTTP/SSE contract; no browser SDK or renderer is supplied.
 - Actual Claude Code 2.1.301 through MCP SDK 1.29.0 fetched v2 context and changed
   the same unsaved Chinese/emoji buffer, without starting a Host.
 
-Application results and current installation evidence are in
+The eight-owner application results and installation evidence are in
 [Rho's plugin boundary review](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-BOUNDARY-ACCEPTANCE.md).
 Earlier evidence and retained failures remain in
 [Rho's extraction acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/EXTRACTION-ACCEPTANCE.md).
