@@ -1,5 +1,6 @@
 export * from './common.js';
 export * from './declarations.js';
+export type { EntryPresentation, PluginPresentation } from './presentation.js';
 import type { ResourceRef } from './common.js';
 import type { Declaration } from './declarations.js';
 export interface Resource {
@@ -26,9 +27,20 @@ export interface ActionPlan { code: string; args: string[]; source: Record<strin
 export interface TableReader {
   rows(ref: ResourceRef): Promise<{ resource: Resource; rows: Record<string, any>[]; columns: { name: string; type: 'string' | 'number' | 'boolean' }[]; entityKey: string | null; namespace: string | null }>;
 }
+export interface ActionDeclaration {
+  id: string; version: string; owner: string; requires: string[];
+  inputSchema: Record<string, any>; capabilities?: string[]; effects?: string[]; cancellation?: string;
+  presentation?: import('./presentation.js').EntryPresentation;
+}
+export interface ComponentDescriptor {
+  id: string; version: string; owner: string; ui: string;
+  bindings: Record<string, string>; propsSchema: Record<string, any>;
+  presentation?: import('./presentation.js').EntryPresentation;
+}
 export interface PluginDescriptor {
   id: string; package: string; version: string; requires: string[]; capabilities: string[];
-  actions?: any[]; components?: any[]; agent?: Record<string, unknown>;
+  presentation?: import('./presentation.js').PluginPresentation;
+  actions?: ActionDeclaration[]; components?: ComponentDescriptor[]; agent?: Record<string, unknown>;
   entryVersion: '1.0';
   operations: import('./common.js').OperationDeclaration[];
   skills: import('./common.js').SkillDeclaration[];

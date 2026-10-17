@@ -1,3 +1,4 @@
+import { presentation, operationPresentation, viewPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import { objectSchema as obj, text, publicResource, requireThat, type ResourceRef, type TableReader, digest } from '@rho-workspace/plugin-contracts';
 
@@ -21,6 +22,6 @@ export function validateComponentBindings(id: string, props: Record<string, unkn
   requireThat(f?.key && [props.x, props.y].every(name => f.columns.some(c => c.name === name && c.type === 'number')), 'condition', 'Scatter entries require an explicit entity key and two declared numeric columns.');
 }
 const chartsSkill = declaredSkill('charts.workspace', 'Use capability.list to discover data.plot. Bind an immutable table resource version and explicit numeric columns; plotting does not execute code.');
-export const plugin = { entryVersion: '1.0', id: 'charts', package: '@rho-workspace/plugin-charts', version: '0.4.0', requires: ['tables'], capabilities: ['charts'],
-  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [chartsSkill],
-  components: [{ id: 'rho.scatter', version: '0.2.0', owner: 'rho-plugins.scatter', bindings: { data: 'table' }, ui: 'unavailable', propsSchema: obj({ title: text, x: text, y: text }) }] };
+export const plugin = { entryVersion: '1.0', id: 'charts', package: '@rho-workspace/plugin-charts', version: '0.4.0', requires: ['tables'], capabilities: ['charts'], presentation,
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [chartsSkill],
+  components: [{ id: 'rho.scatter', version: '0.2.0', owner: 'rho-plugins.scatter', bindings: { data: 'table' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text, x: text, y: text }) }] };

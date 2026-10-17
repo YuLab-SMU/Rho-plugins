@@ -1,3 +1,4 @@
+import { presentation, operationPresentation, viewPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import { parse } from 'csv-parse/sync';
 import { atomicJson, canonical, confined, digest, publicResource, requireThat, stateDirectory, validateDeclarationEnvelope as validateEnvelope, type Declaration, type Resource, type ResourceRef, type ResourceStore } from '@rho-workspace/plugin-contracts';
@@ -89,6 +90,6 @@ export class Tables {
   }
 }
 const tablesSkill = declaredSkill('tables.workspace', 'Use capability.list to discover data.page and data.compare. Bind stable resource versions and entity keys; do not infer identity from row position.');
-export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.0', requires: ['files'], capabilities: ['tables'],
-  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [tablesSkill],
-  components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: 'unavailable', propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };
+export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.0', requires: ['files'], capabilities: ['tables'], presentation,
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [tablesSkill],
+  components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

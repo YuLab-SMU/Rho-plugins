@@ -1,3 +1,4 @@
+import { presentation, operationPresentation, viewPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import { publicResource, objectSchema as obj, text, type ResourceRef, type ResourceStore, type DocumentSnapshotSource, type ActionPlan } from '@rho-workspace/plugin-contracts';
 import * as fs from 'node:fs/promises';
@@ -40,7 +41,7 @@ import { createExecutionInputSchema } from './contract.js';
 
 const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 export { createExecutionInputSchema, scriptSchema } from './contract.js';
-export const actions = [{ id: 'r.execute', version: '0.2.0', owner: 'rho-plugins.r', requires: ['requirements'], capabilities: ['r-execution'], effects: ['native-execution', 'create-declared-artifacts'], cancellation: 'Core cancellation request; native stop requires observation', inputSchema: createExecutionInputSchema() }];
+export const actions = [{ id: 'r.execute', version: '0.2.0', presentation: operationPresentation['action.submit'], owner: 'rho-plugins.r', requires: ['requirements'], capabilities: ['r-execution'], effects: ['native-execution', 'create-declared-artifacts'], cancellation: 'Core cancellation request; native stop requires observation', inputSchema: createExecutionInputSchema() }];
 
 export function validateObjectDeclaration(d: Declaration) {
   validateDeclarationEnvelope(d); requireThat(d.kind === 'object' && (d.format as any).encoding === 'json' && (d.format as any).observation === 'exported-snapshot' && Array.isArray((d.format as any).classes), 'invalid', 'Objects must be explicit exported JSON snapshots.');
@@ -56,6 +57,6 @@ export class Objects {
   }
 }
 const rSkill = declaredSkill('r.workspace', 'Use capability.list to discover object.read and action.submit. Reads address exported snapshots; native execution is explicit and retains its original operation identity.');
-export const plugin = { entryVersion: '1.0', id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.0', requires: ['files'], capabilities: ['r-objects'], actions,
-  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
-  skills: [rSkill], components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };
+export const plugin = { entryVersion: '1.0', id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.0', requires: ['files'], capabilities: ['r-objects'], presentation, actions,
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
+  skills: [rSkill], components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };

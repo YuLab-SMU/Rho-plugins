@@ -63,6 +63,7 @@ export interface ResourceRef { id: string; version: string }
 // contract with a generic execution escape hatch.
 export interface OperationDeclaration {
   method: string;
+  presentation?: import('./presentation.js').EntryPresentation;
   version: '2.0';
   inputSchema: Record<string, unknown>;
   outputSchema: Record<string, unknown>;

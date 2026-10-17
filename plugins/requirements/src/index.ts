@@ -1,3 +1,4 @@
+import { presentation, operationPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -53,5 +54,5 @@ export async function preparation(root: string, requirements: Requirement[], rsc
 }
 
 const requirementsSkill = declaredSkill('requirements.workspace', 'Use capability.list to discover requirements.check and requirements.prepare. Checks are bounded observations; preparation is an explicit native plan and never silently installs packages.');
-export const plugin = { entryVersion: '1.0', id: 'requirements', package: '@rho-workspace/plugin-requirements', version: '0.4.0', requires: [], capabilities: ['requirements'],
-  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [requirementsSkill] };
+export const plugin = { entryVersion: '1.0', id: 'requirements', package: '@rho-workspace/plugin-requirements', version: '0.4.0', requires: [], capabilities: ['requirements'], presentation,
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [requirementsSkill] };

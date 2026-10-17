@@ -21,6 +21,10 @@ assert.equal(plugin.version, '${item.version}');
 assert.equal(plugin.entryVersion, '1.0');
 assert.ok(plugin.operations.length > 0);
 assert.ok(plugin.skills.length > 0);
+assert.ok(plugin.presentation.displayName);
+assert.equal(plugin.presentation.examplePrompts.length, 3);
+for (const entry of [...plugin.operations, ...(plugin.actions ?? []), ...(plugin.components ?? [])]) assert.ok(entry.presentation.displayName);
+assert.equal(typeof globalThis.document, 'undefined');
 const { createHash } = await import('node:crypto');
 for (const skill of plugin.skills) assert.equal(createHash('sha256').update(skill.content).digest('hex'), skill.digest);
 ${['files', 'tables', 'media', 'r', 'requirements'].includes(item.id) ? `assert.ok(Object.keys(await import('${item.package}/contract')).length > 0);` : ''}
@@ -30,9 +34,9 @@ ${['files', 'tables', 'media', 'r', 'requirements'].includes(item.id) ? `assert.
     assert.equal(result.status, 0, result.stderr);
     const packages = await fs.readdir(path.join(directory, 'node_modules/@rho-workspace'));
     assert.deepEqual(packages.sort(), ['plugin-contracts', 'plugin-' + item.id].sort());
-    for (const dependency of ['csv-parse', '@modelcontextprotocol/sdk']) {
+    for (const dependency of ['csv-parse', '@modelcontextprotocol/sdk', 'react', 'react-dom']) {
       const exists = await fs.stat(path.join(directory, 'node_modules', dependency)).then(() => true, () => false);
-      assert.equal(exists, dependency === 'csv-parse' ? item.id === 'tables' : item.id === 'agent');
+      assert.equal(exists, dependency === 'csv-parse' ? item.id === 'tables' : dependency === '@modelcontextprotocol/sdk' ? item.id === 'agent' : false);
     }
     assert.equal((await fs.lstat(path.join(directory, 'node_modules', item.package))).isSymbolicLink(), false);
     report.packages.push({ id: item.id, artifactSha256: item.sha256, state: 'passed' });

@@ -1,3 +1,4 @@
+import { presentation, operationPresentation, viewPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import { objectSchema as obj, text, requireThat, publicResource, validateDeclarationEnvelope, type Declaration, type ResourceRef, type ResourceStore, digest } from '@rho-workspace/plugin-contracts';
 
@@ -29,6 +30,6 @@ export class Media {
   }
 }
 const mediaSkill = declaredSkill('media.workspace', 'Use capability.list to discover media.describe. Preserve the original resource version and declared coordinates; rendering is optional and does not change source bytes.');
-export const plugin = { entryVersion: '1.0', id: 'media', package: '@rho-workspace/plugin-media', version: '0.4.0', requires: ['files'], capabilities: ['media'],
-  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [mediaSkill],
-  components: [{ id: 'rho.media', version: '0.2.0', owner: 'rho-plugins.media', bindings: { data: 'media' }, ui: 'unavailable', propsSchema: obj({ title: text }) }] };
+export const plugin = { entryVersion: '1.0', id: 'media', package: '@rho-workspace/plugin-media', version: '0.4.0', requires: ['files'], capabilities: ['media'], presentation,
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [mediaSkill],
+  components: [{ id: 'rho.media', version: '0.2.0', owner: 'rho-plugins.media', bindings: { data: 'media' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };
