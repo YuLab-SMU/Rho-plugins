@@ -72,6 +72,11 @@ test('all nine headless descriptors ship the Paper U1-06d copy and independent e
     assert.equal(p.examplePrompts.length, 3);
     assert.equal(p.runsCode, id === 'r' || id === 'requirements', id);
     assert.equal(p.readOnly, id === 'charts' || id === 'media', id);
+    assert.ok(p.description && p.icon && p.developer && p.license, id);
+    assert.ok(Number.isFinite(p.categoryOrder) && Number.isFinite(p.order), id);
+    assert.ok(p.links.every(link => new URL(link.url).protocol === 'https:'), id);
+    assert.ok(plugin.skills.every(skill => skill.presentation.displayName && skill.presentation.description), id);
+    assert.ok([...(plugin.operations ?? []), ...(plugin.components ?? [])].every(entry => entry.presentation.description), id);
     for (const operation of plugin.operations) {
       seen.push(operation.method);
       assert.equal(operation.presentation.displayName, names[operation.method], operation.method);

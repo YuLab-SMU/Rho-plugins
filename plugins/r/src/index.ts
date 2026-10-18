@@ -1,4 +1,12 @@
-import { presentation, operationPresentation, viewPresentation } from './presentation.js';
+import { skillPresentation, presentation, operationPresentation, viewPresentation } from './presentation.js';
+import { observeExecutable } from '@rho-workspace/plugin-contracts';
+
+export async function observeNativeAvailability(rscript: string) {
+  const observation = await observeExecutable(rscript);
+  return { ...observation, tool: 'Rscript', methods: ['action.submit'],
+    ...(observation.state === 'missing' ? { title: "Can't run scripts on this machine", body: 'No executable Rscript was found at the selected location. Reading objects that were already exported still works. Whoever runs Rho can install R or select its Rscript.' } :
+      observation.state === 'unknown' ? { title: 'Rscript availability is unknown', body: 'The selected executable could not be checked. Reading exported objects still works. Whoever runs Rho can check the selected Rscript location.' } : {}) };
+}
 import { operationContracts } from './operations.js';
 import { publicResource, objectSchema as obj, text, type ResourceRef, type ResourceStore, type DocumentSnapshotSource, type ActionPlan } from '@rho-workspace/plugin-contracts';
 import * as fs from 'node:fs/promises';
@@ -59,4 +67,4 @@ export class Objects {
 const rSkill = declaredSkill('r.workspace', 'Use capability.list to discover object.read and action.submit. Reads address exported snapshots; native execution is explicit and retains its original operation identity.');
 export const plugin = { entryVersion: '1.0', id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.0', requires: ['files'], capabilities: ['r-objects'], presentation, actions,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
-  skills: [rSkill], components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };
+  skills: [{ ...rSkill, presentation: skillPresentation }], components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };

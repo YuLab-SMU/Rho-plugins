@@ -1,4 +1,4 @@
-import { presentation, operationPresentation, viewPresentation } from './presentation.js';
+import { skillPresentation, presentation, operationPresentation, viewPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -131,6 +131,6 @@ export const plugin = {
   entryVersion: '1.0',
   id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.0', requires: [], capabilities: ['documents'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
-  skills: [documentSkill],
+  skills: [{ ...documentSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]
 };

@@ -1,4 +1,4 @@
-import { presentation, operationPresentation } from './presentation.js';
+import { skillPresentation, presentation, operationPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -146,6 +146,6 @@ export class AgentContext {
 const agentSkill = declaredSkill('agent.workspace', 'Use capability.list to discover context.create/context.read and binding operations. Prepare exact source snapshots, then use the tool result as context; reading is not understanding or completion.');
 export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.0', requires: [], capabilities: ['agent-context'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
-  skills: [agentSkill],
+  skills: [{ ...agentSkill, presentation: skillPresentation }],
   agent: { id: 'claude-code-mcp', transport: 'stdio', modelLoop: 'external-client', contextDelivery: 'pull-tool-result', proactivePush: 'unsupported' }
 };

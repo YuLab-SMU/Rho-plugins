@@ -1,5 +1,6 @@
 export * from './common.js';
 export * from './declarations.js';
+export { observeExecutable } from './executable.js';
 export type { EntryPresentation, PluginPresentation } from './presentation.js';
 import type { ResourceRef } from './common.js';
 import type { Declaration } from './declarations.js';

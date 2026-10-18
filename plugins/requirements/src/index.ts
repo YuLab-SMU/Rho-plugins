@@ -1,4 +1,12 @@
-import { presentation, operationPresentation } from './presentation.js';
+import { skillPresentation, presentation, operationPresentation } from './presentation.js';
+import { observeExecutable } from '@rho-workspace/plugin-contracts';
+
+export async function observeNativeAvailability(rscript: string) {
+  const observation = await observeExecutable(rscript);
+  return { ...observation, tool: 'Rscript', methods: ['requirements.check', 'requirements.prepare'],
+    ...(observation.state === 'missing' ? { title: "Can't check R packages on this machine", body: 'No executable Rscript was found at the selected location. Whoever runs Rho can install R or select its Rscript before checking or preparing packages.' } :
+      observation.state === 'unknown' ? { title: 'Rscript availability is unknown', body: 'The selected executable could not be checked. Whoever runs Rho can check the selected Rscript location before checking or preparing packages.' } : {}) };
+}
 import { operationContracts } from './operations.js';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -55,4 +63,4 @@ export async function preparation(root: string, requirements: Requirement[], rsc
 
 const requirementsSkill = declaredSkill('requirements.workspace', 'Use capability.list to discover requirements.check and requirements.prepare. Checks are bounded observations; preparation is an explicit native plan and never silently installs packages.');
 export const plugin = { entryVersion: '1.0', id: 'requirements', package: '@rho-workspace/plugin-requirements', version: '0.4.0', requires: [], capabilities: ['requirements'], presentation,
-  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [requirementsSkill] };
+  operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...requirementsSkill, presentation: skillPresentation }] };

@@ -1,4 +1,4 @@
-import { presentation, operationPresentation } from './presentation.js';
+import { skillPresentation, presentation, operationPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
@@ -154,5 +154,5 @@ export const plugin = {
   entryVersion: '1.0',
   id: 'files', package: '@rho-workspace/plugin-files', version: '0.4.0', requires: [], capabilities: ['files'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
-  skills: [filesSkill]
+  skills: [{ ...filesSkill, presentation: skillPresentation }]
 };

@@ -1,6 +1,19 @@
 # Current status
 
-Updated: 2026-10-17.
+Updated: 2026-10-18.
+
+## Catalog presentation
+
+All nine descriptors now provide icons, body copy, ordering, Skill descriptions,
+action/view descriptions and developer/license/link/dependency information for
+Rho's U1 catalog. R and Requirements expose bounded executable-file observations
+without running Rscript or starting a Host. Missing Rscript leaves exported object
+reads available. These fields grant no access and add no functional renderer.
+See [catalog presentation](PLUGIN-PRESENTATION.md).
+
+`npm test` passes 17/17, including real non-executing executable observations;
+all nine isolated owner installation/import checks pass. Application composition,
+browser acceptance and installation evidence remain with Rho.
 
 ## Headless collaboration extension
 

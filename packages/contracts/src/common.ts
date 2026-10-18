@@ -70,4 +70,4 @@ export interface OperationDeclaration {
   requires: string[];
   effect: 'read' | 'metadata' | 'document' | 'file' | 'native';
 }
-export interface SkillDeclaration { id: string; version: string; content: string; digest: string }
+export interface SkillDeclaration { id: string; version: string; content: string; digest: string; presentation?: import('./presentation.js').EntryPresentation }

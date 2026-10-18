@@ -43,7 +43,7 @@ test('package imports stay within their owner and declared dependencies; contrac
   // of format validators, document state, planners or language environments.
   assert.deepEqual(Object.keys(contracts).sort(), [
     'Fault', 'atomicBytes', 'atomicJson', 'canonical', 'confined', 'declarationEnvelopeSchema',
-    'digest', 'now', 'objectSchema', 'publicResource', 'readJson', 'refSchema',
+    'digest', 'now', 'objectSchema', 'observeExecutable', 'publicResource', 'readJson', 'refSchema',
     'requireThat', 'stateDirectory', 'text', 'validateDeclarationEnvelope', 'version'
   ].sort());
 });
