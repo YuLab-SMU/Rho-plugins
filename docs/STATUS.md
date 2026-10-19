@@ -9,8 +9,9 @@ receipts. A separate mutation revision covers saves without changing content
 version semantics. Pending saves retain original intent across interrupted disk
 replacement; explicit identical retries inspect disk before completing. Legacy
 calls/archives remain readable. Owner schemas have a pure `./contract` export.
-The 23 owner tests pass, including six new receipt/recovery scenarios. Rho's
-38 tests pass with the accepted Core artifact, including HTTP identity, live
+`abandonSave` releases a pending save that can no longer complete, without
+writing disk. The 24 owner tests pass, including seven receipt/recovery
+scenarios. Rho's 39 tests pass with the accepted Core artifact, including HTTP identity, live
 binding and format-3 checks. No UI was built and the browser write ceiling is
 unchanged; frontend delivery is the next gate. See the Documents
 [package guide](../plugins/documents/README.md).

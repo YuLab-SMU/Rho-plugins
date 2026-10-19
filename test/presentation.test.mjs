@@ -51,7 +51,7 @@ const copy = {
   ]],
 };
 const names = {
-  'document.open': 'Open', 'document.read': 'Read', 'document.edit': 'Edit', 'document.undo': 'Undo', 'document.save': 'Save',
+  'document.open': 'Open', 'document.read': 'Read', 'document.edit': 'Edit', 'document.undo': 'Undo', 'document.save': 'Save', 'document.abandonSave': 'Give up an interrupted save',
   'resource.list': 'List', 'resource.read': 'Read', 'resource.register': 'Register', 'artifact.check': 'Check outputs',
   'object.read': 'Read an exported object', 'action.submit': 'Run a script',
   'requirements.check': 'Check', 'requirements.prepare': 'Install into the project',

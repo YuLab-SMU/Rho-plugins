@@ -24,6 +24,7 @@ export const operationPresentation = {
   'document.edit': { order: 30, displayName: 'Edit', description: "Changes the shared buffer at the expected version.", readOnly: false, runsCode: false },
   'document.undo': { order: 40, displayName: 'Undo', description: "Reverses an edit group in the shared buffer.", readOnly: false, runsCode: false },
   'document.save': { order: 50, displayName: 'Save', description: "Saves the buffer after checking for changes on disk.", readOnly: false, runsCode: false },
+  'document.abandonSave': { order: 60, displayName: 'Give up an interrupted save', description: "Drops an interrupted save that can no longer finish because the file changed on disk. The file and your edits stay as they are.", readOnly: false, runsCode: false },
 } satisfies Record<string, EntryPresentation>;
 export const viewPresentation: EntryPresentation = { description: "Shows the shared code or note buffer in a layout.", displayName: 'Editor', readOnly: false, runsCode: false };
 

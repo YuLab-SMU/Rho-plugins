@@ -21,7 +21,7 @@ export interface DocumentState {
 }
 export interface DocumentChange { changeId: string; expectedRevision: number }
 export interface DocumentReceipt {
-  changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save'; author: string;
+  changeId: string; requestDigest: string; kind: 'edit' | 'undo' | 'save' | 'abandon-save'; author: string;
   revision: number; version: number; at: string;
 }
 export interface PendingSave {
@@ -98,7 +98,7 @@ export class Documents {
       return { doc, requestDigest, receipt };
     }
     requireThat(doc.version === expectedVersion && (!change || doc.revision === change.expectedRevision), 'stale', 'Read the current buffer and receipt boundary. Missing receipts do not authorize replay.', { documentId: id, actualVersion: doc.version, actualRevision: doc.revision, retainedFromRevision: doc.retainedFromRevision });
-    requireThat(!doc.pendingSave || (kind === 'save' && doc.pendingSave.requestDigest === requestDigest), 'condition', 'Resume the original pending save before changing this buffer.', { documentId: id, pendingSave: doc.pendingSave });
+    requireThat(!doc.pendingSave || kind === 'abandon-save' || (kind === 'save' && doc.pendingSave.requestDigest === requestDigest), 'condition', 'Resume the original pending save before changing this buffer.', { documentId: id, pendingSave: doc.pendingSave });
     return { doc, requestDigest, receipt: undefined };
   }
   private acknowledge(doc: DocumentState, kind: DocumentReceipt['kind'], requestDigest: string, author: string, at: string, change?: DocumentChange): DocumentResult {
@@ -160,6 +160,21 @@ export class Documents {
     const result = this.acknowledge(doc, 'save', requestDigest, author, now(), change);
     await this.persist(doc); return result;
   }
+  async abandonSave(id: string, expectedVersion: number, pendingRequestDigest: string, author: string, change: DocumentChange): Promise<DocumentResult> {
+    requireThat(change, 'invalid', 'Abandoning a pending save requires changeId and expectedRevision.');
+    const { doc, requestDigest, receipt } = await this.mutation(id, expectedVersion, 'abandon-save', { pendingRequestDigest }, author, change);
+    if (receipt) return { ...doc, receipt };
+    const pending = doc.pendingSave;
+    requireThat(pending && pending.requestDigest === pendingRequestDigest, 'condition', 'Name the pending save currently retained by this document.', { documentId: id, pendingSave: pending ?? null });
+    // Only a save that can no longer complete may be abandoned; a resumable
+    // save must be resumed, so its intent is never silently dropped.
+    const actual = await fileDigest(await confined(this.root, doc.path, true), this.limits.maxBufferBytes);
+    requireThat(actual !== pending.contentDigest && actual !== pending.expectedDiskDigest, 'condition', 'This pending save can still complete; resume it with the original save request.', { documentId: id, actualDiskDigest: actual });
+    // Disk is not touched. The acknowledged buffer, dirty state and undo stay.
+    delete doc.pendingSave;
+    const result = this.acknowledge(doc, 'abandon-save', requestDigest, author, now(), change);
+    await this.persist(doc); return result;
+  }
   async snapshot(id: string, expectedVersion: number) {
     const doc = await this.current(id, expectedVersion);
     return { code: doc.content, sha256: digest(doc.content), source: { kind: 'buffer', documentId: id, version: doc.version, path: doc.path, dirty: doc.dirty } };
@@ -172,7 +187,7 @@ export class Documents {
   }
   async restore(imported: DocumentState, author: string) {
     imported = this.normalize(imported);
-    requireThat(Number.isSafeInteger(imported.revision) && imported.revision >= 0 && Array.isArray(imported.receipts) && new Set(imported.receipts.map(r => r.changeId)).size === imported.receipts.length && imported.receipts.every((r, i) => /^[A-Za-z0-9._:@-]{1,128}$/.test(r.changeId) && /^[a-f0-9]{64}$/.test(r.requestDigest) && ['edit', 'undo', 'save'].includes(r.kind) && typeof r.author === 'string' && r.author.length > 0 && typeof r.at === 'string' && Number.isSafeInteger(r.version) && r.version > 0 && r.version <= imported.version && Number.isSafeInteger(r.revision) && r.revision > 0 && r.revision <= imported.revision && (i === 0 || r.revision > imported.receipts[i - 1]!.revision)) && imported.retainedFromRevision === (imported.receipts[0]?.revision ?? imported.revision + 1), 'invalid', 'Invalid archived document revision or receipt boundary.');
+    requireThat(Number.isSafeInteger(imported.revision) && imported.revision >= 0 && Array.isArray(imported.receipts) && new Set(imported.receipts.map(r => r.changeId)).size === imported.receipts.length && imported.receipts.every((r, i) => /^[A-Za-z0-9._:@-]{1,128}$/.test(r.changeId) && /^[a-f0-9]{64}$/.test(r.requestDigest) && ['edit', 'undo', 'save', 'abandon-save'].includes(r.kind) && typeof r.author === 'string' && r.author.length > 0 && typeof r.at === 'string' && Number.isSafeInteger(r.version) && r.version > 0 && r.version <= imported.version && Number.isSafeInteger(r.revision) && r.revision > 0 && r.revision <= imported.revision && (i === 0 || r.revision > imported.receipts[i - 1]!.revision)) && imported.retainedFromRevision === (imported.receipts[0]?.revision ?? imported.revision + 1), 'invalid', 'Invalid archived document revision or receipt boundary.');
     if (imported.pendingSave) return { documentId: imported.id, state: 'conflict', reason: 'Archive retains an unresolved save; resume it in the source project.', pendingSave: imported.pendingSave };
     requireThat(!imported.path.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal state is not an editable document.');
     const target = await confined(this.root, imported.path, true);
@@ -188,7 +203,7 @@ export class Documents {
   }
 }
 
-const documentSkill = declaredSkill('documents.workspace', 'Use capability.list to discover document.open, document.read, document.edit, document.undo and document.save. Preserve UTF-16 ranges, expected versions, undo groups and disk write conditions. For acknowledged mutations supply changeId and expectedRevision together, retain the exact original request before sending, and resume only that request after lost delivery. document.read exposes revision, bounded receipts, retainedFromRevision and any pendingSave. A duplicate returns the current buffer and original receipt; the receipt version need not be current. Missing expired receipts do not authorize a new identity or changed conditions. Live editor bindings use {kind:"live-document",documentId}; exact version bindings remain exact.', '1.1');
+const documentSkill = declaredSkill('documents.workspace', 'Use capability.list to discover document.open, document.read, document.edit, document.undo, document.save and document.abandonSave. Preserve UTF-16 ranges, expected versions, undo groups and disk write conditions. For acknowledged mutations supply changeId and expectedRevision together, retain the exact original request before sending, and resume only that request after lost delivery. document.read exposes revision, bounded receipts, retainedFromRevision and any pendingSave. document.abandonSave drops only a pending save that can no longer complete (disk matches neither its condition nor its content); it never writes disk and keeps the buffer and undo. A duplicate returns the current buffer and original receipt; the receipt version need not be current. Missing expired receipts do not authorize a new identity or changed conditions. Live editor bindings use {kind:"live-document",documentId}; exact version bindings remain exact.', '1.2');
 export const plugin = {
   entryVersion: '1.0',
   id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.0', requires: [], capabilities: ['documents'], presentation,

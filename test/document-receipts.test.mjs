@@ -125,3 +125,33 @@ test('invalid Unicode and exceeded budgets do not acknowledge an identified muta
     assert.equal(current.version, 1); assert.equal(current.revision, 0); assert.equal(current.receipts.length, 0);
   }
 });
+
+test('a permanently conflicting pending save can be abandoned without touching disk; resumable saves cannot', async t => {
+  const { root, owner, doc } = await fixture(t);
+  const edited = await owner.edit(doc.id, 1, [{ from: 0, to: 0, insert: 'draft 中文' }], 'a', 'human');
+  const originalPersist = owner.persist.bind(owner);
+  owner.persist = async state => { await originalPersist(state); if (state.pendingSave) throw new Error('injected crash before replacement'); };
+  await assert.rejects(owner.save(doc.id, edited.version, null, 'human', change(edited, 'stuck')), /injected crash/);
+  const fresh = new Documents(root);
+  const pending = await fresh.read(doc.id);
+  const digestOf = pending.pendingSave.requestDigest;
+  // Disk still matches the original condition (absent): the save can resume, so it cannot be dropped.
+  await assert.rejects(fresh.abandonSave(doc.id, pending.version, digestOf, 'human', change(pending, 'give-up-early')), { kind: 'condition' });
+  await fs.writeFile(path.join(root, 'notes.md'), 'outside');
+  await assert.rejects(fresh.save(doc.id, edited.version, null, 'human', change(edited, 'stuck')), { kind: 'conflict' });
+  await assert.rejects(fresh.abandonSave(doc.id, pending.version, 'f'.repeat(64), 'human', change(pending, 'wrong')), { kind: 'condition' });
+  await assert.rejects(fresh.abandonSave(doc.id, pending.version, digestOf, 'human'), { kind: 'invalid' });
+  const args = [doc.id, pending.version, digestOf, 'human', change(pending, 'give-up')];
+  const abandoned = await fresh.abandonSave(...args);
+  assert.equal(abandoned.pendingSave, undefined); assert.equal(abandoned.receipt.kind, 'abandon-save');
+  assert.equal(abandoned.content, edited.content); assert.equal(abandoned.dirty, true); assert.equal(abandoned.undo.length, edited.undo.length);
+  assert.equal(abandoned.version, pending.version); assert.equal(abandoned.revision, pending.revision + 1);
+  assert.equal(await fs.readFile(path.join(root, 'notes.md'), 'utf8'), 'outside');
+  assert.deepEqual(await new Documents(root).abandonSave(...args), abandoned, 'lost reply resumes the same receipt');
+  // Ordinary editing resumes; a new save must name the observed outside disk state.
+  const next = await fresh.edit(doc.id, abandoned.version, [{ from: 0, to: 0, insert: '+' }], 'b', 'human', change(abandoned, 'after'));
+  await assert.rejects(fresh.save(doc.id, next.version, null, 'human', change(next, 'blind')), { kind: 'conflict' });
+  assert.equal(await fs.readFile(path.join(root, 'notes.md'), 'utf8'), 'outside');
+  const restored = await new Documents(await fs.mkdtemp(path.join(tmpdir(), 'rho-doc-abandon-'))).restore(abandoned, 'human');
+  assert.notEqual(restored.state, undefined);
+});

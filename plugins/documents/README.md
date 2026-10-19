@@ -21,7 +21,10 @@ execution; other mutations wait for an explicit identical retry. Matching intend
 disk content finalizes the receipt without another replacement. Outside writes
 conflict. This is a digest check plus atomic replacement, not filesystem CAS.
 Restoring an unresolved save reports conflict and retains its source reference.
-Abandoning a permanently conflicting pending save is not implemented in this batch.
+`abandonSave` drops a pending save only when disk matches neither its write
+condition nor its intended content, so it can never complete. It requires a
+`changeId`/`expectedRevision` and the pending `requestDigest`, never writes disk,
+and keeps the buffer, dirty state and undo; a resumable save is refused.
 
 Rho accepts `{kind:"live-document",documentId}` for a registered document view;
 exact `{documentId,version}` bindings retain their meaning. See the
