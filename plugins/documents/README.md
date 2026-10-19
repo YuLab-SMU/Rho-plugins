@@ -32,6 +32,23 @@ exact `{documentId,version}` bindings retain their meaning. See the
 The schema subpath is not a browser runtime. No React/DOM or UI is introduced;
 frontend delivery precedes browser write grants and UI acceptance.
 
+`undoOwn(id,version,author,change)` reverses only that authenticated caller's
+latest complete active input group. `revert(id,version,targetChangeId,author,change)`
+reverses one active edit, including another author's edit. Both require stable
+`changeId` and `expectedRevision`, preserve unrelated later edits and refuse
+overlap or ambiguous empty-range insertions. Legacy `undo` remains global; it
+is not the browser keyboard action. Reversals add explicit compensation records.
+
+`history(id)` lists retained change IDs, authors, groups, versions/digests and
+compensation links. `readChange(id,targetChangeId)` reads exact before/after text;
+neither starts work or changes the buffer. Retention defaults to 256 entries and
+4096 deltas (`maxHistoryEntries` / `maxHistoryEdits`); oldest entries are evicted
+with an explicit `historyRetainedFromVersion` boundary. Shared `maxUndoBytes`
+covers legacy snapshots plus inserted/removed history text. Its exhaustion rejects
+the new mutation. Incomplete or partially reverted groups cannot be undone as a
+group. Old archives retain legacy undo but do not acquire invented change history.
+Restoration validates the retained history's ranges, versions and digests.
+
 Selected services: None.
 
 No language runtime, table parser or Agent SDK.

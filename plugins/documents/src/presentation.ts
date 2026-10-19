@@ -23,6 +23,10 @@ export const operationPresentation = {
   'document.read': { order: 20, displayName: 'Read', description: "Reads the current buffer, including unsaved edits.", readOnly: true, runsCode: false },
   'document.edit': { order: 30, displayName: 'Edit', description: "Changes the shared buffer at the expected version.", readOnly: false, runsCode: false },
   'document.undo': { order: 40, displayName: 'Undo', description: "Reverses an edit group in the shared buffer.", readOnly: false, runsCode: false },
+  'document.undoOwn': { order: 41, displayName: 'Undo my edits', description: "Reverses the caller's latest retained edit group while preserving other edits; overlapping later changes are refused.", readOnly: false, runsCode: false },
+  'document.revert': { order: 42, displayName: 'Revert one change', description: "Reverses a specified retained edit without replacing the whole buffer.", readOnly: false, runsCode: false },
+  'document.history': { order: 21, displayName: 'Read change history', description: "Lists retained document changes and their authenticated authors.", readOnly: true, runsCode: false },
+  'document.change.read': { order: 22, displayName: 'Read a change', description: "Reads exact before and after text for a retained change.", readOnly: true, runsCode: false },
   'document.save': { order: 50, displayName: 'Save', description: "Saves the buffer after checking for changes on disk.", readOnly: false, runsCode: false },
   'document.abandonSave': { order: 60, displayName: 'Give up an interrupted save', description: "Drops an interrupted save that can no longer finish because the file changed on disk. The file and your edits stay as they are.", readOnly: false, runsCode: false },
 } satisfies Record<string, EntryPresentation>;

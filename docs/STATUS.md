@@ -4,17 +4,17 @@ Updated: 2026-10-19.
 
 ## U2 Documents prerequisites
 
-Documents now accepts optional stable mutation identities and retains bounded
-receipts. A separate mutation revision covers saves without changing content
-version semantics. Pending saves retain original intent across interrupted disk
-replacement; explicit identical retries inspect disk before completing. Legacy
-calls/archives remain readable. Owner schemas have a pure `./contract` export.
-`abandonSave` releases a pending save that can no longer complete, without
-writing disk. The 24 owner tests pass, including seven receipt/recovery
-scenarios. Rho's 39 tests pass with the accepted Core artifact, including HTTP identity, live
-binding and format-3 checks. No UI was built and the browser write ceiling is
-unchanged; frontend delivery is the next gate. See the Documents
-[package guide](../plugins/documents/README.md).
+Documents now retains per-change author/delta history, exact before/after reads,
+authenticated own-group undo and targeted single-edit revert. Later overlapping
+edits are refused; unrelated text is preserved. Legacy global undo remains
+compatible. History is bounded by entries/deltas and the shared undo text budget;
+format-3 restore validates its versions, ranges and digests. Stable receipts,
+pending-save resume/abandon and live-document binding prerequisites remain.
+The 31 owner tests and Rho's 40 tests pass, including real stdio MCP/HTTP author
+checks and zero native attempts in the new flow. No frontend UI was built and
+browser grants retain U1 scope. The [Documents guide](../plugins/documents/README.md)
+and [Rho handoff](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-BACKEND-HANDOFF.md)
+record API limits and frontend integration still required.
 
 ## Catalog presentation
 
