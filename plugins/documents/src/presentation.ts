@@ -24,7 +24,7 @@ export const operationPresentation = {
   'document.edit': { order: 30, displayName: 'Edit', description: "Changes the shared buffer at the expected version.", readOnly: false, runsCode: false },
   'document.undo': { order: 40, displayName: 'Undo', description: "Reverses an edit group in the shared buffer.", readOnly: false, runsCode: false },
   'document.undoOwn': { order: 41, displayName: 'Undo my edits', description: "Reverses the caller's latest retained edit group while preserving other edits; overlapping later changes are refused.", readOnly: false, runsCode: false },
-  'document.revert': { order: 42, displayName: 'Revert one change', description: "Reverses a specified retained edit without replacing the whole buffer.", readOnly: false, runsCode: false },
+  'document.revert': { order: 42, displayName: 'Revert one change', description: "Reverses a specified retained content change without replacing the whole buffer.", readOnly: false, runsCode: false },
   'document.history': { order: 21, displayName: 'Read change history', description: "Lists retained document changes and their authenticated authors.", readOnly: true, runsCode: false },
   'document.change.read': { order: 22, displayName: 'Read a change', description: "Reads exact before and after text for a retained change.", readOnly: true, runsCode: false },
   'document.save': { order: 50, displayName: 'Save', description: "Saves the buffer after checking for changes on disk.", readOnly: false, runsCode: false },

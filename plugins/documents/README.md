@@ -34,7 +34,7 @@ frontend delivery precedes browser write grants and UI acceptance.
 
 `undoOwn(id,version,author,change)` reverses only that authenticated caller's
 latest complete active input group. `revert(id,version,targetChangeId,author,change)`
-reverses one active edit, including another author's edit. Both require stable
+reverses one active content change, including another author's edit. Both require stable
 `changeId` and `expectedRevision`, preserve unrelated later edits and refuse
 overlap or ambiguous empty-range insertions. Legacy `undo` remains global; it
 is not the browser keyboard action. Reversals add explicit compensation records.

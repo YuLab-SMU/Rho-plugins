@@ -47,6 +47,9 @@ test('Show before is an exact historical snapshot; one change can be reverted af
   await assert.rejects(owner.revert(d.id, reverted.version, 'agent-change', 'human', condition(reverted, 'twice')), { kind: 'condition' });
   await assert.rejects(owner.revert(...args.slice(0, 3), 'other', args[4]), { kind: 'conflict' });
   await assert.rejects(owner.undoOwn(d.id, d.version, 'human', condition(d, 'stale')), { kind: 'stale' });
+  const reversedAgain = await owner.revert(d.id, reverted.version, 'revert-agent', 'human', condition(reverted, 'undo-revert'));
+  assert.equal(reversedAgain.content, '中文🧬 hello Y');
+  assert.equal((await owner.history(d.id)).entries.find(e => e.changeId === 'agent-change').revertedBy, null);
 });
 
 test('overlapping later text refuses selective undo; undoing that overlap restores safe reversibility', async t => {
