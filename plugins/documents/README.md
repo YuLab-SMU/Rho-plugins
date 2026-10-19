@@ -2,9 +2,32 @@
 
 `@rho-workspace/plugin-documents` 0.4.0 is an independently packed npm plugin.
 
-Public entries: `Documents`, `documentLimits`.
+Public entries: `Documents`, `documentLimits`; `./contract` exports Node schemas.
 
 One logical document buffer, Unicode edits, undo, snapshots, conditional save and restore.
+Direct Node embeddings must serialize mutations under a project writer lease,
+as the Rho service does; independent concurrent writers are not supported.
+
+`edit`, `undo` and `save` accept optional final `{changeId,expectedRevision}` after
+the author. Old calls remain valid. Identical retries return current state and
+the original `receipt`; changed content, conditions or author conflict. `version`
+counts content changes, while `revision` advances on every acknowledged mutation,
+including saves and legacy calls. `maxReceipts` defaults to 256 per document;
+oldest receipts are evicted above that count and `retainedFromRevision` exposes
+the boundary. Expired requests cannot bypass their original revision condition.
+
+Save persists `pendingSave` before disk replacement. Reads expose it without
+execution; other mutations wait for an explicit identical retry. Matching intended
+disk content finalizes the receipt without another replacement. Outside writes
+conflict. This is a digest check plus atomic replacement, not filesystem CAS.
+Restoring an unresolved save reports conflict and retains its source reference.
+Abandoning a permanently conflicting pending save is not implemented in this batch.
+
+Rho accepts `{kind:"live-document",documentId}` for a registered document view;
+exact `{documentId,version}` bindings retain their meaning. See the
+[U2 handoff](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-BACKEND-HANDOFF.md).
+The schema subpath is not a browser runtime. No React/DOM or UI is introduced;
+frontend delivery precedes browser write grants and UI acceptance.
 
 Selected services: None.
 
