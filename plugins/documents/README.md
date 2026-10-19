@@ -57,8 +57,8 @@ The package depends on `@rho-workspace/plugin-contracts` 0.4.0 for generic envel
 and ordinary file primitives; that package contains no capability implementation.
 Service ports do not install or start other plugins. Rho explicitly selects and
 connects providers. `plugin` describes this package and its selected-service
-requirements. View descriptors, where present, remain UI-unavailable; action/view
-contract versions remain 0.2.0 independently of the package version.
+requirements. The optional `./ui` entry supplies the browser renderer; component contracts
+remain 0.2.0 independently of the package version.
 
 ```sh
 # From the Rho-plugins source checkout
@@ -69,4 +69,29 @@ npm pack --workspace plugins/documents --ignore-scripts
 
 Use the repository's `pack:plugins` command to produce the contracts tarball and
 selected plugin tarballs together. Both explicit R examples are separate consumers
-and are excluded from every plugin artifact. No UI work is included.
+and are excluded from every plugin artifact. Browser behavior is supplied separately through `./ui`.
+
+## Optional browser entry
+
+`@rho-workspace/plugin-documents/ui` exports the CodeMirror view and its draft
+contribution declaration. React/React DOM and CodeMirror State/View are exact,
+optional peers. The headless root/contract entries never import the UI.
+
+A shared browser adapter serializes identified edits, retries the original
+request after a lost reply and keeps unconfirmed text separate on conflicts.
+Composition waits for IME commit. The authenticated tab identity determines
+“You”; read buffers and receipts cannot replace it. Exact-version views use
+retained change snapshots independently of the live adapter. An unavailable
+version never falls back to current content and has no Changes panel.
+
+Keyboard undo uses `undoOwn`; there is no local persistent undo/redo stack.
+Agent line marks can be hidden; Changes exposes exact before text and one
+Revert per Agent change, including separate changes within the same input group.
+Save scheduling stays with the external Agent, with no save timer or save state.
+The unconfirmed text budget is configurable via the adapter’s
+`maxUnconfirmedBytes` (default 1 MiB); rejected input preserves earlier text.
+Recovery copies and pending deliveries survive view closure within this tab;
+only confirmed owner state is promised after refreshing or closing the browser.
+
+[Rho’s U2 acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-UI-ACCEPTANCE.md)
+records the composed browser/installed evidence and physical IME limits.

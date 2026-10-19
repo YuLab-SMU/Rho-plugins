@@ -2,6 +2,20 @@
 
 Updated: 2026-10-19.
 
+## U2 optional editor and table entries
+
+Documents and Tables now ship separate `./ui` entries with exact optional peers;
+headless imports load no React or DOM. The existing confirmed design uses
+CodeMirror serial identified input, authenticated tab author labels, owner undo,
+individual Agent-change revert, recovery copies and separate exact-version reads.
+AG Grid Community requests 200-row blocks, caches five blocks, supports one sort
+and typed filter, and preserves explicit keyed selections through cache changes.
+
+`npm test` passes 40/40. Rho’s 40/40 source tests pass; its
+[U2 acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-UI-ACCEPTANCE.md)
+records composed browser/install results and remaining gates. U3/U4 and manual
+macOS candidate-window input are separate from the Chrome composition check.
+
 ## U2 Documents prerequisites
 
 Documents now retains per-change author/delta history, exact before/after reads,
@@ -11,8 +25,7 @@ compatible. History is bounded by entries/deltas and the shared undo text budget
 format-3 restore validates its versions, ranges and digests. Stable receipts,
 pending-save resume/abandon and live-document binding prerequisites remain.
 The 31 owner tests and Rho's 40 tests pass, including real stdio MCP/HTTP author
-checks and zero native attempts in the new flow. No frontend UI was built and
-browser grants retain U1 scope. The [Documents guide](../plugins/documents/README.md)
+checks and zero native attempts in the new flow. That backend prerequisite batch did not build UI or extend browser grants. The [Documents guide](../plugins/documents/README.md)
 and [Rho handoff](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-BACKEND-HANDOFF.md)
 record API limits and frontend integration still required.
 

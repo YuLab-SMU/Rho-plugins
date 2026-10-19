@@ -9,7 +9,8 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./contract": "./dist/operations.js"
+    "./contract": "./dist/operations.js",
+    "./ui": "./dist/ui.js"
   },
   "files": [
     "dist",
@@ -21,5 +22,25 @@
   },
   "dependencies": {
     "@rho-workspace/plugin-contracts": "0.4.0"
+  },
+  "peerDependencies": {
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.13"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "@codemirror/state": {
+      "optional": true
+    },
+    "@codemirror/view": {
+      "optional": true
+    }
   }
 }

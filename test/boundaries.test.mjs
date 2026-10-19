@@ -14,6 +14,10 @@ test('package imports stay within their owner and declared dependencies; contrac
     const folder = path.join(root, owner);
     const manifest = JSON.parse(await fs.readFile(path.join(folder, 'package.json'), 'utf8'));
     const dependencies = Object.keys(manifest.dependencies ?? {});
+    // Optional browser entries may use optional peers; headless code may not.
+    const peers = Object.keys(manifest.peerDependencies ?? {});
+    for (const peer of peers) assert.equal(manifest.peerDependenciesMeta?.[peer]?.optional, true, owner + ': UI peer must stay optional: ' + peer);
+    if (peers.length) assert.equal(manifest.exports['./ui'], './dist/ui.js', owner);
     assert.ok(dependencies.every(d => d === '@rho-workspace/plugin-contracts' || !d.startsWith('@rho-workspace/')), owner);
     for (const name of await fs.readdir(path.join(folder, 'src'))) {
       const file = path.join(folder, 'src', name);
@@ -26,10 +30,13 @@ test('package imports stay within their owner and declared dependencies; contrac
           assert.ok(ts.isStringLiteral(specifier), 'Only explicit imports: ' + file);
           const spec = specifier.text;
           if (name === 'contract.ts') assert.equal(spec, '@rho-workspace/plugin-contracts', 'Pure contract entries cannot load owner implementations or native/parser dependencies: ' + file);
-          if (spec.startsWith('.')) assert.ok(path.resolve(path.dirname(file), spec).startsWith(folder + path.sep), file + ': ' + spec);
+          if (spec.startsWith('.')) {
+            assert.ok(path.resolve(path.dirname(file), spec).startsWith(folder + path.sep), file + ': ' + spec);
+            if (!name.startsWith('ui')) assert.ok(!/^\.\/ui(-|\.|$)/.test(spec), 'Headless entries cannot load the browser entry: ' + file);
+          }
           else if (spec.startsWith('node:')) {
             if (owner === 'packages/contracts') assert.ok(['node:fs/promises', 'node:path', 'node:crypto'].includes(spec), 'Contracts cannot execute native processes: ' + spec);
-          } else assert.ok(dependencies.some(d => spec === d || spec.startsWith(d + '/')), file + ': undeclared dependency ' + spec);
+          } else assert.ok(dependencies.some(d => spec === d || spec.startsWith(d + '/')) || (name === 'ui.tsx' && peers.some(d => spec === d || spec.startsWith(d + '/'))) || (name === 'ui.tsx' && spec === 'react/jsx-runtime' && peers.includes('react')), file + ': undeclared dependency ' + spec);
         }
         ts.forEachChild(node, inspect);
       }

@@ -16,7 +16,15 @@
     "test:install": "node scripts/install-check.mjs"
   },
   "devDependencies": {
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.13",
     "@types/node": "22.20.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "ag-grid-community": "36.2.0",
+    "ag-grid-react": "36.2.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
     "typescript": "5.9.3"
   },
   "private": true,

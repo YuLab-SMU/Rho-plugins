@@ -9,7 +9,8 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./contract": "./dist/contract.js"
+    "./contract": "./dist/contract.js",
+    "./ui": "./dist/ui.js"
   },
   "files": [
     "dist",
@@ -22,5 +23,21 @@
   "dependencies": {
     "@rho-workspace/plugin-contracts": "0.4.0",
     "csv-parse": "7.0.3"
+  },
+  "peerDependencies": {
+    "react": "19.3.1",
+    "ag-grid-community": "36.2.0",
+    "ag-grid-react": "36.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "ag-grid-community": {
+      "optional": true
+    },
+    "ag-grid-react": {
+      "optional": true
+    }
   }
 }

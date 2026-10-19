@@ -34,7 +34,7 @@ ${['documents', 'files', 'tables', 'media', 'r', 'requirements'].includes(item.i
     assert.equal(result.status, 0, result.stderr);
     const packages = await fs.readdir(path.join(directory, 'node_modules/@rho-workspace'));
     assert.deepEqual(packages.sort(), ['plugin-contracts', 'plugin-' + item.id].sort());
-    for (const dependency of ['csv-parse', '@modelcontextprotocol/sdk', 'react', 'react-dom']) {
+    for (const dependency of ['csv-parse', '@modelcontextprotocol/sdk', 'react', 'react-dom', '@codemirror/state', '@codemirror/view', 'ag-grid-community', 'ag-grid-react']) {
       const exists = await fs.stat(path.join(directory, 'node_modules', dependency)).then(() => true, () => false);
       assert.equal(exists, dependency === 'csv-parse' ? item.id === 'tables' : dependency === '@modelcontextprotocol/sdk' ? item.id === 'agent' : false);
     }

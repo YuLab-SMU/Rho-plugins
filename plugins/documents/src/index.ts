@@ -286,5 +286,5 @@ export const plugin = {
   id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.0', requires: [], capabilities: ['documents'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...documentSkill, presentation: skillPresentation }],
-  components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]
+  components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]
 };
