@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Annotation, EditorState, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, lineNumbers, type DecorationSet } from '@codemirror/view';
 import { acquire, authorLabel, currentRanges, diff, groups, readVersion, type DocumentSync, type Group, type UiClient } from './ui-model.js';
+import { describe, excerpt } from './ui-card-model.js';
 
 export interface EditorViewProps {
   view: { id: string; props: Record<string, unknown>; bindings: Record<string, unknown> };
@@ -79,23 +80,7 @@ function injectStyles() {
   const style = document.createElement('style'); style.dataset.owner = 'rho-plugins.documents'; style.textContent = styles; document.head.append(style);
 }
 
-function describe(group: Group) {
-  if (group.kind === 'undo-own') return 'Undid their edit';
-  if (group.kind === 'revert') return 'Reverted a change';
-  if (group.kind === 'undo') return 'Undid the last edit';
-  if (!group.active) return 'Edit, since reverted';
-  if (!group.lines) return 'Edit, since overwritten';
-  return group.lines[0] === group.lines[1] ? `Changed line ${group.lines[0]}` : `Changed lines ${group.lines[0]}–${group.lines[1]}`;
-}
 const ago = (at: string) => { const s = Math.max(0, (Date.now() - Date.parse(at)) / 1000); return s < 60 ? 'just now' : s < 3600 ? Math.round(s / 60) + ' min ago' : new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
-
-function excerpt(before: string, after: string) {
-  const edit = diff(before, after);
-  const start = edit?.from ?? 0, end = edit ? before.length - edit.to : before.length;
-  const lineStart = before.lastIndexOf('\n', start - 1) + 1;
-  const tailA = before.indexOf('\n', before.length - end);
-  return { lead: before.slice(lineStart, start), removed: before.slice(start, before.length - end), inserted: after.slice(start, after.length - end), trail: before.slice(before.length - end, tailA < 0 ? before.length : tailA) };
-}
 
 function Changes({ sync, me, canRevert }: { sync: DocumentSync; me?: string; canRevert: boolean }) {
   const buffer = sync.confirmed;
@@ -245,3 +230,5 @@ export const editorEntry = {
   selection: ['document-utf16' as const],
   View: DocumentEditorView,
 };
+
+export { DocumentCardBody, documentForms, type DocumentCardProps } from './ui-card.js';

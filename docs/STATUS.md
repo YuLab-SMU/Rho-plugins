@@ -1,5 +1,21 @@
 # Current status
 
+Updated: 2026-10-22. Documents and Tables now draw their own bodies in an
+application's item frame, following the Paper page
+[04 · 插件形态](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-8-0).
+Both `./ui` entries export a card body and form declarations (reference, card,
+summary, compare); compare is reached by naming a change or a recorded comparison,
+not by zooming. The Agent names `show`; without it Tables shows a count when an
+earlier table is given, else rows, and Documents shows a passage for an anchor, a
+change for a named group, else the outline. People may switch `show` on the card.
+Size caps are form parameters with maxima (Tables 3×3 card, 12×6 summary, 50 rows
+and 12 columns; Documents one section, three changes, ten at most), and each body
+reports what it left out, counted from the whole resource. A missing comparison
+reads "No comparison recorded yet". Null cells read "empty", since a null may be a
+genuine NA. Source checks pass 53/53, with seven new DOM-free card-model tests on
+real owners. Browser files named `ui*.tsx` may now use the optional UI peers.
+Rho's composed browser check is recorded in Rho; versions are unchanged.
+
 Updated: 2026-10-22. Files 0.4.1 provides an optional finite source-folder resolver;
 Documents 0.4.2 uses the injected file-path port for real reads, conditional saves
 and restoration checks. R 0.4.1 can freeze a saved script through the same file

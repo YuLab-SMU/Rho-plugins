@@ -21,6 +21,8 @@ test('package imports stay within their owner and declared dependencies; contrac
     assert.ok(dependencies.every(d => d === '@rho-workspace/plugin-contracts' || !d.startsWith('@rho-workspace/')), owner);
     for (const name of await fs.readdir(path.join(folder, 'src'))) {
       const file = path.join(folder, 'src', name);
+      // Browser entry files (ui.tsx and its ui-*.tsx parts) may use the optional UI peers.
+      const browser = name.startsWith('ui') && name.endsWith('.tsx');
       const source = ts.createSourceFile(file, await fs.readFile(file, 'utf8'), ts.ScriptTarget.Latest, true);
       function inspect(node) {
         const specifier = ts.isImportDeclaration(node) || ts.isExportDeclaration(node) ? node.moduleSpecifier
@@ -36,7 +38,7 @@ test('package imports stay within their owner and declared dependencies; contrac
           }
           else if (spec.startsWith('node:')) {
             if (owner === 'packages/contracts') assert.ok(['node:fs/promises', 'node:path', 'node:crypto'].includes(spec), 'Contracts cannot execute native processes: ' + spec);
-          } else assert.ok(dependencies.some(d => spec === d || spec.startsWith(d + '/')) || (name === 'ui.tsx' && peers.some(d => spec === d || spec.startsWith(d + '/'))) || (name === 'ui.tsx' && spec === 'react/jsx-runtime' && peers.includes('react')), file + ': undeclared dependency ' + spec);
+          } else assert.ok(dependencies.some(d => spec === d || spec.startsWith(d + '/')) || (browser && peers.some(d => spec === d || spec.startsWith(d + '/'))) || (browser && spec === 'react/jsx-runtime' && peers.includes('react')), file + ': undeclared dependency ' + spec);
         }
         ts.forEachChild(node, inspect);
       }

@@ -58,8 +58,14 @@ conditional saves and frozen script/context snapshots.
   `{code,sha256,source}`; `restore(state, author)` retains drafts/undo or reports
   conflicts. Snapshot/restore are service ports, not separate HTTP methods.
 - `rho.editor` is its sole registered view entry. No redo operation, filesystem
-  watcher, language service or browser editor is implemented. Conditional replace
-  does not provide filesystem CAS against arbitrary external writers.
+  watcher or language service is implemented. Conditional replace does not
+  provide filesystem CAS against arbitrary external writers.
+- `./ui` also exports `DocumentCardBody` and `documentForms` for an application
+  item frame: reference, card (`show`: passage, change or outline), summary (one
+  section and recent changes) and compare (one named change). Cards read the
+  buffer shared with the editor; their only write is an explicit revert of an
+  Agent change. Anchors `{from,to,version}` follow retained edits; rewritten text
+  names its author and keeps the original under "Show before".
 
 ## Files
 
@@ -145,6 +151,11 @@ optional entity keys/namespaces, paging and explicit two-input numeric compariso
   `mapping:"equal-string"` and `join:"left"|"inner"|"full"`.
 - `./contract` exports `columnSchema`, `tableFormatSchema`, `declarationSchema`;
   types `Column`, `TableFormat`. `rho.table` is the view descriptor.
+- `./ui` also exports `TableCardBody` and `tableForms`: reference, card (`show`:
+  count, rows or cell), summary (subsets by key or by one filter/sort) and compare.
+  Each form is bounded `data.page` reads of published versions; keyed rows are one
+  page per key, at most 50. Compare reads a recorded `data.compare` table and its
+  coverage counts and never runs a comparison.
 - There is no table-cell write API, arbitrary expression/query engine, automatic
   identifier conversion or general join mapper. Unkeyed tables can be read but
   cannot supply stable entity selection. Paging currently parses bounded whole

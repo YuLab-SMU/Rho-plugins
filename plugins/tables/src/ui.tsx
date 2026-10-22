@@ -212,3 +212,5 @@ export const tableEntry = {
   selection: ['table-entities' as const],
   View: TableView,
 };
+
+export { TableCardBody, tableForms, type TableCardProps } from './ui-card.js';
