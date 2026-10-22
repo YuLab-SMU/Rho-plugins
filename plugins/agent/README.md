@@ -1,14 +1,49 @@
 # Agent bridge and context plugin
 
-`@rho-workspace/plugin-agent` 0.4.0 is an independently packed npm plugin.
+`@rho-workspace/plugin-agent` 0.4.3 is the native-observation, original-feedback and optional-presentation source candidate.
 
-Public entries: `AgentContext`, `retainAgentIntent`; `rho-agent-mcp` / `./mcp`.
+Public entries: `AgentContext`, `retainAgentIntent`, `NativeActivity`,
+`ClaudeCodeObserver`; `rho-agent-mcp` / `./mcp`, pure `./contract`, `./native`
+and `./claude-native`. Independent installation/publication of this candidate
+is separate from its source checks.
 
 Scoped MCP tools, durable original caller intents, versioned explicit context, bindings and tool-fetch receipts.
 
 Selected services: Only the read-only sources actually used by a context: documents, files, tables or media.
 
 Only this plugin depends on the MCP SDK. The external client owns the conversation/model loop.
+
+## Native observation entry
+
+`ClaudeCodeObserver` consumes the selected Claude Code `stream-json` envelopes.
+It confirms the actual session ID before invoking `onInit`, then sends original
+tool IDs and requested/returned/rejected observations through `append`. A closed
+stream marks outstanding observations unknown. It excludes model prose/reasoning;
+its caller owns process startup, wall/output limits and observation failure.
+An optional `outputs` callback supplies project-declared artifact hints after a
+real tool return. Hints do not prove byte integrity or table/domain correctness.
+
+The application provisions a separate native-adapter credential and checks the
+registered session/task/binding on each append. `binding.activity.append` is never
+a model tool; legacy MCP still serves the existing authorized context entries.
+`binding.activity` with `source: native` reads bounded history; calls without that
+field retain their principal-filtered Rho API log semantics. Registration records
+identity evidence, not current client liveness or OS sandbox isolation.
+
+`NativeActivity` must be called under the embedding application's project writer
+lease and serializer. Initialize it only during explicit fresh-task setup, before
+activating routing. Missing/corrupt configured history is not an empty store.
+Original retained source IDs deduplicate, changed bytes conflict, and expired
+sequences reject without replay. Complete-object pages bind the cursor/query and
+history version. Reads start no CLI, model or Host.
+
+Defaults under `agentNativeActivity`: event 16 KiB, batch 64 events / 256 KiB,
+retained 256 events / 4 MiB, 128 source epochs. The observer defaults to 2,048 tool
+identities per process. Oversized writes reject before replacing retained state;
+event eviction exposes a gap and preserves source watermarks. Exhausted epochs
+reject new sources. No database, queue, native execution journal or delivery
+guarantee is added. Original-session feedback is supplied by the separate optional entries below; a resident model launcher remains later work. The real source trial used Claude Code 2.1.306 and two separate projects;
+its explicit native resume repaired a manifest path without rerunning Python.
 
 The package depends on `@rho-workspace/plugin-contracts` 0.4.0 for generic envelopes and service ports
 and ordinary file primitives; that package contains no capability implementation.
@@ -26,4 +61,86 @@ npm pack --workspace plugins/agent --ignore-scripts
 
 Use the repository's `pack:plugins` command to produce the contracts tarball and
 selected plugin tarballs together. Both explicit R examples are separate consumers
-and are excluded from every plugin artifact. No UI work is included.
+and are excluded from every plugin artifact. Agent has no chat UI; the selected Annotations UI owns the contextual question entry.
+
+
+## Original feedback delivery
+
+Version 0.4.2 exports `FeedbackDelivery`, `./delivery`, pure
+`./feedback-contract`, `./claude-feedback-worker` and `./claude-feedback-hook`.
+The embedding application explicitly selects the task and original business
+binding, initializes fresh delivery once, and supplies its existing project
+writer/serializer. Public `feedback.submit/read/status` use the phase-0 frozen
+profiles. Submissions retain original input/author/route before owner work;
+committed message identity survives thread advancement. Existing Context storage
+holds the exact source/message, with original-target restrictions. A narrow
+`agent.feedback` Skill instructs current related-document reads, conditional
+edit/save, human-edit preservation and explicit original-message `replyTo`.
+
+One bounded delivery file has schema `deliveryStoreSchema`: public frozen store
+fields plus private `coordinationVersion: 1` ACK/hook-boundary facts. Exact schema,
+original digest/identity and receipt references are checked before use. Default
+limits protect 128 submissions / 4 MiB, 128 fetch receipts per delivery and a
+12 KiB whole selected feedback object. Item caps may be lowered, not raised
+beyond the selected profile. Full, corrupt or missing activated storage keeps
+original identities/drafts/owner receipts and refuses unsafe continuation.
+
+Attempts are persisted before transport. After any attempt, worker steps only
+lookup the original inbox; absence never authorizes re-enqueue. Hooks persist an
+emission attempt before stdout and never emit it twice after an unknown boundary.
+Actual `mcp__rho__rho_feedback_read` stream results, rather than prose or shell
+arguments, supply client-tool-returned evidence. Hook emission and owner-served
+reads do not imply model consumption or native-execution deduplication.
+
+The explicit worker consumes `RHO_ADAPTER_CONNECTION` (one private descriptor or
+an array of at most 16) and only calls the embedding application's authenticated
+local adapter ports. Defaults are 1,200 cycles / 600,000 ms; each HTTP observation
+is bounded by six seconds and the remaining worker time. SIGTERM/SIGINT stop
+coordination without cancelling business work. The explicit Claude PostToolUse
+hook uses one descriptor and bounded 64 KiB stdin / five-second HTTP calls. It
+emits only an original fetch reference, not the whole question. Neither helper
+starts, resumes or replaces Claude. The harness owns credentials, native process
+lifetime and hook selection. These helpers are not public model tools.
+
+Source checks include real subprocess worker replacement and hook crashes before
+and after stdout, with fixture native metadata. Full Claude/provider/installed
+acceptance belongs to the application composition and is still pending.
+
+
+## Layered MCP and optional presentation
+
+An explicitly provisioned `layered-business` or `layered-presentation` descriptor
+selects only `rho_index`, `rho_resolve`, `rho_call`; old descriptors retain the
+compatibility tools. Startup/tools-list do not fetch the full project protocol
+or catalog in layered mode. Relevant Skills and complete exact contracts come
+from the existing owner sources through the application's bounded resolver.
+Results have one JSON text body and no structuredContent duplicate.
+
+The pure `./layered-contract` entry freezes the three tool inputs and Agent note
+props. `./layered` provides the bounded complete-object cache and caller checks;
+it owns no second registry, native loop or task scheduler. Before execution it
+verifies immutable hashes, relevant complete guidance, input/output dependency
+closure and exact input shape. It uses the existing managed-intent helper and an
+ordinary request's contract precondition; the application rechecks live scope,
+provider selection and contract before dispatch. Partial/missing schemas never
+become executable cache proofs. Actual native `rho_call` feedback.read results
+retain exact fetch attribution; an unrelated operation or prose cannot create it.
+
+The selected knowledge profile caps selections/knownRefs at 16/128 and responses
+at 64 KiB (16 KiB convention). It pages whole objects, exposes first-object
+requiredBytes and refuses one object over the maximum. The process-local cache
+holds at most 128 complete bodies and 4 MiB serialized bytes by default, configured
+by `RHO_KNOWLEDGE_CACHE_ENTRIES/BYTES`. Eviction or process loss requires refetch;
+newly fetched bodies are still returned if the chosen cache cannot retain them.
+Context loss explicitly omits missing knownRefs. These limits do not claim a hard
+OS heap or external model-token budget. Project enablement and authorization
+are never answered from cached guidance.
+
+The optional `./ui` entry supplies `rho.agent-note` 0.2.0: read-only plain text,
+at most 600 Unicode characters, with application-written author binding/basis.
+It uses an optional React peer and owns no editor, feedback or execution state.
+The presentation Skill limits the assigned Agent to workspace.observe/enhance;
+Rho controls assignment generation, conditional layout changes, original receipts
+and actual visibility. Native tools remain an external harness responsibility;
+capability scopes are not an OS sandbox. Full live-model and installed acceptance
+is separate from component/SDK/browser source checks.

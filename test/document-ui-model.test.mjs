@@ -171,3 +171,19 @@ test('typing during a stale undo is kept aside and composition-end cannot resume
   sync.flush(); await sync.load(); assert.equal((await docs.read(opened.id)).content, 'remote ab');
   assert.equal(sync.busy, false);
 });
+
+test('closing a composing view retains its draft for reopening and cannot submit from a destroyed port', async () => {
+  const { acquire } = await import('../plugins/documents/dist/ui-model.js');
+  const root = await mkdtemp(path.join(tmpdir(), 'rho-ui-close-'));
+  await writeFile(path.join(root, 'a.R'), 'base');
+  const docs = new Documents(root), opened = await docs.open('a.R', 'agent:a');
+  const c = client(docs, 'browser:me'), held = acquire(c, 'p-close', opened.id, 'browser:me');
+  const view = port(), detach = held.sync.attach(view); await held.sync.load();
+  view.setComposing(true); view.type('base未完成'); held.sync.local(view);
+  detach(); held.release();
+  view.text = () => { throw new Error('destroyed port must not be read'); };
+  const next = acquire(c, 'p-close', opened.id, 'browser:me'); assert.equal(next.sync, held.sync);
+  assert.equal(next.sync.aside.text, 'base未完成'); next.sync.flush(); await next.sync.load();
+  assert.equal((await docs.read(opened.id)).content, 'base'); assert.equal(next.sync.busy, false);
+  await next.sync.discardAside(); next.release();
+});

@@ -1,3 +1,546 @@
+// Exact retained annotation source/message profile.
+const annotationSchemas: Record<string, any> = {
+  "message": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      },
+      "author": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      },
+      "at": {
+        "type": "string",
+        "format": "date-time"
+      },
+      "draft": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "buffer"
+              },
+              "documentId": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "path": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 4096
+              },
+              "dirty": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "kind",
+              "documentId",
+              "version",
+              "path",
+              "dirty"
+            ]
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 1048576
+          }
+        },
+        "required": [
+          "source",
+          "sha256",
+          "text"
+        ]
+      },
+      "replyTo": {
+        "type": "string",
+        "pattern": "^[a-f0-9]{64}$"
+      }
+    },
+    "required": [
+      "id",
+      "author",
+      "at",
+      "draft"
+    ]
+  },
+  "thread": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "annotationId": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+      },
+      "version": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "anchor": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "document"
+              },
+              "documentId": {
+                "type": "string",
+                "minLength": 1
+              },
+              "version": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "from": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "to": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "kind",
+              "documentId",
+              "version",
+              "from",
+              "to"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "table"
+              },
+              "resource": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ]
+              },
+              "entities": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 1024,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "resource",
+              "entities"
+            ]
+          }
+        ]
+      },
+      "source": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "table"
+              },
+              "resource": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "version": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  }
+                },
+                "required": [
+                  "id",
+                  "version"
+                ]
+              },
+              "namespace": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "entityKey": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                },
+                "maxItems": 1024,
+                "minItems": 1
+              }
+            },
+            "required": [
+              "kind",
+              "resource",
+              "namespace",
+              "entityKey",
+              "rows"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "document"
+              },
+              "source": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "buffer"
+                  },
+                  "documentId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "path": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4096
+                  },
+                  "dirty": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "kind",
+                  "documentId",
+                  "version",
+                  "path",
+                  "dirty"
+                ]
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              },
+              "from": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "to": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 1048576
+              }
+            },
+            "required": [
+              "kind",
+              "source",
+              "sha256",
+              "from",
+              "to",
+              "text"
+            ]
+          }
+        ]
+      },
+      "messages": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "author": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "draft": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "source": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "kind": {
+                      "const": "buffer"
+                    },
+                    "documentId": {
+                      "type": "string",
+                      "pattern": "^[a-f0-9]{64}$"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "path": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 4096
+                    },
+                    "dirty": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "documentId",
+                    "version",
+                    "path",
+                    "dirty"
+                  ]
+                },
+                "sha256": {
+                  "type": "string",
+                  "pattern": "^[a-f0-9]{64}$"
+                },
+                "text": {
+                  "type": "string",
+                  "maxLength": 1048576
+                }
+              },
+              "required": [
+                "source",
+                "sha256",
+                "text"
+              ]
+            },
+            "replyTo": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            }
+          },
+          "required": [
+            "id",
+            "author",
+            "at",
+            "draft"
+          ]
+        },
+        "maxItems": 256,
+        "minItems": 1
+      },
+      "receipts": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "changeId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "requestDigest": {
+              "type": "string",
+              "pattern": "^[a-f0-9]{64}$"
+            },
+            "author": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            },
+            "version": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "at": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "changeId",
+            "requestDigest",
+            "author",
+            "version",
+            "at"
+          ]
+        },
+        "maxItems": 256,
+        "minItems": 1
+      },
+      "receipt": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "changeId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "requestDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "author": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "changeId",
+          "requestDigest",
+          "author",
+          "version",
+          "at"
+        ]
+      },
+      "retainedFromVersion": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "sourceStatus": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "enum": [
+                  "same-version",
+                  "version-differs"
+                ]
+              },
+              "currentVersion": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "anchoredVersion": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "state",
+              "currentVersion",
+              "anchoredVersion"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "same-version"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "snapshot-retained"
+              }
+            },
+            "required": [
+              "state"
+            ]
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "state": {
+                "const": "source-unavailable"
+              },
+              "snapshot": {
+                "const": "retained"
+              }
+            },
+            "required": [
+              "state",
+              "snapshot"
+            ]
+          }
+        ]
+      }
+    },
+    "required": [
+      "annotationId",
+      "version",
+      "anchor",
+      "source",
+      "messages",
+      "receipts",
+      "retainedFromVersion"
+    ]
+  }
+};
+
 import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plugin-contracts';
 const version = { type: 'integer', minimum: 1 };
 const integer = { type: 'integer', minimum: 0 };
@@ -13,4 +556,42 @@ export const inputs = {
   'annotation.read': obj({ annotationId: changeId }),
   'annotation.list': obj({})
 };
-export const outputs = { 'annotation.create': { type: 'object' }, 'annotation.reply': { type: 'object' }, 'annotation.read': { type: 'object' }, 'annotation.list': { type: 'array', items: { type: 'object' } } };
+export const outputs = { 'annotation.create': annotationSchemas.thread, 'annotation.reply': annotationSchemas.thread, 'annotation.read': annotationSchemas.thread, 'annotation.list': { type: 'array', items: annotationSchemas.thread } };
+
+export const feedbackComposerPropsSchema = {
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80
+    },
+    "taskId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+    },
+    "sourceSelectionScope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "shared"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ]
+    }
+  },
+  "required": [
+    "title",
+    "taskId",
+    "sourceSelectionScope"
+  ]
+};

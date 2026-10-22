@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-agent",
-  "version": "0.4.0",
+  "version": "0.4.3",
   "type": "module",
   "description": "Rho agent plugin",
   "license": "AGPL-3.0-only",
@@ -9,7 +9,17 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./mcp": "./dist/mcp.js"
+    "./mcp": "./dist/mcp.js",
+    "./contract": "./dist/contract.js",
+    "./native": "./dist/native.js",
+    "./claude-native": "./dist/claude-native.js",
+    "./delivery": "./dist/delivery.js",
+    "./feedback-contract": "./dist/feedback-contract.js",
+    "./claude-feedback-hook": "./dist/claude-feedback-hook.js",
+    "./claude-feedback-worker": "./dist/claude-feedback-worker.js",
+    "./ui": "./dist/ui.js",
+    "./layered-contract": "./dist/layered-contract.js",
+    "./layered": "./dist/layered.js"
   },
   "files": [
     "dist",
@@ -21,9 +31,18 @@
   },
   "dependencies": {
     "@rho-workspace/plugin-contracts": "0.4.0",
-    "@modelcontextprotocol/sdk": "1.29.0"
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "ajv": "8.20.0"
   },
   "bin": {
     "rho-agent-mcp": "./dist/mcp.js"
+  },
+  "peerDependencies": {
+    "react": "19.3.1"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

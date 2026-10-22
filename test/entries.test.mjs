@@ -16,8 +16,9 @@ test('every owner ships versioned operations and digest-checked Skills in its np
     }
     for (const skill of plugin.skills) {
       assert.equal(createHash('sha256').update(skill.content).digest('hex'), skill.digest);
-      assert.ok(skill.content.includes('capability.list')); assert.ok(skill.version);
+      assert.ok(skill.content.includes(skill.id === 'agent.feedback' ? 'feedback.read' : skill.id === 'agent.presentation' ? 'workspace.enhance' : 'capability.list')); assert.ok(skill.version);
     }
-    assert.equal(plugin.skills.length, 1);
+    assert.equal(plugin.skills.length, id === 'agent' ? 3 : 1);
+    assert.equal(new Set(plugin.skills.map(s => s.id)).size, plugin.skills.length);
   }
 });

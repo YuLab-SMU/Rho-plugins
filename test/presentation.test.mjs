@@ -51,6 +51,7 @@ const copy = {
   ]],
 };
 const names = {
+  'feedback.submit': 'Feedback', 'feedback.read': 'Feedback', 'feedback.status': 'Feedback',
   'document.open': 'Open', 'document.read': 'Read', 'document.edit': 'Edit', 'document.undo': 'Undo', 'document.undoOwn': 'Undo my edits', 'document.revert': 'Revert one change', 'document.history': 'Read change history', 'document.change.read': 'Read a change', 'document.save': 'Save', 'document.abandonSave': 'Give up an interrupted save',
   'resource.list': 'List', 'resource.read': 'Read', 'resource.register': 'Register', 'artifact.check': 'Check outputs',
   'object.read': 'Read an exported object', 'action.submit': 'Run a script',
@@ -59,9 +60,9 @@ const names = {
   'media.describe': 'Describe an image or PDF and check regions',
   'annotation.create': 'Create', 'annotation.list': 'List', 'annotation.read': 'Read', 'annotation.reply': 'Reply',
   'context.create': 'Share and read context', 'context.read': 'Share and read context',
-  'binding.list': 'Open and close views', 'binding.open': 'Open and close views', 'binding.close': 'Open and close views', 'binding.activity': 'Activity',
+  'binding.list': 'Open and close views', 'binding.open': 'Open and close views', 'binding.close': 'Open and close views', 'binding.activity': 'Activity', 'binding.activity.append': 'Activity',
 };
-const views = { 'rho.editor': 'Editor', 'rho.object': 'Object', 'rho.table': 'Table', 'rho.scatter': 'Scatter', 'rho.media': 'Media' };
+const views = { 'rho.editor': 'Editor', 'rho.object': 'Object', 'rho.table': 'Table', 'rho.scatter': 'Scatter', 'rho.media': 'Media', 'rho.feedback': 'Feedback', 'rho.agent-note': 'Agent note' };
 
 test('all nine headless descriptors ship the Paper U1-06d copy and independent effect markers', async () => {
   const seen = [], seenViews = [];
@@ -88,13 +89,13 @@ test('all nine headless descriptors ship the Paper U1-06d copy and independent e
       seenViews.push(component.id);
       assert.equal(component.presentation.displayName, views[component.id]);
       assert.equal(component.presentation.runsCode, false);
-      assert.equal(component.presentation.readOnly, component.id !== 'rho.editor');
+      assert.equal(component.presentation.readOnly, !['rho.editor', 'rho.feedback'].includes(component.id));
     }
     for (const action of plugin.actions ?? []) {
       assert.equal(action.id, 'r.execute');
       assert.deepEqual(action.presentation, plugin.operations.find(o => o.method === 'action.submit').presentation);
     }
-    assert.equal(p.viewNote, id === 'annotations' ? 'Inside other views' : ['files', 'requirements', 'agent'].includes(id) ? 'No view' : undefined);
+    assert.equal(p.viewNote, id === 'annotations' ? 'Inside other views' : ['files', 'requirements'].includes(id) ? 'No view' : undefined);
   }
   assert.deepEqual(seen.sort(), Object.keys(names).sort());
   assert.deepEqual(seenViews.sort(), Object.keys(views).sort());

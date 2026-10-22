@@ -128,7 +128,23 @@ export class DocumentSync {
   constructor(public client: UiClient, public projectId: string, public documentId: string, public readonly me?: string, public readonly limits = browserDocumentLimits) {}
   subscribe(listener: () => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
   private changed() { this.stateVersion++; for (const listener of this.listeners) listener(); }
-  attach(port: Port) { this.ports.add(port); return () => { this.ports.delete(port); /* Keep unacknowledged input even when its view closes. */ }; }
+  attach(port: Port) {
+    this.ports.add(port);
+    return () => {
+      this.ports.delete(port);
+      if (this.source !== port) return;
+      const text = port.text();
+      const replacement = [...this.ports].find(p => !p.composing() && p.text() === text);
+      if (!port.composing() && replacement) { this.source = replacement; return; }
+      // A detached editor cannot later finish its composition. Keep the full
+      // unsent draft explicitly; do not depend on reading a destroyed editor.
+      if ((this.pending || port.composing()) && diff(this.confirmed?.content ?? this.sent, text)) {
+        this.aside ??= { text, at: new Date().toISOString() };
+        this.pending = false; this.changed();
+      }
+      this.source = null;
+    };
+  }
   get busy() { return this.inflight || this.pending; }
   refuseInput() { this.notice = 'This document reached its input byte limit. Existing text is kept.'; this.changed(); }
 
@@ -204,7 +220,7 @@ export class DocumentSync {
   // show the acknowledged buffer.
   private async keepAside(text: string, kind?: string) {
     const unconfirmed = diff(this.confirmed?.content ?? '', text);
-    if (unconfirmed) this.aside = { text, at: new Date().toISOString() };
+    if (unconfirmed) this.aside ??= { text, at: new Date().toISOString() };
     this.notice = kind && !['stale', 'conflict', 'condition'].includes(kind) ? 'Your last edit could not be applied.' : '';
     this.pending = false;
     this.changed();

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AgGridReact } from 'ag-grid-react';
 import { CellStyleModule, InfiniteRowModelModule, ModuleRegistry, RowApiModule, RowSelectionModule, themeQuartz, type ColDef, type GridApi, type IDatasource, type RowSelectedEvent } from 'ag-grid-community';
+import { observeTableDom, canonicalDom, type TableRenderObservation } from './dom-observation.js';
 
 ModuleRegistry.registerModules([CellStyleModule, InfiniteRowModelModule, RowApiModule, RowSelectionModule]);
 
@@ -14,6 +15,8 @@ export interface TableViewProps {
   active: boolean;
   // False when this session may read rows but not share a selection.
   selectable?: boolean;
+  renderObservation?: (value: TableRenderObservation) => Promise<void>;
+  requestFeedback?: () => void;
 }
 type Column = { name: string; type: 'string' | 'number' | 'boolean' };
 type Filter = { column: string; op: 'eq' | 'lt' | 'gt' | 'isNull'; value?: string | number | boolean | null };
@@ -36,7 +39,7 @@ export function TableView(props: TableViewProps) {
   return <BoundTable key={props.projectId + ':' + resource?.id + ':' + resource?.version} {...props} />;
 }
 
-function BoundTable({ view, projectId, client, selectable = true }: TableViewProps) {
+function BoundTable({ view, projectId, client, selectable = true, active, renderObservation, requestFeedback }: TableViewProps) {
   const resource = view.bindings.data as { id: string; version: string } | undefined;
   const [meta, setMeta] = useState<{ columns: Column[]; total: number; filtered: number; entityKey: string | null; namespace: string | null } | null>(null);
   const [filter, setFilter] = useState<Filter | null>(null);
@@ -47,7 +50,16 @@ function BoundTable({ view, projectId, client, selectable = true }: TableViewPro
   const selection = useRef<{ version: number } | null>(null);
   const entities = useRef(new Set<string>());
   const selectionQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const selectionConfirmed = useRef(false);
   const initial = useRef<any>(null);
+  const root = useRef<HTMLDivElement | null>(null);
+  const report = useRef(renderObservation); report.current = renderObservation;
+  const currentMeta = useRef(meta); currentMeta.current = meta;
+  const currentQuery = useRef<any>({ offset: 0, limit: pageRows, sort: null, filter: null });
+  const loadedPages = useRef(new Map<number, number>());
+  const schedule = useRef<() => void>(() => {});
+  const lastObservation = useRef('');
+  const [observationFailure, setObservationFailure] = useState('');
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     if (!resource) return;
@@ -56,6 +68,7 @@ function BoundTable({ view, projectId, client, selectable = true }: TableViewPro
     void Promise.all([client.call('data.page', { projectId, resource, offset: 0, limit: pageRows }), shared]).then(([page, picked]) => {
       if (disposed) return;
       if (picked) {
+        selectionConfirmed.current = true;
         selection.current = { version: picked.version };
         if (picked.selection?.resource?.id === resource.id && picked.selection.resource.version === resource.version) entities.current = new Set(picked.selection.entities);
         setSelected(entities.current.size);
@@ -73,13 +86,45 @@ function BoundTable({ view, projectId, client, selectable = true }: TableViewPro
       initial.current = null;
       const request = first ? Promise.resolve(first) : client.call('data.page', { projectId, resource, offset: params.startRow, limit: pageRows, ...(sort ? { sort: { column: sort.colId, direction: sort.sort } } : {}), ...(filterRef.current ? { filter: filterRef.current } : {}) });
       request.then(page => {
+          loadedPages.current.set(params.startRow, page.rows.length);
+          if (loadedPages.current.size > 5) loadedPages.current.delete(loadedPages.current.keys().next().value!);
+          currentQuery.current = { offset: params.startRow, limit: pageRows, sort: sort ? { column: sort.colId, direction: sort.sort } : null, filter: filterRef.current };
           setFailure(''); setMeta(previous => previous ? { ...previous, filtered: page.filtered, total: page.total } : page);
           // The backend knows the exact filtered count. Reset an earlier short
           // result when the filter is removed, rather than retaining its end.
           params.successCallback(page.rows, page.filtered);
+          schedule.current();
         }, error => { setFailure(error?.message ?? 'Rows could not be read.'); params.failCallback(); });
     },
   }), [client, projectId, resource?.id, resource?.version]);
+
+  useEffect(() => {
+    if (!renderObservation) return;
+    let stopped = false, timer: ReturnType<typeof setTimeout> | undefined, frame = 0, generation = 0;
+    const check = async () => {
+      if (stopped || !root.current) return;
+      const selectedGeneration = generation, ownerRoot = root.current;
+      const value = await observeTableDom(ownerRoot, resource, currentMeta.current, api.current, currentQuery.current, loadedPages.current);
+      if (stopped || selectedGeneration !== generation) return;
+      const identity = canonicalDom([value.evidence, value.coverage]);
+      if (lastObservation.current === identity) return;
+      try { await report.current?.(value); lastObservation.current = identity; setObservationFailure(''); }
+      catch { setObservationFailure('The view is kept. Its display receipt could not be confirmed.'); }
+    };
+    const enqueue = () => {
+      generation++; clearTimeout(timer); cancelAnimationFrame(frame);
+      // Background tabs suspend animation frames. Hidden evidence needs no data
+      // paint and must be sent from the actual visibility event immediately.
+      if (document.visibilityState !== 'visible') { void check(); return; }
+      timer = setTimeout(() => { frame = requestAnimationFrame(() => { frame = requestAnimationFrame(() => { void check(); }); }); }, 40);
+    };
+    schedule.current = enqueue;
+    const size = new ResizeObserver(enqueue); if (root.current) size.observe(root.current);
+    document.addEventListener('visibilitychange', enqueue); window.addEventListener('resize', enqueue); enqueue();
+    return () => { stopped = true; clearTimeout(timer); cancelAnimationFrame(frame); size.disconnect(); document.removeEventListener('visibilitychange', enqueue); window.removeEventListener('resize', enqueue); };
+    // Callback may change with a snapshot without resetting owner input/state.
+  }, [!!renderObservation, resource?.id, resource?.version]);
+  useEffect(() => { lastObservation.current = ''; schedule.current(); }, [active, renderObservation, meta]);
 
   const columnDefs = useMemo<ColDef[]>(() => (meta?.columns ?? []).map(c => ({
     field: c.name, colId: c.name, valueGetter: p => p.data?.[c.name], headerName: c.name + (c.name === meta?.entityKey ? ' · key' : ''), sortable: true,
@@ -87,7 +132,7 @@ function BoundTable({ view, projectId, client, selectable = true }: TableViewPro
     cellRenderer: (p: { value: unknown }) => p.value === null ? <Empty /> : String(p.value ?? ''),
   })), [meta?.columns, meta?.entityKey]);
 
-  const applyFilter = (next: Filter | null) => { setFilter(next); filterRef.current = next; api.current?.purgeInfiniteCache(); };
+  const applyFilter = (next: Filter | null) => { loadedPages.current.clear(); setFilter(next); filterRef.current = next; api.current?.purgeInfiniteCache(); };
   const submitDraft = () => {
     if (!draft || !meta) return;
     const column = meta.columns.find(c => c.name === draft.column)!;
@@ -105,13 +150,14 @@ function BoundTable({ view, projectId, client, selectable = true }: TableViewPro
     const id = String(event.node.data[key]);
     if (event.node.isSelected()) entities.current.add(id); else entities.current.delete(id);
     const chosen = [...entities.current]; setSelected(chosen.length);
+    selectionConfirmed.current = false;
     const scope = { kind: 'shared', id: view.id };
     selectionQueue.current = selectionQueue.current.catch(() => undefined).then(async () => {
       const current = selection.current ?? await client.call('interaction.selection.read', { projectId, scope });
       const input = { projectId, scope, expectedVersion: current.version, changeId: 'tab-' + globalThis.crypto.randomUUID(), selection: chosen.length ? { resource, entities: chosen } : null };
       // Preserve the original transaction when transport loses its response.
       for (let retry = 0; ; retry++) {
-        try { const result = await client.call('interaction.selection.set', input); selection.current = { version: result.version }; setFailure(''); return; }
+        try { const result = await client.call('interaction.selection.set', input); selection.current = { version: result.version }; selectionConfirmed.current = true; setFailure(''); return; }
         catch (error: any) {
           if (error?.error?.kind || error?.kind || retry >= 2) throw error;
         }
@@ -123,10 +169,11 @@ function BoundTable({ view, projectId, client, selectable = true }: TableViewPro
   const bar: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', padding: '6px 12px', fontSize: 12, borderBottom: '1px solid var(--border, #e4e7eb)', flexWrap: 'wrap' };
   const control: CSSProperties = { font: 'inherit', fontSize: 12, border: '1px solid var(--border, #d6dae0)', borderRadius: 6, padding: '2px 8px', maxWidth: '100%', minWidth: 0, background: 'var(--surface, #fff)', color: 'inherit' };
   const count = meta ? (filter ? `${meta.filtered.toLocaleString()} of ${meta.total.toLocaleString()} rows` : `${meta.total.toLocaleString()} rows`) : 'Reading rows…';
-  return <div style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+  return <div ref={root} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
     <div style={bar} role="toolbar" aria-label="Table">
       <span>{count}</span>
       {selected > 0 && <span>· {selected} selected</span>}
+      {selected > 0 && requestFeedback && <button style={control} onClick={() => { void selectionQueue.current.then(() => { if (selectionConfirmed.current) requestFeedback(); else setFailure('Confirm the selected rows before asking Claude Code.'); }); }}>Ask Claude Code</button>}
       {filter && <span style={{ ...control, display: 'inline-flex', gap: 6, alignItems: 'center' }}>{filter.column} {opLabel[filter.op]}{filter.op !== 'isNull' && ' ' + String(filter.value)}
         <button aria-label="Remove filter" style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, color: 'inherit' }} onClick={() => applyFilter(null)}>×</button></span>}
       {!filter && meta && !draft && <button style={control} onClick={() => setDraft({ column: meta.columns[0]!.name, op: 'eq', value: '' })}>Filter</button>}
@@ -141,12 +188,17 @@ function BoundTable({ view, projectId, client, selectable = true }: TableViewPro
       {meta && !meta.entityKey && selectable && <span style={{ color: 'var(--text-muted, #5f6873)' }}>Rows have no key, so they can't be selected for Claude Code.</span>}
     </div>
     {failure && <div role="alert" style={{ ...bar, color: 'var(--danger, #cf222e)' }}>{failure}<button style={control} onClick={() => { setAttempt(n => n + 1); api.current?.purgeInfiniteCache(); }}>Try again</button></div>}
+    {observationFailure && <div role="status" style={bar}>{observationFailure}</div>}
     <div style={{ flex: 1, minHeight: 0 }}>
       {meta && <AgGridReact theme={theme} rowModelType="infinite" datasource={datasource} cacheBlockSize={pageRows} maxBlocksInCache={5} suppressMultiSort maxConcurrentDatasourceRequests={1} columnDefs={columnDefs}
         defaultColDef={{ resizable: true, minWidth: 80, flex: 1 }}
         getRowId={meta?.entityKey && meta.namespace ? p => meta.namespace + ':' + String(p.data[meta.entityKey!]) : undefined}
         rowSelection={meta?.entityKey && meta.namespace && selectable ? { mode: 'multiRow', checkboxes: true, headerCheckbox: false, enableClickSelection: true } : undefined}
-        onModelUpdated={e => { if (meta.entityKey) e.api.forEachNode(node => { if (node.data && entities.current.has(String(node.data[meta.entityKey!]))) node.setSelected(true); }); }}
+        onModelUpdated={e => { if (meta.entityKey) e.api.forEachNode(node => { if (node.data && entities.current.has(String(node.data[meta.entityKey!]))) node.setSelected(true); }); schedule.current(); }}
+        onViewportChanged={() => schedule.current()}
+        onBodyScroll={() => schedule.current()}
+        onSortChanged={() => { loadedPages.current.clear(); schedule.current(); }}
+        onColumnResized={() => schedule.current()}
         onRowSelected={onSelection}
         onGridReady={e => { api.current = e.api; }} />}
     </div>

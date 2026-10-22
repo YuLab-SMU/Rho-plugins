@@ -1,5 +1,7 @@
+import { feedbackSchemas } from './feedback-contract.js';
+import { nativeSchemas } from './contract.js';
 // Owner business contracts. Application project/authentication fields are separate.
-export const operationContracts = {
+const legacyOperationContracts = {
   "context.create": {
     "inputSchema": {
       "type": "object",
@@ -407,3 +409,14 @@ export const operationContracts = {
     "effect": "metadata"
   }
 } as const;
+
+const business = (schema: any) => structuredClone(schema);
+export const operationContracts = {
+  ...legacyOperationContracts,
+  'feedback.submit': { inputSchema: feedbackSchemas.FeedbackSubmitInput, outputSchema: feedbackSchemas.SubmissionRecord, requires: ['documents', 'annotations'], effect: 'metadata' as const },
+  'feedback.read': { inputSchema: feedbackSchemas.FeedbackReadInput, outputSchema: feedbackSchemas.FeedbackReadOutput, requires: ['annotations'], effect: 'metadata' as const },
+  'feedback.status': { inputSchema: feedbackSchemas.DeliveryStatusInput, outputSchema: feedbackSchemas.DeliveryStatusOutput, requires: [], effect: 'read' as const },
+  'binding.open': { ...legacyOperationContracts['binding.open'], inputSchema: business(nativeSchemas.BindingOpenExtended), outputSchema: { anyOf: [legacyOperationContracts['binding.open'].outputSchema, nativeSchemas.BindingRecordExtension] } },
+  'binding.activity': { ...legacyOperationContracts['binding.activity'], inputSchema: { ...nativeSchemas.NativeActivityReadInput, required: [], allOf: [{ if: { required: ['source'] }, then: { required: ['source', 'taskId', 'query'] }, else: { not: { anyOf: [{ required: ['taskId'] }, { required: ['query'] }] } } }] }, outputSchema: { anyOf: [legacyOperationContracts['binding.activity'].outputSchema, nativeSchemas.NativeActivityReadOutput] } },
+  'binding.activity.append': { inputSchema: business(nativeSchemas.ActivityAppendInput), outputSchema: nativeSchemas.ActivityAppendOutput, requires: [], effect: 'metadata' as const },
+};

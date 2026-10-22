@@ -18,15 +18,18 @@ export const presentation: PluginPresentation = {
     '“Which views have you opened in this project?”',
     "“Show what you've done in this project since this morning.”",
   ],
-  viewNote: 'No view',
   readOnly: false, runsCode: false,
 };
 export const operationPresentation = {
+  'feedback.submit': { order: 70, displayName: 'Feedback', description: 'Freezes selected feedback and retains its original business-session delivery.', readOnly: false, runsCode: false },
+  'feedback.read': { order: 71, displayName: 'Feedback', description: 'Serves feedback only to its original business binding and records a bounded fetch receipt.', readOnly: false, runsCode: false },
+  'feedback.status': { order: 72, displayName: 'Feedback', description: 'Observes original delivery, actual fetch and explicit reply facts without sending again.', readOnly: true, runsCode: false },
   'context.create': { order: 10, displayName: 'Share and read context', description: "Prepares exact resource context for the bound Agent.", readOnly: false, runsCode: false },
   'context.read': { order: 20, displayName: 'Share and read context', description: "Reads shared context and records the fetch separately from a reply.", readOnly: true, runsCode: false },
   'binding.list': { order: 30, displayName: 'Open and close views', description: "Lists views bound to the Agent session.", readOnly: true, runsCode: false },
   'binding.open': { order: 40, displayName: 'Open and close views', description: "Opens a registered view on its resource context.", readOnly: false, runsCode: false },
   'binding.close': { order: 50, displayName: 'Open and close views', description: "Releases a view binding without cancelling its work.", readOnly: false, runsCode: false },
+  'binding.activity.append': { order: 61, displayName: 'Activity', description: 'Records bounded native observations from the registered adapter, without executing tools.', readOnly: false, runsCode: false },
   'binding.activity': { order: 60, displayName: 'Activity', description: "Reads observed activity for the bound session.", readOnly: true, runsCode: false },
 } satisfies Record<string, EntryPresentation>;
 

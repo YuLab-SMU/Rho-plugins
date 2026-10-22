@@ -1,6 +1,66 @@
 # Current status
 
-Updated: 2026-10-19.
+Updated: 2026-10-21. Application phase 5 now accepts the selected external offline
+grades candidate with Agent 0.4.3 and the existing Documents/Files/Tables/Annotations
+owners. Actual Claude Code 2.1.306 / Westlake HPC DeepSeek completed two original
+business sessions and two restricted presentation sessions: 77 tool calls,
+1,098,713 input tokens including cache and 29,705 output tokens. The application
+records 32 installed checks, real browser/worker/save-ACK faults and frozen
+AC01–AC21 coverage. Earlier interrupted-trial calls/usage lower bounds are retained;
+no provider invoice or exactly-once native execution claim is made. Core remains
+unchanged; same-project multi-task, full product acceptance and registry publication remain
+unselected. Local evidence belongs to Rho's
+`work/phase5-installed-dual-agent-20261021/results.html`.
+
+## Phase 4 optional presentation and layered MCP source candidate
+
+Agent 0.4.3 adds explicit three-tool MCP profiles, bounded complete-body cache,
+closed schema checks and original managed-intent reuse. The optional read-only
+`rho.agent-note` displays at most 600 Unicode characters; Rho writes its author
+and binding basis through the assigned guarded path. Generic rho_call feedback
+fetches retain exact native return attribution. Headless compatibility and optional
+React isolation remain; the catalog now lists the actual note view. Source owner
+checks pass 45/45, with Rho 63/63 and real two-project SDK/browser evidence recorded
+by the application. No model ran in those source/SDK checks; the separate phase-5
+model and installed evidence is summarized above. See [layered MCP](../plugins/agent/README.md#layered-mcp-and-optional-presentation).
+
+## Phase 3 original feedback delivery source candidate
+
+Agent 0.4.2 adds exact original submissions, frozen targeted contexts, one durable
+bounded delivery file, whole feedback reads/status and optional Claude hook/worker
+entries. ACK loss permits only original lookup; persisted hook attempts never
+re-emit after ambiguous crashes. Native MCP returns carry exact fetch attribution.
+Annotations 0.4.1 adds the contextual question entry and exact retained thread
+contract. It reuses Documents 0.4.1 buffer-readiness notification and Tables 0.4.2
+confirmed-selection action; no duplicate editor or domain workflow is introduced.
+Private schema refinement retains ACK/hook-boundary facts without changing frozen
+public profiles. Component regressions pass 44/44; Rho 57/57 and actual two-project
+browser checks have separate application evidence. This phase used zero model
+tokens. Real Claude consumption, presentation enhancement and installed acceptance
+remain pending. See [Agent feedback](../plugins/agent/README.md#original-feedback-delivery).
+
+## Phase 2 table display evidence source candidate
+
+Tables 0.4.1 adds an optional DOM-observation callback and pure coverage schema.
+It reports exact visible keys/columns, typed-value digests, query and actual
+viewport/hit-test coverage after data paint. Virtual buffers, sticky-header-covered
+rows and native hidden tabs do not claim visible cells. Headless readers remain
+unchanged; no Agent model or Core runtime is required. Owner checks pass 43/43;
+Rho records actual split/refresh/restart/hidden/occlusion checks separately. Reliable
+feedback, presentation enhancement and the full installed combination remain work.
+
+## Phase 1 native observation source candidate
+
+Agent 0.4.1 adds pure/native/Claude stream-observer entries, registered attachment
+and bounded original-source observations. Separate adapter authority and the
+application project writer protect ingestion; no model loop, queue or execution
+journal is introduced. Existing Files/Tables supply artifact validation unchanged.
+The [Agent guide](../plugins/agent/README.md#native-observation-entry) records limits
+and scope. Owner source checks pass 43/43. Application source acceptance ran two
+real Claude Code 2.1.306 / Westlake HPC DeepSeek projects: an explicit native
+resume repaired one manifest path without rerunning either Python computation.
+Application/usage evidence and remaining phases belong to Rho; no independent
+installation or publication of the candidate is claimed.
 
 ## U2 optional editor and table entries
 

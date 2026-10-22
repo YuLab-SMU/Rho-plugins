@@ -1,7 +1,7 @@
 import { skillPresentation, presentation, operationPresentation } from './presentation.js';
 import path from 'node:path';
 import { atomicJson, canonical, digest, now, readJson, requireThat, stateDirectory, type DocumentSnapshotSource, type ResourceRef } from '@rho-workspace/plugin-contracts';
-import { inputs, outputs } from './contract.js';
+import { inputs, outputs, feedbackComposerPropsSchema } from './contract.js';
 export const annotationLimits = { maxThreads: 128, maxMessages: 256, maxAnnotationBytes: 32 * 1024 * 1024, maxReceipts: 256 };
 export interface AnnotationSources {
   documents?: DocumentSnapshotSource & { anchor(id: string, version: number, from: number, to: number): Promise<any>; read(id: string): Promise<{ version: number }> };
@@ -94,7 +94,8 @@ export class Annotations {
   }
 }
 const content = 'Discover enabled operations with capability.list and skill.list. Use annotation.create/read/list/reply over versioned Documents drafts. Anchor exact UTF-16 document ranges or stable table entity keys. Submitted messages and source snapshots never rebase. Prepare selected feedback with context.create, read context through the tool, edit the shared artifact with its current version, and submit an explicit replyTo. Tool reads are not understanding or completion. Preserve original changeIds after lost acknowledgements.';
-export const plugin = { entryVersion: '1.0', id: 'annotations', package: '@rho-workspace/plugin-annotations', version: '0.4.0', requires: ['documents'], capabilities: ['annotations'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'annotations', package: '@rho-workspace/plugin-annotations', version: '0.4.1', requires: ['documents'], capabilities: ['annotations'], presentation,
+  components: [{ id: 'rho.feedback', version: '0.2.0', owner: 'rho-plugins.annotations', bindings: { draft: 'document' }, propsSchema: feedbackComposerPropsSchema, ui: './ui', presentation: { displayName: 'Feedback', description: 'Asks about selected objects and follows original delivery and linked replies.', readOnly: false, runsCode: false } }],
   operations: Object.entries(inputs).map(([method, inputSchema]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, inputSchema, outputSchema: outputs[method as keyof typeof outputs], requires: ['documents'], effect: method === 'annotation.create' || method === 'annotation.reply' ? 'metadata' as const : 'read' as const })),
   skills: [{ id: 'annotations.workspace', version: '1.0', content, digest: digest(content), presentation: skillPresentation }]
 };

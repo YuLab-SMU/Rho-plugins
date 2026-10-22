@@ -90,6 +90,6 @@ export class Tables {
   }
 }
 const tablesSkill = declaredSkill('tables.workspace', 'Use capability.list to discover data.page and data.compare. Bind stable resource versions and entity keys; do not infer identity from row position.');
-export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.0', requires: ['files'], capabilities: ['tables'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.2', requires: ['files'], capabilities: ['tables'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...tablesSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

@@ -18,6 +18,8 @@ export interface EditorViewProps {
   maxUnconfirmedBytes?: number;
   // False when this session may read but not edit; the view stays readable.
   editable?: boolean;
+  appearance?: 'document' | 'message';
+  onDraftState?: (state: { documentId: string; version: number | null; ready: boolean }) => void;
 }
 
 const remote = Annotation.define<boolean>();
@@ -51,6 +53,7 @@ const theme = EditorView.theme({
 const styles = `
 .rho-doc{display:flex;flex-direction:column;height:100%;min-height:0}
 .rho-doc-editor{flex:1;min-height:0;overflow:hidden}
+.rho-doc-message .cm-scroller{font-family:inherit;line-height:19px}
 .rho-doc-band{display:flex;gap:8px;align-items:center;padding:6px 12px;font-size:12px;border-bottom:1px solid var(--border,#e4e7eb);background:var(--surface-muted,#f6f7f9);color:var(--text,#1f2328)}
 .rho-doc-band button,.rho-doc-changes button{font:inherit;font-size:12px;border:1px solid var(--border,#d6dae0);background:var(--surface,#fff);color:inherit;border-radius:6px;padding:2px 8px;cursor:pointer}
 .rho-doc-band .rho-doc-fill{flex:1}
@@ -148,7 +151,7 @@ function PinnedDocumentView({ view, projectId, client, documentId, version }: Ed
   </div>;
 }
 
-function LiveDocumentView({ view, projectId, client, active, documentVersion, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true }: EditorViewProps) {
+function LiveDocumentView({ view, projectId, client, active, documentVersion, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, appearance = 'document', onDraftState }: EditorViewProps) {
   injectStyles();
   const binding = view.bindings.document as { documentId: string; version?: number; kind?: string } | undefined;
   const documentId = binding?.documentId ?? '';
@@ -157,14 +160,18 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, pr
   const editor = useRef<EditorView | null>(null);
   const [showAgent, setShowAgent] = useState(true);
   const [failure, setFailure] = useState('');
+  const [composing, setComposing] = useState(false);
   const held = useMemo(() => acquire(client, projectId, documentId, principalId, maxUnconfirmedBytes), [client, projectId, documentId, principalId, maxUnconfirmedBytes]);
   const sync = held.sync;
+  const draftStateCallback = useRef(onDraftState);
+  draftStateCallback.current = onDraftState;
   useEffect(() => () => held.release(), [held]);
   const tick = useSyncExternalStore(listener => sync.subscribe(listener), () => sync.stateVersion);
+  useEffect(() => { onDraftState?.({ documentId, version: sync.confirmed?.version ?? null, ready: !!sync.confirmed && !sync.busy && !sync.aside && !composing }); }, [sync, tick, documentId, composing, onDraftState]);
 
   useEffect(() => {
     if (!host.current || !documentId) return;
-    const extensions: Extension[] = [lineNumbers(), EditorView.lineWrapping, theme, agentMarks,
+    const extensions: Extension[] = [...(appearance === 'message' ? [] : [lineNumbers()]), EditorView.lineWrapping, theme, agentMarks,
       EditorView.contentAttributes.of({ 'aria-label': String(view.props.title ?? 'Document'), spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
       EditorView.editable.of(!readOnly),
       EditorState.transactionFilter.of(tr => {
@@ -178,9 +185,12 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, pr
         { key: 'Mod-Shift-z', preventDefault: true, run: () => true },
         { key: 'Mod-y', preventDefault: true, run: () => true },
       ]),
-      EditorView.domEventHandlers({ compositionend: () => { setTimeout(() => sync.flush(), 0); return false; } }),
+      EditorView.domEventHandlers({ compositionstart: () => { draftStateCallback.current?.({ documentId, version: sync.confirmed?.version ?? null, ready: false }); setComposing(true); return false; }, compositionend: () => { setComposing(false); setTimeout(() => sync.flush(), 0); return false; } }),
       EditorView.updateListener.of(update => {
-        if (update.docChanged && !update.transactions.some(t => t.annotation(remote))) sync.local(port);
+        if (update.docChanged && !update.transactions.some(t => t.annotation(remote))) {
+          draftStateCallback.current?.({ documentId, version: sync.confirmed?.version ?? null, ready: false });
+          sync.local(port);
+        }
       })];
     const cm = new EditorView({ parent: host.current, doc: sync.sent, extensions });
     editor.current = cm;
@@ -198,7 +208,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, pr
     if (!sync.confirmed) sync.load().catch(error => setFailure(error?.message ?? 'This document could not be read.'));
     else port.replace(sync.sent);
     return () => { detach(); cm.destroy(); editor.current = null; };
-  }, [sync, documentId, readOnly]);
+  }, [sync, documentId, readOnly, appearance]);
 
   useEffect(() => { if (documentVersion !== undefined) void sync.observe(documentVersion).catch(() => undefined); }, [sync, documentVersion]);
 
@@ -212,7 +222,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, pr
 
   if (!documentId) return <div className="rho-doc"><p className="rho-doc-exact">This view has no document.</p></div>;
   const changes = <Changes sync={sync} me={sync.me} canRevert={!readOnly} />;
-  return <div className="rho-doc" data-active={active || undefined}>
+  return <div className={'rho-doc' + (appearance === 'message' ? ' rho-doc-message' : '')} data-active={active || undefined}>
     {!editable && <p className="rho-doc-exact">This tab can read this document but not edit it.</p>}
     {failure && <div className="rho-doc-band" role="alert"><span className="rho-doc-fill">{failure}</span><button onClick={() => { setFailure(''); void sync.load().catch(e => setFailure(e?.message ?? 'This document could not be read.')); }}>Try again</button></div>}
     {sync.aside && <div className="rho-doc-band" role="status"><span className="rho-doc-fill">The text changed while you were typing. Your last keystrokes were kept aside.</span>
