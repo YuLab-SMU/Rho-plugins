@@ -8,7 +8,8 @@ equal filenames remain distinct and overlapping aliases share a buffer within
 one workspace. Source checks pass 46/46, including actual two-folder reads/saves,
 external-write conflict and saved-script planning. Rho selects and persists folders;
 these owner checks do not accept its UI or installation. No Core changes or
-scientific refits were needed.
+scientific refits were needed. Annotations 0.4.2 accepts both selected Documents
+0.4.1 and 0.4.2 as optional peers; its behavior is unchanged.
 
 Updated: 2026-10-21. Application phase 5 now accepts the selected external offline
 grades candidate with Agent 0.4.3 and the existing Documents/Files/Tables/Annotations
