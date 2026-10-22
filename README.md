@@ -15,6 +15,8 @@ CLI, Skills, MCP or UI entries to the same functionality.
 
 The [reusable plugin model](docs/PLUGIN-MODEL.md) defines capability ownership,
 headless and UI entries, resource/selection contracts and extraction acceptance.
+The [concrete catalog](docs/PLUGIN-CATALOG.md) names the first-party
+capabilities and their entries.
 UI entry designs do not establish shipped renderers.
 A plugin can contribute several views over one state owner. Rho selects and
 arranges those entries; a workflow's dataset, method choices and sequencing stay

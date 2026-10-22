@@ -40,6 +40,8 @@ copied into capability plugins.
 
 Names in this table describe responsibilities. The [package inventory](PLUGIN-PACKAGES.md)
 records the eight implemented IDs and their selected service dependencies.
+The [concrete capability and entry catalog](PLUGIN-CATALOG.md) instantiates
+these rows as named capabilities, their entries and the UI assembly rules.
 
 | Capability | Headless responsibility | Possible UI entries |
 | --- | --- | --- |
