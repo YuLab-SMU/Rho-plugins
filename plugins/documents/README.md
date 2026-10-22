@@ -95,3 +95,13 @@ only confirmed owner state is promised after refreshing or closing the browser.
 
 [Rho’s U2 acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-UI-ACCEPTANCE.md)
 records the composed browser/installed evidence and physical IME limits.
+
+## Optional source-folder file port
+
+Documents 0.4.2 accepts an optional third constructor argument implementing
+`resolve(relative, missing?) -> {file, relative}`. The selected file service owns
+path resolution; Documents retains buffer identity, undo, actual disk digests and
+conditional save behavior. Canonical source-qualified references distinguish equal
+filenames and normalize overlapping aliases. Unavailable source access cannot
+create a replacement blank buffer. Restoring an archive does not authorize new
+source folders; the injected current resolver must accept its reference.

@@ -30,3 +30,14 @@ npm pack --workspace plugins/files --ignore-scripts
 Use the repository's `pack:plugins` command to produce the contracts tarball and
 selected plugin tarballs together. Both explicit R examples are separate consumers
 and are excluded from every plugin artifact. No UI work is included.
+
+## Selected source folders
+
+Files 0.4.1 exports `ProjectPaths(root, sources)` as an optional, finite file-path
+port. The application supplies already authorized `{id, root, name}` folders;
+references use `@<id>/<relative-path>`. Resolution rechecks the canonical folder,
+containment, symlinks and internal source state. Overlapping aliases normalize to
+one reference. The fifth Files constructor argument accepts this port; without it,
+the existing single-root behavior remains. `sourceFile` exposes the same resolver
+to selected consumers such as saved-script planning. Source bytes stay in place;
+immutable snapshots and metadata remain in the owner state under `root`.

@@ -1,5 +1,7 @@
 import { skillPresentation, presentation, operationPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
+import type { FilePaths } from './paths.js';
+export { ProjectPaths, type FilePaths, type SourceFolder } from './paths.js';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { atomicBytes, atomicJson, canonical, confined, digest, Fault, now, readJson, requireThat, stateDirectory, type ResourceRef, objectSchema as obj, text } from '@rho-workspace/plugin-contracts';
@@ -9,7 +11,8 @@ const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, v
 export const fileLimits = { maxFileBytes: 64 * 1024 * 1024, maxResources: 1024, maxArtifactBytes: 512 * 1024 * 1024, maxReadBytes: 65536 };
 export class Files {
   limits: typeof fileLimits;
-  constructor(public root: string, public projectId: string, limits: Partial<typeof fileLimits> = {}, public validators: DeclarationValidator[] = []) { this.limits = { ...fileLimits, ...limits }; }
+  constructor(public root: string, public projectId: string, limits: Partial<typeof fileLimits> = {}, public validators: DeclarationValidator[] = [], private paths?: FilePaths) { this.limits = { ...fileLimits, ...limits }; }
+  async sourceFile(relative: string, missing = false) { return this.paths ? this.paths.resolve(relative, missing) : { file: await confined(this.root, relative, missing), relative }; }
   validateDeclaration(declaration: Declaration) {
     validateDeclarationEnvelope(declaration);
     if (declaration.kind === 'file') {
@@ -54,7 +57,7 @@ export class Files {
     const r = (await this.list()).find(x => x.id === ref.id);
     requireThat(r, 'not_found', 'Resource is not registered in this project.', { resource: ref });
     requireThat(r.version === ref.version, 'stale', 'Resource version has changed.', { resource: ref, actualVersion: r.version });
-    const original = await confined(this.root, r.path);
+    const { file: original } = await this.sourceFile(r.path);
     requireThat((await fs.stat(original)).size <= this.limits.maxFileBytes, 'limit', 'Source artifact exceeds its file byte budget.', { limit: 'maxFileBytes' });
     const bytes = await fs.readFile(original);
     requireThat(digest(bytes) === r.version, 'stale', 'Source artifact changed after resource registration.', { resource: ref });
@@ -70,7 +73,8 @@ export class Files {
   }
   async register(relative: string, provenance: Record<string, any>, availability: Resource['availability'], coverage: Record<string, any> = {}, declaration: Declaration = { path: relative, kind: 'file', format: { mimeType: 'application/octet-stream' } }, expectedDigest?: string) {
     this.validateDeclaration(declaration);
-    const source = await confined(this.root, relative);
+    const { file: source, relative: normalized } = await this.sourceFile(relative);
+    relative = normalized;
     const stat = await fs.stat(source);
     requireThat(stat.isFile() && stat.size <= this.limits.maxFileBytes, 'limit', 'Artifact exceeds the configured read limit.', { limit: 'maxFileBytes', maximum: this.limits.maxFileBytes });
     const data = await fs.readFile(source); const sha = digest(data);
@@ -152,7 +156,7 @@ export async function verifyArtifacts(root: string, run: any, resources: Resourc
 const filesSkill = declaredSkill('files.workspace', 'Use capability.list to discover resource.list, resource.read, resource.register and artifact.check. Keep resource versions and provenance explicit; reads never start a runtime.');
 export const plugin = {
   entryVersion: '1.0',
-  id: 'files', package: '@rho-workspace/plugin-files', version: '0.4.0', requires: [], capabilities: ['files'], presentation,
+  id: 'files', package: '@rho-workspace/plugin-files', version: '0.4.1', requires: [], capabilities: ['files'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...filesSkill, presentation: skillPresentation }]
 };

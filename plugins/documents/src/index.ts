@@ -35,15 +35,22 @@ export interface PendingSave {
 }
 export type DocumentResult = DocumentState & { receipt?: DocumentReceipt };
 export interface TextEdit { from: number; to: number; insert: string }
+export interface DocumentPaths { resolve(relative: string, missing?: boolean): Promise<{ file: string; relative: string }> }
 export const documentLimits = { maxBufferBytes: 1024 * 1024, maxTotalBytes: 8 * 1024 * 1024, maxUndoBytes: 8 * 1024 * 1024, maxDocuments: 64, maxReceipts: 256, maxHistoryEntries: 256, maxHistoryEdits: 4096 };
 export class Documents {
   limits: typeof documentLimits;
-  constructor(public root: string, limits: Partial<typeof documentLimits> = {}) {
+  constructor(public root: string, limits: Partial<typeof documentLimits> = {}, private paths?: DocumentPaths) {
     this.limits = { ...documentLimits, ...limits };
     requireThat(Number.isSafeInteger(this.limits.maxReceipts) && this.limits.maxReceipts > 0, 'invalid', 'Document maxReceipts must be a positive integer.');
     for (const name of ['maxHistoryEntries', 'maxHistoryEdits'] as const) requireThat(Number.isSafeInteger(this.limits[name]) && this.limits[name] > 0, 'invalid', 'Document history limits must be positive integers.', { limit: name });
   }
   private async directory() { return stateDirectory(this.root, '.rho/plugins/documents'); }
+  private async source(relative: string, missing = true) {
+    requireThat(!/^@[^/]+\//.test(relative) || this.paths, 'unavailable', 'Source-folder access needs its selected file service.');
+    if (this.paths) return this.paths.resolve(relative, missing);
+    const file = await confined(this.root, relative, missing);
+    return { file, relative: path.relative(await fs.realpath(this.root), file) };
+  }
   private async record(id: string) {
     requireThat(/^[a-f0-9]{64}$/.test(id), 'invalid', 'Invalid document identity.');
     return path.join(await this.directory(), id + '.json');
@@ -60,8 +67,7 @@ export class Documents {
   async read(id: string) { return this.normalize(await readJson<DocumentState>(await this.record(id))); }
   async open(relative: string, author: string) {
     requireThat(!relative.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal state is not an editable document.');
-    const file = await confined(this.root, relative, true);
-    const normalized = path.relative(await fs.realpath(this.root), file);
+    const { file, relative: normalized } = await this.source(relative);
     const id = digest(normalized);
     const existing = await readJson<DocumentState | null>(await this.record(id), null);
     if (existing) return this.normalize(existing);
@@ -208,7 +214,7 @@ export class Documents {
   async save(id: string, expectedVersion: number, expectedDiskDigest: string | null, author: string, change?: DocumentChange): Promise<DocumentResult> {
     const { doc, requestDigest, receipt } = await this.mutation(id, expectedVersion, 'save', { expectedDiskDigest }, author, change);
     if (receipt) return { ...doc, receipt };
-    const file = await confined(this.root, doc.path, true);
+    const { file } = await this.source(doc.path);
     const actual = await fileDigest(file, this.limits.maxBufferBytes);
     const pending = doc.pendingSave;
     const alreadyWritten = pending && actual === pending.contentDigest;
@@ -238,7 +244,7 @@ export class Documents {
     requireThat(pending && pending.requestDigest === pendingRequestDigest, 'condition', 'Name the pending save currently retained by this document.', { documentId: id, pendingSave: pending ?? null });
     // Only a save that can no longer complete may be abandoned; a resumable
     // save must be resumed, so its intent is never silently dropped.
-    const actual = await fileDigest(await confined(this.root, doc.path, true), this.limits.maxBufferBytes);
+    const actual = await fileDigest((await this.source(doc.path)).file, this.limits.maxBufferBytes);
     requireThat(actual !== pending.contentDigest && actual !== pending.expectedDiskDigest, 'condition', 'This pending save can still complete; resume it with the original save request.', { documentId: id, actualDiskDigest: actual });
     // Disk is not touched. The acknowledged buffer, dirty state and undo stay.
     delete doc.pendingSave;
@@ -263,8 +269,8 @@ export class Documents {
     requireThat(Number.isSafeInteger(imported.revision) && imported.revision >= 0 && Array.isArray(imported.receipts) && new Set(imported.receipts.map(r => r.changeId)).size === imported.receipts.length && imported.receipts.every((r, i) => /^[A-Za-z0-9._:@-]{1,128}$/.test(r.changeId) && /^[a-f0-9]{64}$/.test(r.requestDigest) && ['edit', 'undo', 'save', 'abandon-save', 'undo-own', 'revert'].includes(r.kind) && typeof r.author === 'string' && r.author.length > 0 && typeof r.at === 'string' && Number.isSafeInteger(r.version) && r.version > 0 && r.version <= imported.version && Number.isSafeInteger(r.revision) && r.revision > 0 && r.revision <= imported.revision && (i === 0 || r.revision > imported.receipts[i - 1]!.revision)) && imported.retainedFromRevision === (imported.receipts[0]?.revision ?? imported.revision + 1), 'invalid', 'Invalid archived document revision or receipt boundary.');
     if (imported.pendingSave) return { documentId: imported.id, state: 'conflict', reason: 'Archive retains an unresolved save; resume it in the source project.', pendingSave: imported.pendingSave };
     requireThat(!imported.path.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal state is not an editable document.');
-    const target = await confined(this.root, imported.path, true);
-    requireThat(digest(path.relative(await fs.realpath(this.root), target)) === imported.id, 'invalid', 'Restored document identity does not match its project-relative path.');
+    const { file: target, relative } = await this.source(imported.path);
+    requireThat(digest(relative) === imported.id, 'invalid', 'Restored document identity does not match its project-relative path.');
     const current = await readJson<DocumentState | null>(await this.record(imported.id), null);
     if (current) {
       const retained = this.normalize(current);
@@ -283,7 +289,7 @@ export class Documents {
 const documentSkill = declaredSkill('documents.workspace', 'Use capability.list to discover document.open/read/edit, document.undoOwn, document.revert, document.history, document.change.read, document.save and document.abandonSave. document.undoOwn reverses only the authenticated caller\'s latest complete retained input group; document.revert reverses one active content change named by targetChangeId and may target another author. Both require changeId and expectedRevision. Later overlapping edits are refused without mutation. Read history for authenticated authors and exact before/after text with document.change.read; reads never edit. document.undo retains legacy global undo semantics and must not be used for the human keyboard shortcut. Preserve UTF-16 ranges, expected versions, undo groups and disk write conditions. For acknowledged mutations supply changeId and expectedRevision together, retain the exact original request before sending, and resume only that request after lost delivery. document.read exposes revision, bounded receipts, retainedFromRevision and any pendingSave. document.abandonSave drops only a pending save that can no longer complete (disk matches neither its condition nor its content); it never writes disk and keeps the buffer and undo. A duplicate returns the current buffer and original receipt; the receipt version need not be current. Missing expired receipts do not authorize a new identity or changed conditions. Live editor bindings use {kind:"live-document",documentId}; exact version bindings remain exact.', '1.3');
 export const plugin = {
   entryVersion: '1.0',
-  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.1', requires: [], capabilities: ['documents'], presentation,
+  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.2', requires: [], capabilities: ['documents'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...documentSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]

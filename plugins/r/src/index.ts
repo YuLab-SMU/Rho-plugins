@@ -17,14 +17,14 @@ import { validateDeclarationEnvelope, type Declaration } from '@rho-workspace/pl
 export interface Environment { rscript: string; libraryPaths: string[] }
 export const executionLimits = { maxScriptBytes: 1024 * 1024 };
 
-export async function planExecution(root: string, input: any, operationId: string, environment: Environment, resources: Pick<ResourceStore, 'resolve' | 'validateDeclaration'>, documents?: DocumentSnapshotSource, limits: Partial<typeof executionLimits> = {}): Promise<ActionPlan> {
+export async function planExecution(root: string, input: any, operationId: string, environment: Environment, resources: Pick<ResourceStore, 'resolve' | 'validateDeclaration'> & { sourceFile?: (relative: string) => Promise<{ file: string; relative: string }> }, documents?: DocumentSnapshotSource, limits: Partial<typeof executionLimits> = {}): Promise<ActionPlan> {
   const maximum = limits.maxScriptBytes ?? executionLimits.maxScriptBytes;
   root = await fs.realpath(root);
   let snapshot;
   if (input.script.kind === 'buffer') { requireThat(documents, 'unavailable', 'The documents plugin is required for buffer execution.'); snapshot = await documents.snapshot(input.script.documentId, input.script.version); }
   else {
     requireThat(!input.script.path.split('/').some((p: string) => ['.rho', '.git'].includes(p)), 'scope', 'Select a script outside internal owner state.');
-    const file = await confined(root, input.script.path);
+    const file = resources.sourceFile ? (await resources.sourceFile(input.script.path)).file : await confined(root, input.script.path);
     requireThat((await fs.stat(file)).size <= maximum, 'limit', 'Saved script exceeds the R script byte limit.', { limit: 'maxScriptBytes', maximum });
     let code: string;
     try { code = new TextDecoder('utf-8', { fatal: true }).decode(await fs.readFile(file)); }
@@ -65,6 +65,6 @@ export class Objects {
   }
 }
 const rSkill = declaredSkill('r.workspace', 'Use capability.list to discover object.read and action.submit. Reads address exported snapshots; native execution is explicit and retains its original operation identity.');
-export const plugin = { entryVersion: '1.0', id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.0', requires: ['files'], capabilities: ['r-objects'], presentation, actions,
+export const plugin = { entryVersion: '1.0', id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.1', requires: ['files'], capabilities: ['r-objects'], presentation, actions,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...rSkill, presentation: skillPresentation }], components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };
