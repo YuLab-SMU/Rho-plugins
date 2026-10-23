@@ -61,6 +61,34 @@ export async function preparation(root: string, requirements: Requirement[], rsc
   return { code, args: [] as string[], source: { kind: 'dependency-preparation', requirements, library, before: check }, output: null };
 }
 
-const requirementsSkill = declaredSkill('requirements.workspace', 'Use capability.list to discover requirements.check and requirements.prepare. Checks are bounded observations; preparation is an explicit native plan and never silently installs packages.');
+const requirementsSkillContent = [
+  'Check that the packages an R script needs are usable, and prepare them explicitly.',
+  'Use capability.list to discover requirements.check and requirements.prepare.',
+  '',
+  '1. requirements.check probes the declared packages with bounded base R and reports what',
+  '   is present, absent or unknown. It installs nothing and starts no Host.',
+  '2. requirements.prepare returns an explicit native plan: the code, arguments and the',
+  '   library path it would use. It is a plan, not permission, and it never installs',
+  '   packages silently.',
+  '3. Base R needs no declaration. Declare only add-on packages, each with its source, and',
+  '   keep the declaration with the original request identity.',
+  '4. The project library path is fixed per project; a check that reports a package present',
+  '   is still not a promise that the run will succeed.'
+].join('\n');
+const requirementsSkill = {
+  ...declaredSkill('requirements.workspace', requirementsSkillContent, '1.1'),
+  intent: 'Know whether an R script can run here before submitting it.',
+  requires: ['requirements.check', 'requirements.prepare'],
+  example: {
+    method: 'requirements.check',
+    input: { requirements: [{ package: 'digest', source: 'cran' }] }
+  },
+  failureRecipes: [
+    { kind: 'unavailable', message: 'R is unavailable.', next: 'Select an existing Rscript with --rscript or RHO_RSCRIPT; the check reports unknown rather than failing the service.' },
+    { kind: 'invalid', message: 'Package declaration is malformed.', next: 'Declare each package by name with source cran or bioconductor.' },
+    { kind: 'limit', message: 'Too many declared packages.', next: 'Declare the packages the script truly needs; the limit is explicit in the reply.' }
+  ],
+  verify: { command: 'npm run test:requirements', description: 'Empty and base-R requirements need no add-on package, and script and argument references are checked before dispatch.' }
+};
 export const plugin = { entryVersion: '1.0', id: 'requirements', package: '@rho-workspace/plugin-requirements', version: '0.4.0', requires: [], capabilities: ['requirements'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...requirementsSkill, presentation: skillPresentation }] };

@@ -93,9 +93,37 @@ export class Annotations {
     await atomicJson(await this.file(), prepared.state); return prepared.report;
   }
 }
-const content = 'Discover enabled operations with capability.list and skill.list. Use annotation.create/read/list/reply over versioned Documents drafts. Anchor exact UTF-16 document ranges or stable table entity keys. Submitted messages and source snapshots never rebase. Prepare selected feedback with context.create, read context through the tool, edit the shared artifact with its current version, and submit an explicit replyTo. Tool reads are not understanding or completion. Preserve original changeIds after lost acknowledgements.';
+const content = [
+  'Ask about a selected object and follow the answer without rebasing what was submitted.',
+  'Discover enabled operations with capability.list and skill.list.',
+  '',
+  '1. An annotation anchors to an exact version: a UTF-16 document range or a stable table',
+  '   entity key at that resource version. A submitted message and its source snapshot stay',
+  '   exactly as submitted; a later edit does not silently move them.',
+  '2. annotation.create submits; annotation.read and annotation.list observe; annotation.reply',
+  '   answers and must name replyTo explicitly. Threads advance conditionally.',
+  '3. To hand chosen feedback to an agent, build it with context.create and read it back',
+  '   through the tool with context.read. Prepared, read and explicitly replied are three',
+  '   different facts: reading is not understanding and not completion.',
+  '4. Keep the original changeId after a lost acknowledgement and query the receipt boundary;',
+  '   never resubmit the same feedback under a new identity.'
+].join('\n');
 export const plugin = { entryVersion: '1.0', id: 'annotations', package: '@rho-workspace/plugin-annotations', version: '0.4.2', requires: ['documents'], capabilities: ['annotations'], presentation,
   components: [{ id: 'rho.feedback', version: '0.2.0', owner: 'rho-plugins.annotations', bindings: { draft: 'document' }, propsSchema: feedbackComposerPropsSchema, ui: './ui', presentation: { displayName: 'Feedback', description: 'Asks about selected objects and follows original delivery and linked replies.', readOnly: false, runsCode: false } }],
   operations: Object.entries(inputs).map(([method, inputSchema]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, inputSchema, outputSchema: outputs[method as keyof typeof outputs], requires: ['documents'], effect: method === 'annotation.create' || method === 'annotation.reply' ? 'metadata' as const : 'read' as const })),
-  skills: [{ id: 'annotations.workspace', version: '1.0', content, digest: digest(content), presentation: skillPresentation }]
+  skills: [{
+    id: 'annotations.workspace', version: '1.1', content, digest: digest(content), presentation: skillPresentation,
+    intent: 'Submit and follow anchored feedback without rebasing the original message.',
+    requires: ['annotation.create', 'annotation.read', 'annotation.list', 'annotation.reply', 'context.create', 'context.read'],
+    example: {
+      method: 'annotation.list',
+      input: { projectId: 'the-open-project' }
+    },
+    failureRecipes: [
+      { kind: 'stale', message: 'Anchor or thread advanced past the submitted version.', next: 'Read the thread, then reply with an explicit replyTo instead of moving the original anchor.' },
+      { kind: 'scope', message: 'Selection or anchor is outside this binding.', next: 'Anchor inside the document or table the binding owns.' },
+      { kind: 'invalid', message: 'Anchor range or entity key is malformed.', next: 'Use UTF-16 offsets for documents and a declared entity key for tables.' }
+    ],
+    verify: { command: 'npm run test:annotations', description: 'Submits anchored messages over versioned drafts, advances threads conditionally and keeps original snapshots.' }
+  }]
 };

@@ -176,9 +176,100 @@ export class AgentContext {
     return responses;
   }
 }
-const agentSkill = declaredSkill('agent.workspace', 'Use capability.list to discover context.create/context.read and binding operations. Prepare exact source snapshots, then use the tool result as context; reading is not understanding or completion.');
-const feedbackSkill = declaredSkill('agent.feedback', 'When the selected native hook supplies an original delivery reference, call feedback.read with its task, delivery, context and stable fetchId. Fetch the whole feedback object; increase maxBytes after a size refusal, never use a partial schema or message. The relatedDocumentId is a pointer: read its CURRENT document version before editing, preserve human changes, use conditional document.edit/save and retain original changeIds after lost replies. Reply through annotation.reply with the exact original messageId as replyTo and a separate versioned reply draft. A tool read or hook emission is not understanding, model consumption or domain correctness. Missing acceptance/emission acknowledgements preserve unknown; do not invent a new delivery or native session.');
-const presentationSkill = declaredSkill('agent.presentation', 'Use rho_index, rho_resolve and rho_call for only workspace.observe/workspace.enhance. Resolve relevant instructions and whole exact contracts, including every schema dependency, before executing. Reuse only complete cached immutable bodies; if context loses a body, omit its knownRef and refetch it. Accumulate whole observation pages against the same snapshot. Use the assigned task, composition, presenter generation, exact retained binding witness and visible observation as the enhancement basis. Change only display emphasis/title and an optional plain Agent note of at most 600 characters. The application writes authorship and basis. Never write/read business feedback, shared documents or native trace through another capability. Keep original changeId after unknown replies; stale layout/assignment needs a fresh observation and an explicit new intent, never silent rebase. Integrity/table shape and visibility do not establish domain correctness.');
+const agentSkillContent = [
+  'Prepare exact context and work through one registered native binding.',
+  'Use capability.list to discover context.create, context.read and the binding operations.',
+  '',
+  '1. context.create freezes an exact source snapshot: a document range at one version or a',
+  '   table selection at one resource version. It prepares facts; it does not decide what',
+  '   they mean.',
+  '2. Fetch that context with context.read and use the tool result as your context. Reading',
+  '   is not understanding, and neither is task completion.',
+  '3. binding.open attaches one native session to one task and role. The attachment names',
+  '   the adapter registration and its transport capabilities; nothing else starts a',
+  '   native session.',
+  '4. Keep original identities. After a lost acknowledgement query the owner instead of',
+  '   opening a second binding under a new identity.'
+].join('\n');
+const agentSkill = {
+  ...declaredSkill('agent.workspace', agentSkillContent, '1.1'),
+  intent: 'Give a native session exact prepared context and keep its binding identity.',
+  requires: ['context.create', 'context.read', 'binding.open', 'binding.list', 'binding.activity'],
+  example: { method: 'context.create', input: { document: { documentId: '5df1e6280c70fa8475dfd6bb1a6165b302443640224c893510eed728058adac0', version: 1, from: 0, to: 12 } } },
+  failureRecipes: [
+    { kind: 'stale', message: 'Context source version changed.', next: 'Build a new context from the current version; do not edit through an old snapshot.' },
+    { kind: 'scope', message: 'Binding belongs to a different task or principal.', next: 'Use the binding issued for this task and role; a forged attachment is refused.' },
+    { kind: 'unavailable', message: 'No native adapter is registered.', next: 'Ask the operator to register the adapter for this project before opening a binding.' }
+  ],
+  verify: { command: 'npm run test:native', description: 'Registers a native adapter, opens a business binding, refuses a forged one, and records artifact-ready observations without a model call.' }
+};
+const feedbackSkillContent = [
+  'Answer feedback that arrived through the selected native hook, without rebasing it.',
+  'Use capability.list to discover feedback.read and feedback.status.',
+  '',
+  '1. When the hook supplies an original delivery reference, call feedback.read with that',
+  '   task, delivery, context and a stable fetchId. Fetch the whole object: if the reply says',
+  '   the size is too small, raise maxBytes rather than accepting a partial message.',
+  '2. feedback.status reports delivery, exact-target fetches and explicitly linked replies.',
+  '   A hook emission or a tool read is not understanding, model consumption or domain',
+  '   correctness.',
+  '3. relatedDocumentId is a pointer, not a snapshot: read that document CURRENT version',
+  '   before editing, preserve human changes, and use conditional edit and save.',
+  '4. Reply with annotation.reply, naming the exact original messageId as replyTo and a',
+  '   separate versioned reply draft.',
+  '5. Missing acknowledgements keep the outcome unknown. Do not invent a new delivery, a new',
+  '   native session, or a new changeId for the same reply.'
+].join('\n');
+const feedbackSkill = {
+  ...declaredSkill('agent.feedback', feedbackSkillContent, '1.1'),
+  intent: 'Read one original feedback delivery and answer it explicitly.',
+  requires: ['feedback.read', 'feedback.status', 'document.read', 'document.edit', 'annotation.reply'],
+  example: {
+    method: 'feedback.read',
+    input: {
+      taskId: 'grades', deliveryId: 'delivery-1', contextId: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855', fetchId: 'fetch-1',
+      query: { after: 0, cursor: null, limit: 50, maxBytes: 65536 }
+    }
+  },
+  failureRecipes: [
+    { kind: 'limit', message: 'Feedback object exceeds maxBytes.', next: 'Increase maxBytes and read the whole object; never use a partial message.' },
+    { kind: 'stale', message: 'Related document changed since the feedback.', next: 'Read the current document version and edit conditionally, keeping human changes.' },
+    { kind: 'unauthorized', message: 'Only the original business binding may read this delivery.', next: 'Read it from the binding that received the delivery.' }
+  ],
+  verify: { command: 'npm run test:feedback', description: 'Drives the real feedback worker and hook entries without a model: original delivery, whole-object fetch and explicit reply.' }
+};
+const presentationSkillContent = [
+  'Enhance only what the assigned person is looking at, within the presentation role.',
+  'Use rho_index, rho_resolve and rho_call for workspace.observe and workspace.enhance only.',
+  '',
+  '1. Resolve the relevant instructions and whole exact contracts, including every schema',
+  '   dependency, before executing. Reuse only complete cached bodies; if context loses a',
+  '   body, omit its known reference and fetch it again.',
+  '2. Observe with workspace.observe, accumulating whole pages against the same snapshot.',
+  '   Use the assigned task, composition, presenter generation, retained binding witness and',
+  '   visible observation as the basis.',
+  '3. Enhance display only: emphasis, a title, and an optional plain note of at most 600',
+  '   characters. The application writes authorship and the basis; you do not.',
+  '4. Never read or write business feedback, shared documents or native trace through',
+  '   another capability.',
+  '5. Keep the original changeId after an unknown reply. A stale layout or assignment needs a',
+  '   fresh observation and an explicit new intent, never a silent rebase.'
+].join('\n');
+const presentationSkill = {
+  ...declaredSkill('agent.presentation', presentationSkillContent, '1.1'),
+  intent: 'Enhance the visible layout for the assigned presenter, display only.',
+  requires: ['workspace.observe', 'workspace.enhance'],
+  example: {
+    method: 'workspace.observe',
+    input: { taskId: 'grades', compositionId: 'workspace', query: { after: 0, cursor: null, limit: 20, maxBytes: 65536 } }
+  },
+  failureRecipes: [
+    { kind: 'stale', message: 'Witness, generation or layout changed.', next: 'Observe again and form an explicit new intent; never rebase silently.' },
+    { kind: 'scope', message: 'Presentation role cannot reach business feedback or documents.', next: 'Stay within workspace.observe and workspace.enhance.' },
+    { kind: 'limit', message: 'Note exceeds 600 characters.', next: 'Shorten the note; emphasis and title carry the rest.' }
+  ],
+  verify: { command: 'npm run test:presenter', description: 'Presentation enhances display within its witness and role, and refuses business feedback or document access.' }
+};
 export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.3', requires: [], capabilities: ['agent-context'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   components: [{ id: 'rho.agent-note', version: '0.2.0', owner: 'rho-plugins.agent', bindings: {}, propsSchema: layeredSchemas.AgentNoteProps, ui: './ui', presentation: { displayName: 'Agent note', description: 'A plain presentation explanation with authenticated author and binding basis.', readOnly: true, runsCode: false } }],

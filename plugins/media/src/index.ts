@@ -29,7 +29,35 @@ export class Media {
     return { ...region, resource: ref, mapping: 'original-media-coordinates' };
   }
 }
-const mediaSkill = declaredSkill('media.workspace', 'Use capability.list to discover media.describe. Preserve the original resource version and declared coordinates; rendering is optional and does not change source bytes.');
+const mediaSkillContent = [
+  'Describe and select a region of registered media without touching its bytes.',
+  'Use capability.list to discover media.describe and object.read.',
+  '',
+  '1. Register the media first and keep its exact {id, version}. Coordinates are declared',
+  '   in original media space: width and height come from the declaration, not from what a',
+  '   renderer happens to show.',
+  '2. media.describe reports the stored description of that version. Rendering is optional',
+  '   and never changes source bytes; a region selection maps back to original coordinates.',
+  '3. A region outside the declared bounds is refused rather than clamped, so a zoomed or',
+  '   cropped view cannot invent pixels that are not in the file.',
+  '4. If the file changed, the version is stale: register the new bytes instead of reusing',
+  '   coordinates that belonged to the old ones.'
+].join('\n');
+const mediaSkill = {
+  ...declaredSkill('media.workspace', mediaSkillContent, '1.1'),
+  intent: 'Describe media and select a region in original coordinates.',
+  requires: ['media.describe', 'resource.register', 'object.read'],
+  example: {
+    method: 'media.describe',
+    input: { resource: { id: '9f1c2d3e4b5a69788796a5b4c3d2e1f00112233445566778899aabbccddeeff0', version: '3f9d2b0e1a4c5f6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5' } }
+  },
+  failureRecipes: [
+    { kind: 'invalid', message: 'Region lies outside the declared media bounds.', next: 'Use coordinates inside width and height from the registration; a region is never clamped.' },
+    { kind: 'stale', message: 'Resource version changed.', next: 'Re-register the current bytes and describe the new version.' },
+    { kind: 'unavailable', message: 'This build selects no renderer.', next: 'Describe and select stay available; only rendering is missing.' }
+  ],
+  verify: { command: 'npm run test:media', description: 'Registers media, maps a selection to original coordinates, and refuses a region outside the declared bounds.' }
+};
 export const plugin = { entryVersion: '1.0', id: 'media', package: '@rho-workspace/plugin-media', version: '0.4.0', requires: ['files'], capabilities: ['media'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...mediaSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.media', version: '0.2.0', owner: 'rho-plugins.media', bindings: { data: 'media' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };
