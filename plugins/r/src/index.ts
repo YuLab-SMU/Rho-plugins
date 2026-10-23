@@ -34,9 +34,18 @@ export async function planExecution(root: string, input: any, operationId: strin
   }
   requireThat(Buffer.byteLength(snapshot.code) <= maximum, 'limit', 'Script snapshot exceeds the R script byte limit.', { limit: 'maxScriptBytes', maximum });
   const parent = await stateDirectory(root, '.rho/plugins/runs/' + digest(operationId));
-  const output = path.join(parent, 'artifacts');
   requireThat(new Set(input.artifacts.map((d: Declaration) => d.path)).size === input.artifacts.length, 'invalid', 'Output paths must be unique.');
-  for (const d of input.artifacts) { resources.validateDeclaration(d); await confined(parent, 'artifacts/' + d.path, true); }
+  // The declared output directory is handed to R as its first argument, so it must
+  // exist before the run: a script that opens a file there fails otherwise.
+  const output = await stateDirectory(root, path.relative(root, path.join(parent, 'artifacts')));
+  for (const d of input.artifacts) {
+    resources.validateDeclaration(d);
+    await confined(parent, 'artifacts/' + d.path, true);
+    // A declared path may name a subdirectory; that directory is part of the
+    // declaration, not an accident of the script.
+    const inside = path.posix.dirname(d.path.split(path.sep).join('/'));
+    if (inside && inside !== '.') await stateDirectory(output, inside);
+  }
   const completionPath = input.completion === null ? null : await confined(parent, input.completion, true);
   const inputs = [], args = [output];
   for (const arg of input.args) {

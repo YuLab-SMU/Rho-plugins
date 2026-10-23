@@ -41,7 +41,9 @@ test('a completion sidecar verifies immutable producer bytes and rejects escapin
   const environment = { rscript: 'Rscript', libraryPaths: [] };
   await assert.rejects(planExecution(root, { ...input, artifacts: [{ ...artifact, path: '../outside.txt' }] }, 'invalid', environment, resources, documents), { kind: 'scope' });
   const plan = await planExecution(root, input, 'operation', environment, resources, documents);
-  await fs.mkdir(path.join(root, plan.output));
+  // The declared output directory exists before the producer starts: R is handed it
+  // as its first argument and opening a file there must not need a directory first.
+  assert.equal((await fs.stat(path.join(root, plan.output))).isDirectory(), true);
   const bytes = Buffer.from('original producer bytes');
   await fs.writeFile(path.join(root, plan.output, artifact.path), bytes);
   await fs.writeFile(path.join(root, plan.completion), JSON.stringify({ schemaVersion: 1, complete: true, artifacts: [{ path: artifact.path, bytes: bytes.length, sha256: digest(bytes) }] }));
@@ -103,4 +105,23 @@ test('R script limits do not depend on Documents selection or its buffer budget'
   // Planning does not start a runtime, and document buffers keep their own limit.
   await assert.rejects(documents.open('run.R', 'test'), { kind: 'limit' });
   await assert.rejects(fs.stat(path.join(root, '.rho/core')));
+});
+
+test('the declared output directory and each artifact subdirectory exist before the producer runs', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-output-'));
+  const resources = new Files(root, 'test'), documents = new Documents(root);
+  const d = await documents.open('plot.R', 'test');
+  const input = {
+    script: { kind: 'buffer', documentId: d.id, version: d.version }, args: [], requirements: [],
+    artifacts: [{ path: 'cars.png', kind: 'file', format: { mimeType: 'image/png' } },
+      { path: 'nested/table.csv', kind: 'file', format: { mimeType: 'text/csv' } }], completion: null
+  };
+  const plan = await planExecution(root, input, 'nested', { rscript: 'Rscript', libraryPaths: [] }, resources, documents);
+  const output = path.join(root, plan.output);
+  assert.equal(await fs.realpath(plan.args[0]), await fs.realpath(output));
+  assert.equal((await fs.stat(output)).isDirectory(), true);
+  assert.equal((await fs.stat(path.join(output, 'nested'))).isDirectory(), true);
+  // Writing where R would write works with no extra setup, which is the whole point.
+  await fs.writeFile(path.join(plan.args[0], 'cars.png'), 'png bytes');
+  assert.deepEqual(await fs.readdir(output), ['cars.png', 'nested']);
 });
