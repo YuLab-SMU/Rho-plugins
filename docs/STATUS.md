@@ -1,5 +1,18 @@
 # Current status
 
+Updated: 2026-10-23. Agent now defaults to four tools: owner discovery, selected
+contract resolution, invocation and retained-result reading. Large results have
+scoped references with bounded JSON-pointer and Unicode text pages, explicit
+release, fresh authorization checks and no replay. Files streams hashes/snapshots
+and reads ranges through a bounded digest/fingerprint cache. Media negotiates the
+owner page size, enforces a display byte cap and cancels inactive reads.
+Documents supplies metadata-only summaries, bounded record/aggregate reads and
+conditional browser saves that flush pending edits and preserve retry identity.
+Media description leaves browser rendering unobserved; it does not claim the UI
+is unavailable. Owner checks pass 65/65; focused media checks pass 5/5. Rho records
+the composed real browser, actual R execution and Claude Code trials separately.
+
+
 Updated: 2026-10-22. Documents and Tables now draw their own bodies in an
 application's item frame, following the Paper page
 [04 · 插件形态](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-8-0).

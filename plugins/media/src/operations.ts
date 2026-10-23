@@ -130,7 +130,7 @@ export const operationContracts = {
           "minLength": 1
         },
         "rendering": {
-          "const": "unavailable"
+          "const": "unobserved"
         }
       },
       "required": [

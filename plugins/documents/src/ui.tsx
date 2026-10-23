@@ -13,12 +13,14 @@ export interface EditorViewProps {
   client: UiClient;
   active: boolean;
   documentVersion?: number;
+  documentRevision?: number;
   principalId?: string;
   contextTarget?: HTMLElement | null;
   headerTarget?: HTMLElement | null;
   maxUnconfirmedBytes?: number;
   // False when this session may read but not edit; the view stays readable.
   editable?: boolean;
+  saveable?: boolean;
   appearance?: 'document' | 'message';
   onDraftState?: (state: { documentId: string; version: number | null; ready: boolean }) => void;
 }
@@ -136,7 +138,7 @@ function PinnedDocumentView({ view, projectId, client, documentId, version }: Ed
   </div>;
 }
 
-function LiveDocumentView({ view, projectId, client, active, documentVersion, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, appearance = 'document', onDraftState }: EditorViewProps) {
+function LiveDocumentView({ view, projectId, client, active, documentVersion, documentRevision, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, saveable = false, appearance = 'document', onDraftState }: EditorViewProps) {
   injectStyles();
   const binding = view.bindings.document as { documentId: string; version?: number; kind?: string } | undefined;
   const documentId = binding?.documentId ?? '';
@@ -166,6 +168,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, pr
         return tr;
       }),
       keymap.of([
+        { key: 'Mod-s', preventDefault: true, run: () => { if (saveable) void sync.save(); return true; } },
         { key: 'Mod-z', preventDefault: true, run: () => { if (!readOnly) void sync.undo(); return true; } },
         { key: 'Mod-Shift-z', preventDefault: true, run: () => true },
         { key: 'Mod-y', preventDefault: true, run: () => true },
@@ -193,9 +196,9 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, pr
     if (!sync.confirmed) sync.load().catch(error => setFailure(error?.message ?? 'This document could not be read.'));
     else port.replace(sync.sent);
     return () => { detach(); cm.destroy(); editor.current = null; };
-  }, [sync, documentId, readOnly, appearance]);
+  }, [sync, documentId, readOnly, saveable, appearance]);
 
-  useEffect(() => { if (documentVersion !== undefined) void sync.observe(documentVersion).catch(() => undefined); }, [sync, documentVersion]);
+  useEffect(() => { if (documentVersion !== undefined) void sync.observe(documentVersion, documentRevision).catch(() => undefined); }, [sync, documentVersion, documentRevision]);
 
   useEffect(() => {
     const cm = editor.current, buffer = sync.confirmed;
@@ -207,6 +210,8 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, pr
 
   if (!documentId) return <div className="rho-doc"><p className="rho-doc-exact">This view has no document.</p></div>;
   const changes = <Changes sync={sync} me={sync.me} canRevert={!readOnly} />;
+  const save = saveable && <button type="button" aria-label="Save document" disabled={!sync.confirmed || !!sync.aside || composing || !sync.confirmed.dirty && !sync.busy}
+    onClick={() => void sync.save()}>Save</button>;
   return <div className={'rho-doc' + (appearance === 'message' ? ' rho-doc-message' : '')} data-active={active || undefined}>
     {!editable && <p className="rho-doc-exact">This tab can read this document but not edit it.</p>}
     {failure && <div className="rho-doc-band" role="alert"><span className="rho-doc-fill">{failure}</span><button onClick={() => { setFailure(''); void sync.load().catch(e => setFailure(e?.message ?? 'This document could not be read.')); }}>Try again</button></div>}
@@ -214,7 +219,8 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, pr
       <button onClick={() => void navigator.clipboard?.writeText(sync.aside!.text)}>Copy them</button><button onClick={() => sync.discardAside()}>Dismiss</button></div>}
     {sync.notice && <div className="rho-doc-band" role="status"><span className="rho-doc-fill">{sync.notice}</span></div>}
     <div className="rho-doc-editor" ref={host} />
-    {active && headerTarget && createPortal(<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Claude Code's edits</label>, headerTarget)}
+    {active && headerTarget && createPortal(<>{save}<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Claude Code's edits</label></>, headerTarget)}
+    {active && !headerTarget && save && <div className="rho-doc-band">{save}</div>}
     {active && (contextTarget ? createPortal(changes, contextTarget) : contextTarget === null ? null : <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border,#e4e7eb)', maxHeight: '40%', overflow: 'auto' }}>{changes}</div>)}
   </div>;
 }

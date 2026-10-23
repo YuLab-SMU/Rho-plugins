@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, writeFile, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Documents } from '@rho-workspace/plugin-documents';
@@ -14,6 +14,7 @@ function client(docs, author, faults = {}) {
     const change = b.changeId === undefined ? undefined : { changeId: b.changeId, expectedRevision: b.expectedRevision };
     const run = () => ({
       'document.read': () => docs.read(b.documentId),
+      'document.save': () => docs.save(b.documentId, b.expectedVersion, b.expectedDiskDigest, author, change),
       'document.edit': () => docs.edit(b.documentId, b.expectedVersion, b.edits, b.undoGroup, author, change),
       'document.undoOwn': () => docs.undoOwn(b.documentId, b.expectedVersion, author, change),
       'document.revert': () => docs.revert(b.documentId, b.expectedVersion, b.targetChangeId, author, change),
@@ -186,4 +187,34 @@ test('closing a composing view retains its draft for reopening and cannot submit
   assert.equal(next.sync.aside.text, 'base未完成'); next.sync.flush(); await next.sync.load();
   assert.equal((await docs.read(opened.id)).content, 'base'); assert.equal(next.sync.busy, false);
   await next.sync.discardAside(); next.release();
+});
+
+test('browser saves flush pending input, reuse a lost acknowledgement identity and preserve disk conflicts', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'rho-ui-save-'));
+  const file = path.join(root, 'a.R'); await writeFile(file, 'old\n');
+  const docs = new Documents(root), opened = await docs.open('a.R', 'browser:me');
+  const c = client(docs, 'browser:me', { 'document.save': ['lost-reply'] });
+  const sync = new DocumentSync(c, 'p', opened.id, 'browser:me'), view = port(); sync.attach(view); await sync.load();
+  view.type('saved 中文 🧬\n'); sync.local(view);
+  assert.equal(await sync.save(), true); assert.equal(await readFile(file, 'utf8'), view.text());
+  const calls = c.calls.filter(c => c.method === 'document.save'); assert.equal(calls.length, 2); assert.deepEqual(calls[0].b, calls[1].b);
+  assert.equal(sync.confirmed.dirty, false);
+  view.type('keep my buffer\n'); sync.local(view); await settle(sync);
+  await writeFile(file, 'external edit\n');
+  assert.equal(await sync.save(), false); assert.equal(await readFile(file, 'utf8'), 'external edit\n');
+  assert.equal(view.text(), 'keep my buffer\n'); assert.equal(sync.confirmed.dirty, true); assert.match(sync.notice, /changed on disk/);
+});
+
+test('another author saving the same text version updates disk conditions before the next browser edit', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'rho-ui-save-observe-'));
+  const docs = new Documents(root), opened = await docs.open('a.R', 'browser:me');
+  const sync = new DocumentSync(client(docs, 'browser:me'), 'p', opened.id, 'browser:me'), view = port(); sync.attach(view); await sync.load();
+  view.type('one'); sync.local(view); await settle(sync);
+  const base = sync.confirmed;
+  const other = await docs.save(base.id, base.version, base.diskDigest, 'agent:other', { changeId: 'other-save', expectedRevision: base.revision });
+  assert.equal(other.version, base.version); assert.ok(other.revision > base.revision);
+  await sync.observe(other.version, other.revision);
+  assert.equal(sync.confirmed.dirty, false); assert.equal(sync.confirmed.diskDigest, other.diskDigest);
+  view.type('two'); sync.local(view); assert.equal(await sync.save(), true);
+  assert.equal(await readFile(path.join(root, 'a.R'), 'utf8'), 'two'); assert.equal(sync.aside, null);
 });

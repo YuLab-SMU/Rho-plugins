@@ -25,7 +25,7 @@ real tool return. Hints do not prove byte integrity or table/domain correctness.
 
 The application provisions a separate native-adapter credential and checks the
 registered session/task/binding on each append. `binding.activity.append` is never
-a model tool; legacy MCP still serves the existing authorized context entries.
+a model tool; the scoped MCP entry serves the authorized context operations.
 `binding.activity` with `source: native` reads bounded history; calls without that
 field retain their principal-filtered Rho API log semantics. Registration records
 identity evidence, not current client liveness or OS sandbox isolation.
@@ -88,7 +88,7 @@ original identities/drafts/owner receipts and refuses unsafe continuation.
 Attempts are persisted before transport. After any attempt, worker steps only
 lookup the original inbox; absence never authorizes re-enqueue. Hooks persist an
 emission attempt before stdout and never emit it twice after an unknown boundary.
-Actual `mcp__rho__rho_feedback_read` stream results, rather than prose or shell
+Actual `rho_call` feedback.read stream results, rather than prose or shell
 arguments, supply client-tool-returned evidence. Hook emission and owner-served
 reads do not imply model consumption or native-execution deduplication.
 
@@ -109,14 +109,24 @@ acceptance belongs to the application composition and is still pending.
 
 ## Layered MCP and optional presentation
 
-An explicitly provisioned `layered-business` or `layered-presentation` descriptor
-selects only `rho_index`, `rho_resolve`, `rho_call`; old descriptors retain the
-compatibility tools. Startup/tools-list do not fetch the full project protocol
-or catalog in layered mode. Relevant Skills and complete exact contracts come
-from the existing owner sources through the application's bounded resolver.
-Results have one JSON text body and no structuredContent duplicate.
+All MCP descriptors use `rho_index`, `rho_resolve`, `rho_call`, `rho_read`.
+Business is the default profile; presentation remains explicitly restricted.
+Startup/tools-list fetch no full protocol or catalog. Discovery starts with owner
+summaries, then owner/search pages. Relevant Skills and complete exact contracts
+come from the existing owner sources. Results have one JSON text body without a
+structuredContent duplicate. Old per-operation tools are removed.
 
-The pure `./layered-contract` entry freezes the three tool inputs and Agent note
+Large operation replies become immutable connection-scoped references. `rho_read`
+selects fields by JSON pointer, pages containers and Unicode-safe UTF-16 text, or
+releases a result. It cannot execute the source operation. Reads recheck current
+authorization; explicit release remains possible after an operation is disabled.
+Defaults: 16 KiB reply/page (64 KiB maximum); `RHO_MAX_RESULT_BYTES` 16 MiB,
+`RHO_MAX_RETAINED_RESULT_BYTES` 64 MiB, `RHO_MAX_RESULTS` 64. Capacity is reserved
+before invoking an operation; exhaustion refuses dispatch and preserves existing
+results. Results survive MCP restart. A transport overrun keeps the outcome
+uncertain and directs observation of the original identity, never replacement work.
+
+The pure `./layered-contract` entry defines the four tool inputs and Agent note
 props. `./layered` provides the bounded complete-object cache and caller checks;
 it owns no second registry, native loop or task scheduler. Before execution it
 verifies immutable hashes, relevant complete guidance, input/output dependency

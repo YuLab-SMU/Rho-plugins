@@ -26,12 +26,12 @@ export class LayeredMcp {
     this.cache.set(object.ref, { object, bytes, validate }); this.used += bytes;
   }
   async index(input: any) {
-    const role = this.connection.profile === 'layered-presentation' ? 'presentation' : 'business';
-    return this.ports.invoke('capability.index', { role, query: { after: 0, cursor: input.cursor, limit: 100, maxBytes: input.maxBytes } });
+    const role = this.connection.profile === 'layered-presentation' ? 'presentation' : this.connection.methods.includes('binding.activity.append') ? 'adapter' : 'business';
+    return this.ports.invoke('capability.index', { role, query: { after: 0, cursor: input.cursor ?? null, limit: 20, maxBytes: input.maxBytes ?? 16384, ...(input.owner ? { owner: input.owner } : {}), ...(input.search ? { search: input.search } : {}) } });
   }
   async resolve(input: any) {
-    const knownRefs = input.knownRefs.filter((ref: string) => this.get(ref));
-    const result = await this.ports.invoke('capability.resolve', { ...input, knownRefs });
+    const knownRefs = (input.knownRefs ?? []).filter((ref: string) => this.get(ref));
+    const result = await this.ports.invoke('capability.resolve', { cursor: null, maxBytes: 16384, ...input, knownRefs });
     if (result.ok) for (const object of result.value.items) this.put(object);
     return result;
   }

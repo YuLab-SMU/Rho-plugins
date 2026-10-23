@@ -8,7 +8,7 @@ export interface HistoryEntry {
   changeId: string; author: string; kind: 'edit' | 'undo' | 'undo-own' | 'revert';
   groupId: string; version: number; at: string; edits: Delta[]; reverts: string[];
 }
-export interface Buffer { id: string; path: string; content: string; version: number; revision: number; history?: HistoryEntry[]; historyRetainedFromVersion?: number; receipt?: { author: string } }
+export interface Buffer { id: string; path: string; content: string; version: number; revision: number; dirty?: boolean; diskDigest?: string | null; history?: HistoryEntry[]; historyRetainedFromVersion?: number; receipt?: { author: string } }
 export interface Port { text(): string; replace(next: string): void; composing(): boolean }
 export interface Group { groupId: string; author: string; kind: HistoryEntry['kind']; at: string; changeIds: string[]; active: boolean; lines: [number, number] | null; reverts: string[] }
 
@@ -120,6 +120,7 @@ export class DocumentSync {
   private group = identity();
   private lastEdit = 0;
   private seen = 0;
+  private seenRevision = 0;
   private idle: (() => void)[] = [];
   private listeners = new Set<() => void>();
   private loading?: Promise<Buffer>;
@@ -230,16 +231,17 @@ export class DocumentSync {
   private settle() {
     if (this.busy) return;
     const waiting = this.idle; this.idle = []; for (const resolve of waiting) resolve();
-    if (this.seen > (this.confirmed?.version ?? 0)) void this.observe(this.seen).catch(() => undefined);
+    if (this.seen > (this.confirmed?.version ?? 0) || this.seenRevision > (this.confirmed?.revision ?? 0)) void this.observe(this.seen, this.seenRevision).catch(() => undefined);
   }
   private whenIdle() { this.flush(); return this.busy ? new Promise<void>(resolve => this.idle.push(resolve)) : Promise.resolve(); }
 
   // Another author changed the buffer. Apply it only when no local input waits.
-  async observe(version: number) {
+  async observe(version: number, revision = 0) {
     this.seen = Math.max(this.seen, version);
-    if (!this.confirmed || version <= this.confirmed.version || this.busy) return;
+    this.seenRevision = Math.max(this.seenRevision, revision);
+    if (!this.confirmed || version <= this.confirmed.version && revision <= this.confirmed.revision || this.busy) return;
     const buffer: Buffer = await this.client.call('document.read', { projectId: this.projectId, documentId: this.documentId });
-    if (buffer.version <= this.confirmed.version || this.busy || [...this.ports].some(p => p.composing() || p.text() !== this.sent)) return;
+    if (buffer.version <= this.confirmed.version && buffer.revision <= this.confirmed.revision || this.busy || [...this.ports].some(p => p.composing() || p.text() !== this.sent)) return;
     this.accept(buffer); this.sent = buffer.content; this.draft = buffer.content;
     for (const port of this.ports) port.replace(buffer.content);
     this.changed();
@@ -274,6 +276,29 @@ export class DocumentSync {
     const next = this.commands.then(run); this.commands = next.catch(() => undefined); return next;
   }
   undo() { return this.command(() => this.selective('document.undoOwn', {})); }
+  save() {
+    return this.command(async () => {
+      await this.whenIdle();
+      if (!this.confirmed || this.aside || [...this.ports].some(p => p.composing()) || this.confirmed.diskDigest === undefined) return false;
+      const base = this.confirmed;
+      this.inflight = true; this.changed();
+      try {
+        // A missing acknowledgement retries these exact conditions and identity.
+        // Typing during the save remains pending against this acknowledged buffer.
+        const saved: Buffer = await this.deliver('document.save', { projectId: this.projectId, documentId: this.documentId,
+          expectedVersion: base.version, expectedRevision: base.revision, expectedDiskDigest: base.diskDigest, changeId: identity() });
+        this.accept(saved); this.notice = ''; return true;
+      } catch (error) {
+        if (kindOf(error) === 'stale') this.seenRevision = Math.max(this.seenRevision, base.revision + 1);
+        this.notice = kindOf(error) === 'conflict' ? 'The file changed on disk. Your buffer is kept; review the disk change before saving.'
+          : kindOf(error) === 'stale' ? 'The shared document changed before saving. Read its current version and save again.' : 'The document could not be saved. Your buffer is kept.';
+        return false;
+      } finally {
+        this.inflight = false; this.changed();
+        if (this.pending) this.flush(); else this.settle();
+      }
+    });
+  }
   revert(group: Group) {
     return this.command(async () => {
       for (const changeId of [...group.changeIds].reverse()) if (!await this.selective('document.revert', { targetChangeId: changeId })) return false;

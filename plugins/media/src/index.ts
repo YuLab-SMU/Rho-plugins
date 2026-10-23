@@ -14,7 +14,7 @@ export class Media {
   async describe(ref: ResourceRef) {
     const r = await this.files.resolve(ref);
     requireThat(r.kind === 'media' && typeof r.format === 'object', 'invalid', 'Select declared original media.');
-    return { resource: publicResource(r), original: ref, ...r.format, rendering: 'unavailable' };
+    return { resource: publicResource(r), original: ref, ...r.format, rendering: 'unobserved' };
   }
   async region(ref: ResourceRef, region: any) {
     const r = await this.files.resolve(ref);

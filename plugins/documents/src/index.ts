@@ -36,7 +36,8 @@ export interface PendingSave {
 export type DocumentResult = DocumentState & { receipt?: DocumentReceipt };
 export interface TextEdit { from: number; to: number; insert: string }
 export interface DocumentPaths { resolve(relative: string, missing?: boolean): Promise<{ file: string; relative: string }> }
-export const documentLimits = { maxBufferBytes: 1024 * 1024, maxTotalBytes: 8 * 1024 * 1024, maxUndoBytes: 8 * 1024 * 1024, maxDocuments: 64, maxReceipts: 256, maxHistoryEntries: 256, maxHistoryEdits: 4096 };
+export const documentLimits = { maxBufferBytes: 1024 * 1024, maxTotalBytes: 8 * 1024 * 1024, maxUndoBytes: 8 * 1024 * 1024, maxRecordBytes: 64 * 1024 * 1024, maxTotalRecordBytes: 64 * 1024 * 1024, maxDocuments: 64, maxReceipts: 256, maxHistoryEntries: 256, maxHistoryEdits: 4096 };
+export const summarizeDocument = (doc: DocumentState) => ({ id: doc.id, path: doc.path, version: doc.version, revision: doc.revision ?? doc.version - 1, dirty: doc.dirty, diskDigest: doc.diskDigest, author: doc.author, acknowledgedAt: doc.acknowledgedAt, bytes: Buffer.byteLength(doc.content) });
 export class Documents {
   limits: typeof documentLimits;
   constructor(public root: string, limits: Partial<typeof documentLimits> = {}, private paths?: DocumentPaths) {
@@ -57,20 +58,38 @@ export class Documents {
   }
   async list(): Promise<DocumentState[]> {
     const d = await this.directory();
-    return Promise.all((await fs.readdir(d)).filter(n => /^[a-f0-9]{64}\.json$/.test(n)).map(n => this.read(n.slice(0, -5))));
+    const names = (await fs.readdir(d)).filter(n => /^[a-f0-9]{64}\.json$/.test(n));
+    requireThat(names.length <= this.limits.maxDocuments, 'limit', 'Document count exceeds the selected budget.', { limit: 'maxDocuments', maximum: this.limits.maxDocuments });
+    const records = []; let bytes = 0;
+    for (const name of names) {
+      bytes += (await fs.stat(path.join(d, name))).size;
+      requireThat(bytes <= this.limits.maxTotalRecordBytes, 'limit', 'Retained document state exceeds the aggregate byte budget.', { limit: 'maxTotalRecordBytes', maximum: this.limits.maxTotalRecordBytes });
+      records.push(await this.read(name.slice(0, -5)));
+    }
+    return records;
+  }
+  async summaries() {
+    const names = (await fs.readdir(await this.directory())).filter(n => /^[a-f0-9]{64}\.json$/.test(n));
+    requireThat(names.length <= this.limits.maxDocuments, 'limit', 'Document metadata exceeds the selected count budget.', { limit: 'maxDocuments', maximum: this.limits.maxDocuments });
+    const summaries = [];
+    for (const name of names) summaries.push(summarizeDocument(await this.read(name.slice(0, -5))));
+    return summaries;
   }
   private normalize(doc: DocumentState): DocumentState {
     // Earlier buffers/archives have content versions but no mutation revision.
     const { receipt, ...state } = doc as DocumentResult;
     return { ...state, revision: doc.revision ?? doc.version - 1, receipts: doc.receipts ?? [], retainedFromRevision: doc.retainedFromRevision ?? (doc.revision ?? doc.version - 1) + 1, history: doc.history ?? [], historyRetainedFromVersion: doc.historyRetainedFromVersion ?? doc.version + 1 };
   }
-  async read(id: string) { return this.normalize(await readJson<DocumentState>(await this.record(id))); }
+  async read(id: string) {
+    const file = await this.record(id);
+    requireThat((await fs.stat(file)).size <= this.limits.maxRecordBytes, 'limit', 'Document state exceeds the selected record byte budget. Retained content is unchanged.', { limit: 'maxRecordBytes', maximum: this.limits.maxRecordBytes });
+    return this.normalize(await readJson<DocumentState>(file));
+  }
   async open(relative: string, author: string) {
     requireThat(!relative.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal state is not an editable document.');
     const { file, relative: normalized } = await this.source(relative);
     const id = digest(normalized);
-    const existing = await readJson<DocumentState | null>(await this.record(id), null);
-    if (existing) return this.normalize(existing);
+    try { return await this.read(id); } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
     const all = await this.list();
     requireThat(all.length < this.limits.maxDocuments, 'limit', 'Document count limit reached.', { limit: 'maxDocuments', maximum: this.limits.maxDocuments });
     let content = '';
@@ -96,6 +115,8 @@ export class Documents {
     requireThat(doc.undo.reduce((n, u) => n + Buffer.byteLength(u.content), historyBytes) <= this.limits.maxUndoBytes, 'limit', 'Undo/history text budget reached; acknowledged content is retained.', { limit: 'maxUndoBytes', maximum: this.limits.maxUndoBytes });
     requireThat(doc.history.length <= this.limits.maxHistoryEntries && doc.history.reduce((n, e) => n + e.edits.length, 0) <= this.limits.maxHistoryEdits, 'limit', 'Retained document history exceeds configured limits.');
     requireThat(doc.receipts.length <= this.limits.maxReceipts, 'limit', 'Document receipts exceed configured retention; existing state is retained.', { limit: 'maxReceipts', maximum: this.limits.maxReceipts });
+    const recordBytes = Buffer.byteLength(JSON.stringify(doc)) + 1;
+    requireThat(recordBytes <= this.limits.maxRecordBytes && recordBytes + others.reduce((n, d) => n + Buffer.byteLength(JSON.stringify(d)) + 1, 0) <= this.limits.maxTotalRecordBytes, 'limit', 'Document state byte budget reached; acknowledged content is retained.', { limit: 'documentRecords', maxRecordBytes: this.limits.maxRecordBytes, maxTotalRecordBytes: this.limits.maxTotalRecordBytes });
     await atomicJson(await this.record(doc.id), doc);
   }
   private async current(id: string, expectedVersion: number) {

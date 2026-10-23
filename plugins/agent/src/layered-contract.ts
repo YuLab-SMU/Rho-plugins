@@ -131,3 +131,22 @@ export const layeredSchemas: Record<string, any> = {
     ]
   }
 };
+
+Object.assign(layeredSchemas.McpIndexInput.properties, {
+  owner: { type: 'string', minLength: 1, maxLength: 128 },
+  search: { type: 'string', minLength: 1, maxLength: 128 }
+});
+layeredSchemas.McpIndexInput.required = [];
+layeredSchemas.McpResolveInput.required = ['catalogRef', 'selected'];
+layeredSchemas.McpCallInput.properties.maxBytes = { type: 'integer', minimum: 1024, maximum: 65536 };
+layeredSchemas.McpReadInput = {
+  type: 'object', additionalProperties: false,
+  properties: {
+    ref: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+    path: { type: 'string', maxLength: 1024 },
+    offset: { type: 'integer', minimum: 0 },
+    limit: { type: 'integer', minimum: 1, maximum: 100 },
+    maxBytes: { type: 'integer', minimum: 1024, maximum: 65536 },
+    release: { type: 'boolean' }
+  }, required: ['ref']
+};

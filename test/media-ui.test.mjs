@@ -1,39 +1,35 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readWhole, mediaChunkBytes, mediaByteBudget } from '@rho-workspace/plugin-media/ui';
-
-// The owner refuses a page larger than fileLimits.maxReadBytes (64 KiB) with a limit
-// error, so the renderer must page at that size or larger files never display.
-test('the renderer pages at the owner byte limit and rebuilds the bytes in order', async () => {
-  assert.equal(mediaChunkBytes, 64 * 1024);
-  const total = 150 * 1024;
+import { readWhole } from '@rho-workspace/plugin-media/ui';
+const ref = { id: 'a'.repeat(64), version: 'b'.repeat(64) };
+function source(data, limit = 4096) {
   const calls = [];
-  const bytes = Uint8Array.from({ length: total }, (_, i) => i % 251);
-  const client = {
-    async call(method, input) {
-      calls.push(input.maxBytes);
-      assert.equal(method, 'resource.read');
-      if (input.maxBytes > 64 * 1024) { const error = new Error('limit'); error.error = { kind: 'limit' }; throw error; }
-      const end = Math.min(input.offset + input.maxBytes, total);
-      const slice = Buffer.from(bytes.subarray(input.offset, end)).toString('base64');
-      return { data: slice, more: end < total, nextOffset: end };
-    }
-  };
-  const whole = await readWhole(client, 'project', { id: 'a'.repeat(64), version: 'b'.repeat(64) });
-  assert.equal(whole.length, total);
-  assert.deepEqual(Array.from(whole.subarray(0, 4)), [0, 1, 2, 3]);
-  assert.equal(whole[total - 1], (total - 1) % 251, 'the last byte is the last byte, not a truncation');
-  assert.ok(calls.every(size => size <= 64 * 1024), 'no page exceeds the owner limit');
-  assert.ok(calls.length >= 3, 'the read actually paged');
+  return { calls, async call(method, input) {
+    calls.push(input); assert.equal(method, 'resource.read');
+    const size = input.maxBytes ?? limit; assert.ok(size <= limit);
+    const end = Math.min(data.length, input.offset + size);
+    return { resource: { ...ref, bytes: data.length }, encoding: 'base64', offset: input.offset, nextOffset: end, more: end < data.length, maxReadBytes: limit, data: data.subarray(input.offset, end).toString('base64') };
+  } };
+}
+test('media negotiates a non-default owner page size and preserves every byte', async () => {
+  const bytes = Buffer.from(Array.from({ length: 150 * 1024 }, (_, i) => i % 251)), client = source(bytes);
+  assert.deepEqual(Buffer.from(await readWhole(client, 'p', ref)), bytes);
+  assert.ok(client.calls.length > 30); assert.equal(client.calls[0].maxBytes, undefined);
+  assert.ok(client.calls.slice(1).every(c => c.maxBytes === 4096));
 });
-
-test('a file beyond the display budget is refused instead of silently truncated', async () => {
-  let offset = 0;
-  const client = { async call(_m, input) { const end = input.offset + input.maxBytes; return { data: Buffer.alloc(input.maxBytes).toString('base64'), more: true, nextOffset: end }; } };
-  await assert.rejects(readWhole(client, 'p', { id: 'a'.repeat(64), version: 'b'.repeat(64) }, 32 * 1024), /display budget/);
+test('oversized media is refused after metadata instead of downloading the whole file', async () => {
+  const client = source(Buffer.alloc(100000));
+  await assert.rejects(readWhole(client, 'p', ref, 8192), /display budget/); assert.equal(client.calls.length, 1);
 });
-
-test('a page that does not advance is refused rather than looped forever', async () => {
-  const client = { async call() { return { data: 'AA==', more: true, nextOffset: 0 }; } };
-  await assert.rejects(readWhole(client, 'p', { id: 'a'.repeat(64), version: 'b'.repeat(64) }), /in order/);
+test('media rejects inconsistent progress, changed references and early EOF', async () => {
+  for (const override of [{ nextOffset: 0 }, { offset: 8 }, { resource: { ...ref, version: 'c'.repeat(64), bytes: 9000 } }, { more: false }]) {
+    const client = source(Buffer.alloc(9000)), call = client.call.bind(client);
+    client.call = async (...args) => ({ ...await call(...args), ...override });
+    await assert.rejects(readWhole(client, 'p', ref), /in order|identity/);
+  }
+});
+test('closing a media view cancels paging without another resource request', async () => {
+  const controller = new AbortController(), client = source(Buffer.alloc(9000)), call = client.call.bind(client);
+  client.call = async (...args) => { const page = await call(...args); controller.abort(); return page; };
+  await assert.rejects(readWhole(client, 'p', ref, 10000, undefined, controller.signal), { name: 'AbortError' }); assert.equal(client.calls.length, 1);
 });

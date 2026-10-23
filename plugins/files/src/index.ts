@@ -1,5 +1,6 @@
 import { skillPresentation, presentation, operationPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
+import { verifyFile, snapshotFile, readRange } from './byte-store.js';
 import type { FilePaths } from './paths.js';
 export { ProjectPaths, type FilePaths, type SourceFolder } from './paths.js';
 import * as fs from 'node:fs/promises';
@@ -58,9 +59,7 @@ export class Files {
     requireThat(r, 'not_found', 'Resource is not registered in this project.', { resource: ref });
     requireThat(r.version === ref.version, 'stale', 'Resource version has changed.', { resource: ref, actualVersion: r.version });
     const { file: original } = await this.sourceFile(r.path);
-    requireThat((await fs.stat(original)).size <= this.limits.maxFileBytes, 'limit', 'Source artifact exceeds its file byte budget.', { limit: 'maxFileBytes' });
-    const bytes = await fs.readFile(original);
-    requireThat(digest(bytes) === r.version, 'stale', 'Source artifact changed after resource registration.', { resource: ref });
+    await verifyFile(original, this.limits.maxFileBytes, r.version);
     return r;
   }
   async bytes(ref: ResourceRef) {
@@ -75,10 +74,7 @@ export class Files {
     this.validateDeclaration(declaration);
     const { file: source, relative: normalized } = await this.sourceFile(relative);
     relative = normalized;
-    const stat = await fs.stat(source);
-    requireThat(stat.isFile() && stat.size <= this.limits.maxFileBytes, 'limit', 'Artifact exceeds the configured read limit.', { limit: 'maxFileBytes', maximum: this.limits.maxFileBytes });
-    const data = await fs.readFile(source); const sha = digest(data);
-    requireThat(!expectedDigest || sha === expectedDigest, 'stale', 'File bytes changed before resource registration.');
+    const checked = await verifyFile(source, this.limits.maxFileBytes, expectedDigest), sha = checked.digest;
     const registry = await this.list();
     // Declaration identity is immutable even when equal bytes have different schemas.
     const id = digest(canonical([provenance.operationId, relative, declaration]));
@@ -88,19 +84,20 @@ export class Files {
     const storage = path.relative(this.root, path.join(snapshots, sha));
     try { await fs.access(path.join(snapshots, sha)); } catch (e: any) {
       if (e.code !== 'ENOENT') throw e;
-      requireThat(await this.storedBytes() + data.length <= this.limits.maxArtifactBytes, 'limit', 'Registered artifact storage budget reached; earlier snapshots are retained.', { limit: 'maxArtifactBytes', maximum: this.limits.maxArtifactBytes });
-      await atomicBytes(path.join(snapshots, sha), data);
+      const remaining = this.limits.maxArtifactBytes - await this.storedBytes();
+      requireThat(checked.bytes <= remaining, 'limit', 'Registered artifact storage budget reached; earlier snapshots are retained.', { limit: 'maxArtifactBytes', maximum: this.limits.maxArtifactBytes });
+      await snapshotFile(source, snapshots, Math.min(this.limits.maxFileBytes, remaining), sha);
     }
-    const resource: Resource = { id, version: sha, projectId: this.projectId, owner: 'rho-plugins.' + declaration.kind, kind: declaration.kind, path: relative, bytes: data.length, provenance, coverage, availability, storage, format: declaration.format };
+    const resource: Resource = { id, version: sha, projectId: this.projectId, owner: 'rho-plugins.' + declaration.kind, kind: declaration.kind, path: relative, bytes: checked.bytes, provenance, coverage, availability, storage, format: declaration.format };
     await atomicJson(await this.registryFile(), [...registry.filter(r => r.id !== id), resource]);
     return resource;
   }
   async read(ref: ResourceRef, offset: number, maxBytes = this.limits.maxReadBytes) {
-    requireThat(maxBytes <= this.limits.maxReadBytes && offset >= 0, 'limit', 'Resource read exceeds the configured byte page.', { limit: 'maxReadBytes', maximum: this.limits.maxReadBytes });
-    const { r, data } = await this.bytes(ref);
-    requireThat(offset <= data.length, 'invalid', 'Offset is beyond the resource.');
-    const nextOffset = Math.min(data.length, offset + maxBytes);
-    return { resource: publicResource(r), encoding: 'base64', data: data.subarray(offset, nextOffset).toString('base64'), offset, nextOffset, more: nextOffset < data.length };
+    requireThat(Number.isSafeInteger(maxBytes) && maxBytes > 0 && maxBytes <= this.limits.maxReadBytes && Number.isSafeInteger(offset) && offset >= 0, 'limit', 'Resource read exceeds the configured byte page.', { limit: 'maxReadBytes', maximum: this.limits.maxReadBytes });
+    const r = await this.resolve(ref);
+    const { data, total } = await readRange(await confined(this.root, r.storage), this.limits.maxFileBytes, r.version, offset, maxBytes);
+    const nextOffset = offset + data.length;
+    return { resource: publicResource(r), encoding: 'base64', data: data.toString('base64'), offset, nextOffset, more: nextOffset < total, maxReadBytes: this.limits.maxReadBytes };
   }
 }
 
@@ -145,9 +142,8 @@ export async function verifyArtifacts(root: string, run: any, resources: Resourc
   requireThat(manifest.artifacts.length === declared.length && declared.every(d => manifest.artifacts.some((x: any) => x.path === d.path)), 'condition', 'Completion inventory must cover exactly the selected artifact declarations.');
   for (const item of manifest.artifacts) {
     const file = await confined(await confined(root, run.plan.output), item.path);
-    requireThat((await fs.stat(file)).size <= resources.limits.maxFileBytes, 'limit', 'Manifest entry exceeds the file limit.', { limit: 'maxFileBytes' });
-    const bytes = await fs.readFile(file);
-    requireThat(bytes.length === item.bytes && digest(bytes) === item.sha256, 'condition', 'Manifest entry failed byte verification.', { artifact: item.path });
+    const checked = await verifyFile(file, resources.limits.maxFileBytes);
+    requireThat(checked.bytes === item.bytes && checked.digest === item.sha256, 'condition', 'Manifest entry failed byte verification.', { artifact: item.path });
   }
   const facts = await collectArtifacts(root, run.projectId, run, resources);
   return { ...facts, integrity: { ...facts.integrity, state: 'verified', files: declared.length, checkedAt: now(), manifestDigest: digest(JSON.stringify(manifest)) } };
@@ -165,8 +161,9 @@ const filesSkillContent = [
   '3. artifact.check verifies the artifacts one run declared, against the completion',
   '   inventory the producer wrote. Without a declared inventory there is nothing to',
   '   check, and a missing inventory is not evidence of a missing artifact.',
-  '4. An executed artifact lives under .rho/plugins/runs/...: it is verified with',
-  '   artifact.check and is not a project resource, so resource.register refuses it.',
+  '4. resource.list and artifact.check return registered references for declared run',
+  '   artifacts, including owner-state files. Bind those references directly to a view;',
+  '   resource.register remains limited to ordinary project files.',
   '',
   'Declare a table key and namespace at registration if a later comparison or plot needs',
   'entity identity; an unkeyed table stays readable but has no identity to compare on.'

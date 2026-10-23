@@ -39,3 +39,19 @@ test('buffer and undo limits preserve the last acknowledged state', async () => 
   assert.equal((await d.read(a.id)).content, '中文');
   await assert.rejects(d.open('b.R', 'agent'), { kind: 'limit' });
 });
+
+test('serialized document and aggregate budgets refuse before replacing acknowledged records', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'rho-document-records-'));
+  t.after(async () => { const { rm } = await import('node:fs/promises'); await rm(root, { recursive: true, force: true }); });
+  const owner = new Documents(root);
+  const original = await owner.open('a.md', 'human');
+  const size = Buffer.byteLength(JSON.stringify(original)) + 1;
+  const limited = new Documents(root, { maxRecordBytes: size + 20, maxTotalRecordBytes: size + 20 });
+  await assert.rejects(limited.edit(original.id, 1, [{ from: 0, to: 0, insert: 'next' }], 'a', 'human'), e => e.kind === 'limit');
+  assert.deepEqual(await owner.read(original.id), original);
+  await assert.rejects(limited.open('b.md', 'human'), e => e.kind === 'limit');
+  assert.equal((await owner.list()).length, 1);
+  const tooSmall = new Documents(root, { maxRecordBytes: size - 1 });
+  await assert.rejects(tooSmall.open('a.md', 'human'), e => e.kind === 'limit');
+  assert.deepEqual(await owner.read(original.id), original);
+});
