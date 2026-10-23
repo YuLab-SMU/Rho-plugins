@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
-    "test": "npm run build && node --test test/*.test.mjs",
+    "test": "node --test test/*.test.mjs",
     "prepack": "node -e \"throw new Error('Pack the selected workspace plugin, not the source repository.')\"",
     "test:examples": "node --test examples/real-r-analysis/recipe.test.mjs",
     "pack:plugins": "node scripts/pack.mjs",

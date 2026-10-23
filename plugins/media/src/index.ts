@@ -60,4 +60,4 @@ const mediaSkill = {
 };
 export const plugin = { entryVersion: '1.0', id: 'media', package: '@rho-workspace/plugin-media', version: '0.4.0', requires: ['files'], capabilities: ['media'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...mediaSkill, presentation: skillPresentation }],
-  components: [{ id: 'rho.media', version: '0.2.0', owner: 'rho-plugins.media', bindings: { data: 'media' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };
+  components: [{ id: 'rho.media', version: '0.2.0', owner: 'rho-plugins.media', bindings: { data: 'media' }, ui: './ui', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };
