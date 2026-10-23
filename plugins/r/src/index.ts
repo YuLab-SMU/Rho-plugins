@@ -73,7 +73,61 @@ export class Objects {
     return { resource: publicResource(r), observation: 'exported-snapshot', value: JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(data)) };
   }
 }
-const rSkill = declaredSkill('r.workspace', 'Use capability.list to discover object.read and action.submit. Reads address exported snapshots; native execution is explicit and retains its original operation identity.');
+// Written after running this path by hand and getting each step wrong once. The
+// content is what an Agent needs to succeed first time; the extra fields are what a
+// check can hold to account.
+const rSkillContent = [
+  'Run R in this project. Use capability.list to discover object.read, action.submit and',
+  'artifact.check in this session; reads address exported snapshots and execution is one',
+  'explicit submit that keeps its original operation identity.',
+  '',
+  '1. Find the script. A disk script must match its declared digest; a buffer script is',
+  '   pinned by documentId and version. The bytes sent are the bytes in this request.',
+  '2. Declare what the run produces, not what it might produce: artifacts carry path,',
+  '   kind and format, and their paths stay inside the run output directory.',
+  '3. The output directory exists before R starts and is handed to R as its first',
+  '   argument (commandArgs(trailingOnly = TRUE)[1]). Write there directly; do not build',
+  '   the directory and do not use the working directory for outputs.',
+  '4. If you need artifact verification, declare completion: its filename is relative to',
+  '   the run directory, beside artifacts/, and the producer writes',
+  '   {"schemaVersion":1,"complete":true,"artifacts":[{"path","bytes","sha256"}]}.',
+  '   artifact.check reads that inventory; without it there is nothing to verify.',
+  '5. Read the outcome. A read of the operation reports the current outcome, so no',
+  '   separate observe is required: action.lookup and action.list reconcile a run that',
+  '   finished while nobody was watching. When the Host gives no answer the run stays',
+  '   active and the outcome is genuinely unknown; do not resubmit under a new identity.',
+  '6. Facts belong to the session that submitted the run. Another session looking up the',
+  '   same operationId gets not found, so check artifacts from the submitting session.',
+  '',
+  'An executed artifact lives under owner state (.rho/plugins/runs/...). It is verified',
+  'through artifact.check; it is not a project resource, so resource.register refuses it',
+  'and an Agent-run figure cannot be shown in a view. Do not claim it is presented.'
+].join('\n');
+const rSkill = {
+  ...declaredSkill('r.workspace', rSkillContent),
+  intent: 'Run an R script in this project and keep its produced artifacts.',
+  requires: ['action.submit', 'action.lookup', 'artifact.check'],
+  example: {
+    method: 'action.submit',
+    input: {
+      operationId: 'analysis-1', action: 'r.execute', actionVersion: '0.2.0',
+      input: {
+        script: { kind: 'disk', path: 'R/plot.R', digest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855' },
+        args: [], requirements: [],
+        artifacts: [{ path: 'cars.png', kind: 'file', format: { mimeType: 'image/png' } }],
+        completion: 'inventory.json'
+      }
+    }
+  },
+  failureRecipes: [
+    { kind: 'scope', message: 'Use a project-relative path without parent traversal.', next: 'Address the script and every artifact inside the project; the run output directory is the only writable output location.' },
+    { kind: 'stale', message: 'Saved script bytes changed before submission.', next: 'Re-read the script, take its current digest, and submit once with that digest.' },
+    { kind: 'not_found', message: 'Requested owner record or file is missing.', next: 'Look the operation up from the session that submitted it; facts are keyed by principal.' },
+    { kind: 'condition', message: 'No complete artifact inventory has been declared.', next: 'Declare completion and write that inventory from the producer before calling artifact.check.' },
+    { kind: 'unavailable', message: 'Requested executable is unavailable.', next: 'Select the Core binary and Rscript explicitly, then retry the same operation identity.' }
+  ],
+  verify: { command: 'npm run acceptance:execution', description: 'Submits r.execute for a script that writes an artifact into the directory it is handed, then asserts one Host start, the artifact, its completion inventory and artifact.check.' }
+};
 export const plugin = { entryVersion: '1.0', id: 'r', package: '@rho-workspace/plugin-r', version: '0.4.1', requires: ['files'], capabilities: ['r-objects'], presentation, actions,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...rSkill, presentation: skillPresentation }], components: [{ id: 'rho.object', version: '0.2.0', owner: 'rho-plugins.object', bindings: { data: 'object' }, ui: 'unavailable', presentation: viewPresentation, propsSchema: obj({ title: text }) }] };

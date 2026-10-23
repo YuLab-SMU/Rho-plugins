@@ -70,4 +70,19 @@ export interface OperationDeclaration {
   requires: string[];
   effect: 'read' | 'metadata' | 'document' | 'file' | 'native';
 }
-export interface SkillDeclaration { id: string; version: string; content: string; digest: string; presentation?: import('./presentation.js').EntryPresentation }
+// A Skill is guidance an Agent follows, so the parts that used to live only in prose
+// are also machine-readable: what the intent needs, one payload that is checked
+// against the operation's schema, the failures already seen and their fix, and a
+// command that runs the described path. The extra fields are optional so published
+// Skills stay valid, but a Skill without `verify` is guidance nobody has run.
+export interface SkillFailureRecipe { kind: string; message: string; next: string }
+export interface SkillVerification { command: string; description: string }
+export interface SkillExample { method: string; input: Record<string, unknown> }
+export interface SkillDeclaration {
+  id: string; version: string; content: string; digest: string; presentation?: import('./presentation.js').EntryPresentation;
+  intent?: string;
+  requires?: string[];
+  example?: SkillExample;
+  failureRecipes?: SkillFailureRecipe[];
+  verify?: SkillVerification;
+}
