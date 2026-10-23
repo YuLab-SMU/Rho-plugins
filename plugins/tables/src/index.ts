@@ -89,7 +89,39 @@ export class Tables {
     return publicResource(await this.files.register(relative, { operationId: 'comparison:' + key, inputs: [left, right], transform: options, sources: [a.resource.provenance, b.resource.provenance] }, 'available', { total: rows.length, missingX: rows.filter(r => r.x === null).length, missingY: rows.filter(r => r.y === null).length }, { path: relative, kind: 'table', format }));
   }
 }
-const tablesSkill = declaredSkill('tables.workspace', 'Use capability.list to discover data.page and data.compare. Bind stable resource versions and entity keys; do not infer identity from row position.');
+const tablesSkillContent = [
+  'Read and compare typed tables through stable resource identities.',
+  'Use capability.list to discover data.page, data.compare and resource.register.',
+  '',
+  '1. Register the bytes first with resource.register and keep the returned {id, version}.',
+  '   A version names exact bytes: if the file changed, the version changes and the old',
+  '   pages become stale rather than silently mixing.',
+  '2. data.page takes offset and limit, an optional sort and an optional filter. It never',
+  '   addresses rows by position as identity: identity is the declared entity key, and an',
+  '   unkeyed table is readable but has none, so do not fabricate one.',
+  '3. data.compare joins two keyed tables and returns a new resource with provenance.',
+  '   The join is left, inner or full on declared key columns and namespaces.',
+  '4. Nulls stay nulls. A declared null value is not an empty string, and a comparison',
+  '   that finds no value on one side reports no value, not "absent from the file".',
+  '',
+  'Reads are bounded observations: they never execute R and never change a resource.'
+].join('\n');
+const tablesSkill = {
+  ...declaredSkill('tables.workspace', tablesSkillContent, '1.1'),
+  intent: 'Page and compare a typed table without inventing identity from row order.',
+  requires: ['resource.register', 'data.page', 'data.compare'],
+  example: {
+    method: 'data.page',
+    input: { resource: { id: '4702434457c0465d6dfbb54793b62d327c9aa4f419be2f5fc6cf92c6918eeaf1', version: '3f9d2b0e1a4c5f6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5' }, offset: 0, limit: 50, sort: { column: 'score', direction: 'desc' } }
+  },
+  failureRecipes: [
+    { kind: 'stale', message: 'Resource version changed.', next: 'Register or re-read the current version; save the new {id, version} before paging again.' },
+    { kind: 'limit', message: 'Page size exceeds the configured limit.', next: 'Ask for fewer rows; the earlier rows stay readable.' },
+    { kind: 'invalid', message: 'Filter or sort names an unknown column.', next: 'Use a declared column name from the registration, not a positional index.' },
+    { kind: 'condition', message: 'Compare needs two keyed tables in declared namespaces.', next: 'Declare a key column and namespace at registration before comparing.' }
+  ],
+  verify: { command: 'npm run test:tables', description: 'Declared types keep leading zeros and literal NA, joins retain nulls, namespaces and both input versions, and unkeyed tables never fabricate keys.' }
+};
 export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.2', requires: ['files'], capabilities: ['tables'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...tablesSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

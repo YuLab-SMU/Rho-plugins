@@ -153,7 +153,43 @@ export async function verifyArtifacts(root: string, run: any, resources: Resourc
   return { ...facts, integrity: { ...facts.integrity, state: 'verified', files: declared.length, checkedAt: now(), manifestDigest: digest(JSON.stringify(manifest)) } };
 }
 
-const filesSkill = declaredSkill('files.workspace', 'Use capability.list to discover resource.list, resource.read, resource.register and artifact.check. Keep resource versions and provenance explicit; reads never start a runtime.');
+const filesSkillContent = [
+  'Keep resource identity and provenance explicit: bytes, a version, and where they came from.',
+  'Use capability.list to discover resource.list, resource.read, resource.register and artifact.check.',
+  '',
+  '1. resource.register declares existing bytes with their kind and format, and requires',
+  '   expectedDigest of the current content. The returned {id, version} names those exact',
+  '   bytes; when the file changes, both change and old pages become stale on purpose.',
+  '2. resource.read is a bounded byte read with offset; resource.list reports retained',
+  '   resources with availability. Reads never start a runtime and never execute R.',
+  '3. artifact.check verifies the artifacts one run declared, against the completion',
+  '   inventory the producer wrote. Without a declared inventory there is nothing to',
+  '   check, and a missing inventory is not evidence of a missing artifact.',
+  '4. An executed artifact lives under .rho/plugins/runs/...: it is verified with',
+  '   artifact.check and is not a project resource, so resource.register refuses it.',
+  '',
+  'Declare a table key and namespace at registration if a later comparison or plot needs',
+  'entity identity; an unkeyed table stays readable but has no identity to compare on.'
+].join('\n');
+const filesSkill = {
+  ...declaredSkill('files.workspace', filesSkillContent, '1.1'),
+  intent: 'Register existing bytes with explicit identity, read them bounded, and verify produced artifacts.',
+  requires: ['resource.register', 'resource.read', 'resource.list', 'artifact.check'],
+  example: {
+    method: 'resource.register',
+    input: {
+      expectedDigest: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+      declaration: { path: 'data/points.csv', kind: 'table', format: { encoding: 'csv', columns: [{ name: 'id', type: 'string', nullValues: [] }, { name: 'value', type: 'number', nullValues: ['', 'NA'] }], key: { column: 'id', namespace: 'samples' } } }
+    }
+  },
+  failureRecipes: [
+    { kind: 'stale', message: 'Registered bytes no longer match the declaration digest.', next: 'Re-read the file and register the current digest as a new version; keep the old one for what already cited it.' },
+    { kind: 'scope', message: 'Register a project file outside internal state.', next: 'Register project files only; an artifact under .rho is checked with artifact.check.' },
+    { kind: 'invalid', message: 'Declared columns do not match the file.', next: 'Declare every column with its type and the null values that mean missing.' },
+    { kind: 'condition', message: 'No complete artifact inventory has been declared.', next: 'Have the producer write the completion inventory, then call artifact.check.' }
+  ],
+  verify: { command: 'npm run test:files', description: 'A completion sidecar verifies immutable producer bytes, escaping output declarations are refused, and declared output directories exist before the producer runs.' }
+};
 export const plugin = {
   entryVersion: '1.0',
   id: 'files', package: '@rho-workspace/plugin-files', version: '0.4.1', requires: [], capabilities: ['files'], presentation,

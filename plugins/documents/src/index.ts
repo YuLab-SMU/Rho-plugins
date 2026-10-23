@@ -286,7 +286,53 @@ export class Documents {
   }
 }
 
-const documentSkill = declaredSkill('documents.workspace', 'Use capability.list to discover document.open/read/edit, document.undoOwn, document.revert, document.history, document.change.read, document.save and document.abandonSave. document.undoOwn reverses only the authenticated caller\'s latest complete retained input group; document.revert reverses one active content change named by targetChangeId and may target another author. Both require changeId and expectedRevision. Later overlapping edits are refused without mutation. Read history for authenticated authors and exact before/after text with document.change.read; reads never edit. document.undo retains legacy global undo semantics and must not be used for the human keyboard shortcut. Preserve UTF-16 ranges, expected versions, undo groups and disk write conditions. For acknowledged mutations supply changeId and expectedRevision together, retain the exact original request before sending, and resume only that request after lost delivery. document.read exposes revision, bounded receipts, retainedFromRevision and any pendingSave. document.abandonSave drops only a pending save that can no longer complete (disk matches neither its condition nor its content); it never writes disk and keeps the buffer and undo. A duplicate returns the current buffer and original receipt; the receipt version need not be current. Missing expired receipts do not authorize a new identity or changed conditions. Live editor bindings use {kind:"live-document",documentId}; exact version bindings remain exact.', '1.3');
+const documentSkillContent = [
+  'Edit a document buffer with a stable identity, explicit undo and conditional saves.',
+  'Use capability.list to discover the document operations this session may call.',
+  '',
+  '1. document.open takes a project-relative path and returns the buffer with id, version',
+  '   and revision. Inside the project, never under .rho or .git: internal state is not',
+  '   an editable document.',
+  '2. Writes are conditional. document.edit takes expectedVersion and, when changeId is',
+  '   given, expectedRevision as well: the two travel together, always. A refused edit',
+  '   leaves the buffer and undo untouched; re-read and retry with the current numbers',
+  '   rather than replaying the old request under a new identity.',
+  '3. Undo has three distinct meanings. document.undoOwn reverses only the caller\'s own',
+  '   latest complete retained input group. document.revert reverses one named active',
+  '   change, possibly by another author, through targetChangeId. document.undo is the',
+  '   legacy global form and is not the human keyboard shortcut.',
+  '4. document.save writes disk only when the expected disk digest still matches. After',
+  '   a lost reply the save is pending: read the buffer to see pendingSave, and either',
+  '   resume the same request or abandon it with document.abandonSave, which never',
+  '   writes disk and keeps the buffer.',
+  '5. History is author-scoped. document.history lists retained entries;',
+  '   document.change.read returns exact before and after text for one change.',
+  '',
+  'A browser tab may read and edit but never save: saving is an Agent or operator step.',
+  'Live editor bindings use {kind:"live-document",documentId}; a pinned binding keeps an',
+  'exact version and stays exact.'
+].join('\n');
+const documentSkill = {
+  ...declaredSkill('documents.workspace', documentSkillContent, '1.4'),
+  intent: 'Edit a document buffer conditionally, with explicit undo and save conditions.',
+  requires: ['document.open', 'document.read', 'document.edit', 'document.save', 'document.undoOwn', 'document.revert'],
+  example: {
+    method: 'document.edit',
+    input: {
+      documentId: '5df1e6280c70fa8475dfd6bb1a6165b302443640224c893510eed728058adac0',
+      expectedVersion: 1, expectedRevision: 0, changeId: 'edit-intro-1', undoGroup: 'agent-edit',
+      edits: [{ from: 0, to: 0, insert: '# Draft\n' }]
+    }
+  },
+  failureRecipes: [
+    { kind: 'invalid', message: 'must have property expectedRevision when property changeId is present', next: 'Send changeId and expectedRevision together; read the buffer for its current revision.' },
+    { kind: 'stale', message: 'Document version or revision changed.', next: 'Re-read the document and retry with its current version and revision; keep the original changeId only for the same request.' },
+    { kind: 'scope', message: 'Internal state is not an editable document.', next: 'Edit a project file, not anything under .rho or .git.' },
+    { kind: 'condition', message: 'Resume the original pending save before changing this buffer.', next: 'Read the buffer, then resume that exact save or abandon it with document.abandonSave.' },
+    { kind: 'unauthorized', message: 'Only the Agent or operator saves to disk.', next: 'A tab edits the buffer; ask the Agent to save the document.' }
+  ],
+  verify: { command: 'npm run test:documents', description: 'Author-scoped undo, one-change revert, shared buffers and conditional saves over HTTP.' }
+};
 export const plugin = {
   entryVersion: '1.0',
   id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.2', requires: [], capabilities: ['documents'], presentation,

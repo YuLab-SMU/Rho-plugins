@@ -83,6 +83,8 @@ const rSkillContent = [
   '',
   '1. Find the script. A disk script must match its declared digest; a buffer script is',
   '   pinned by documentId and version. The bytes sent are the bytes in this request.',
+  '   If a body is not certain, protocol.validate { method, body } answers with the edit',
+  '   each problem needs before anything is sent.',
   '2. Declare what the run produces, not what it might produce: artifacts carry path,',
   '   kind and format, and their paths stay inside the run output directory.',
   '3. The output directory exists before R starts and is handed to R as its first',

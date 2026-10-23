@@ -125,3 +125,18 @@ test('the declared output directory and each artifact subdirectory exist before 
   await fs.writeFile(path.join(plan.args[0], 'cars.png'), 'png bytes');
   assert.deepEqual(await fs.readdir(output), ['cars.png', 'nested']);
 });
+
+test('a plot binds one immutable table version and two numeric columns, and never runs code', async () => {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-chart-'));
+  const data = new Files(root, 'test', {}, [declarationValidator]), tables = new Tables(data, { maxPageRows: 3 }), charts = new Charts(tables, { maxPoints: 2 });
+  await fs.writeFile(path.join(root, 'points.csv'), 'sample_id,label,value\n001,a,1\n002,b,2\n003,c,3\n');
+  const r = await data.register('points.csv', { operationId: 'plot' }, 'available', {}, declaration('points.csv'));
+  const plot = await charts.plot(ref(r), 'value', 'value');
+  assert.deepEqual(ref(plot.resource), ref(r), 'the plot names the exact table version it read');
+  assert.deepEqual(plot.spec, { type: 'scatter', entityKey: 'sample_id', namespace: 'samples', x: 'value', y: 'value', missing: 'null' });
+  assert.equal(plot.downsampled, true, 'a point budget downsamples instead of reading everything');
+  assert.ok(plot.points.length <= 2);
+  // The same version keeps plotting; changed bytes make the version stale rather than mixing.
+  await fs.appendFile(path.join(root, 'points.csv'), '004,d,4\n');
+  await assert.rejects(charts.plot(ref(r), 'value', 'value'), { kind: 'stale' });
+});
