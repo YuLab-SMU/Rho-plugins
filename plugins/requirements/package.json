@@ -9,6 +9,7 @@
   },
   "exports": {
     ".": "./dist/index.js",
+    "./operations": "./dist/operations.js",
     "./contract": "./dist/contract.js"
   },
   "files": [
