@@ -46,6 +46,9 @@ export function MediaView(props: MediaViewProps) {
 
   const label = useMemo(() => typeof resource?.version === 'string' ? resource.version.slice(0, 8) : '', [resource?.version]);
 
+  // An inactive view is not reading: it is waiting for its tab to be selected, and saying
+  // "Reading" forever would describe work that never started.
+  if (!props.active && !state) return <p style={message}>{title}{label && <> · version {label}</>} — open this tab to load it.</p>;
   if (!state || 'problem' in state && state.problem === 'reading') return <p style={message}>Reading {title}…</p>;
   if ('problem' in state) return <p style={message} role="status">{state.problem}{label && <> · version {label}</>}</p>;
   return <figure style={{ margin: 0, padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
