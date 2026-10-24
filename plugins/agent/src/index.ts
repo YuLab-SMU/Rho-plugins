@@ -56,7 +56,10 @@ export class AgentContext {
     const retained = await readJson<any>(file, { cursor: 0, entries: [] });
     retained.entries.push({ cursor: ++retained.cursor, principal, method, at: now(), outcome: errorKind ? 'rejected' : 'returned',
       ...(errorKind ? { errorKind } : {}), ...(body.operationId ? { operationId: body.operationId } : {}),
-      ...(body.documentId ? { documentId: body.documentId } : {}), ...(result?.version ? { returnedVersion: result.version } : {}),
+      ...(body.documentId ? { documentId: body.documentId } : method === 'document.open' && result?.id ? { documentId: result.id } : {}), ...(result?.version ? { returnedVersion: result.version } : {}),
+      ...(body.resource?.id && body.resource?.version ? { resource: { id: body.resource.id, version: body.resource.version } } : {}),
+      ...(body.compositionId ? { compositionId: body.compositionId } : {}),
+      ...(method === 'action.output' && ['stdout', 'stderr'].includes(body.stream) ? { stream: body.stream } : {}),
       ...(body.contextId ? { contextId: body.contextId } : {}), ...(body.skillId ? { skillId: body.skillId } : {}), ...(body.annotationId ? { annotationId: body.annotationId } : {}) });
     retained.entries = retained.entries.slice(-this.limits.maxActivities); await atomicJson(file, retained);
   }
@@ -270,7 +273,7 @@ const presentationSkill = {
   ],
   verify: { command: 'npm run test:presenter', description: 'Presentation enhances display within its witness and role, and refuses business feedback or document access.' }
 };
-export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.3', requires: [], capabilities: ['agent-context'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.4', requires: [], capabilities: ['agent-context'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   components: [{ id: 'rho.agent-note', version: '0.2.0', owner: 'rho-plugins.agent', bindings: {}, propsSchema: layeredSchemas.AgentNoteProps, ui: './ui', presentation: { displayName: 'Agent note', description: 'A plain presentation explanation with authenticated author and binding basis.', readOnly: true, runsCode: false } }],
   skills: [{ ...agentSkill, presentation: skillPresentation }, { ...feedbackSkill, presentation: { displayName: 'Business feedback', description: 'Reads original feedback, preserves current human edits and links an explicit reply.' } }, { ...presentationSkill, presentation: { displayName: 'Presentation', description: 'Enhances the assigned visible layout without business feedback or document access.' } }],

@@ -545,6 +545,9 @@ import { objectSchema as obj, text, refSchema as ref } from '@rho-workspace/plug
 const version = { type: 'integer', minimum: 1 };
 const integer = { type: 'integer', minimum: 0 };
 const changeId = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
+const replyResources = { type: 'array', maxItems: 16, uniqueItems: true, items: ref };
+annotationSchemas.message.properties.resources = replyResources;
+annotationSchemas.thread.properties.messages.items.properties.resources = replyResources;
 export const draftSchema = obj({ documentId: text, version });
 export const anchorSchema = { oneOf: [
   obj({ kind: { const: 'document' }, documentId: text, version, from: integer, to: integer }),
@@ -552,7 +555,7 @@ export const anchorSchema = { oneOf: [
 ] };
 export const inputs = {
   'annotation.create': obj({ annotationId: changeId, expectedVersion: { const: 0 }, changeId, anchor: anchorSchema, draft: draftSchema }),
-  'annotation.reply': obj({ annotationId: changeId, expectedVersion: version, changeId, replyTo: text, draft: draftSchema }),
+  'annotation.reply': obj({ annotationId: changeId, expectedVersion: version, changeId, replyTo: text, draft: draftSchema, resources: replyResources }, ['annotationId', 'expectedVersion', 'changeId', 'replyTo', 'draft']),
   'annotation.read': obj({ annotationId: changeId }),
   'annotation.list': obj({})
 };

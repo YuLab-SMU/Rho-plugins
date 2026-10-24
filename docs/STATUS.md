@@ -1,5 +1,16 @@
 # Current status
 
+Updated: 2026-10-24. Annotations 0.4.3 adds an optional table-question UI using the
+single Documents buffer, exact source/row anchors, original submission identities
+and explicit Agent replies. Replies may name up to 16 exact output refs, resolved
+through Files; these author links do not establish domain correctness. UI intent
+retention is capped at 16 KiB; exceeding it preserves the draft and refuses a new
+submission. Assigned task feedback keeps its existing delivery entry. Agent 0.4.4
+adds document-open identity, resource id/version and output-stream metadata to its
+bounded activity log, without tool inputs, code or row/output contents. Owner
+checks pass 67/67, including retry/archive links and bounded metadata after restart.
+Rho owns the composed browser/real-model acceptance; S6 remains human unverified.
+
 Updated: 2026-10-23. Agent now defaults to four tools: owner discovery, selected
 contract resolution, invocation and retained-result reading. Large results have
 scoped references with bounded JSON-pointer and Unicode text pages, explicit

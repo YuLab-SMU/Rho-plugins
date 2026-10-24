@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DocumentEditorView } from '@rho-workspace/plugin-documents/ui';
 import { feedbackComposerPropsSchema } from './contract.js';
+export { TableQuestion } from './ui-table-question.js';
 interface Client { call(method: string, input: any): Promise<any> }
 interface Props {
   view: { id: string; props: Record<string, any>; bindings: Record<string, any> };

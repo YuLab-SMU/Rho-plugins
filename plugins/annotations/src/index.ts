@@ -6,6 +6,7 @@ export const annotationLimits = { maxThreads: 128, maxMessages: 256, maxAnnotati
 export interface AnnotationSources {
   documents?: DocumentSnapshotSource & { anchor(id: string, version: number, from: number, to: number): Promise<any>; read(id: string): Promise<{ version: number }> };
   tables?: { anchor(ref: ResourceRef, entities: string[]): Promise<any> };
+  files?: { resolve(ref: ResourceRef): Promise<unknown> };
 }
 export class Annotations {
   limits: typeof annotationLimits;
@@ -55,9 +56,15 @@ export class Annotations {
         source = await this.sources.tables.anchor(b.anchor.resource, b.anchor.entities);
       }
     }
+    // These are explicit references supplied by the reply author, not inferred
+    // from a later run or matching filename. Resolution checks project containment.
+    if (b.resources?.length) {
+      requireThat(reply && this.sources.files, 'unavailable', 'Reply resources require their Files owner.');
+      for (const resource of b.resources) await this.sources.files!.resolve(resource);
+    }
     const version = (current?.version ?? 0) + 1;
     const receipt = { changeId: b.changeId, requestDigest, version, author, at: now() };
-    const message = { id: digest(canonical([b.annotationId, version, requestDigest])), author, at: receipt.at, draft: { source: draft.source, sha256: draft.sha256, text: draft.code }, ...(reply ? { replyTo: b.replyTo } : {}) };
+    const message = { id: digest(canonical([b.annotationId, version, requestDigest])), author, at: receipt.at, draft: { source: draft.source, sha256: draft.sha256, text: draft.code }, ...(reply ? { replyTo: b.replyTo } : {}), ...(b.resources ? { resources: b.resources.map((r: ResourceRef) => ({ id: r.id, version: r.version })) } : {}) };
     const receipts = [...(current?.receipts ?? []), receipt].slice(-this.limits.maxReceipts);
     const result = { annotationId: b.annotationId, version, anchor: current?.anchor ?? b.anchor, source, messages: [...(current?.messages ?? []), message], receipts, receipt, retainedFromVersion: receipts[0].version };
     const next = [...all.filter(t => t.annotationId !== b.annotationId), result];
@@ -78,6 +85,7 @@ export class Annotations {
       for (const [index, message] of thread.messages.entries()) {
         requireThat(hash(message?.id) && !messages.has(message.id) && typeof message.author === 'string' && typeof message.at === 'string' && message.draft?.source?.kind === 'buffer' && typeof message.draft.text === 'string' && digest(message.draft.text) === message.draft.sha256 && (index === 0 ? !message.replyTo : messages.has(message.replyTo)), 'invalid', 'Invalid archived message or explicit reply relationship.');
         messages.add(message.id);
+        requireThat(message.resources === undefined || index > 0 && Array.isArray(message.resources) && message.resources.length <= 16 && message.resources.every((r: any) => hash(r?.id) && hash(r?.version)) && new Set(message.resources.map((r: any) => r.id + '@' + r.version)).size === message.resources.length, 'invalid', 'Invalid archived reply resource references.');
       }
       requireThat(thread.receipts.length > 0 && thread.receipts.length <= this.limits.maxReceipts && new Set(thread.receipts.map((r: any) => r?.changeId)).size === thread.receipts.length && thread.receipts.every((r: any, index: number) => identity(r?.changeId) && hash(r.requestDigest) && r.version === thread.version - thread.receipts.length + index + 1 && typeof r.author === 'string' && typeof r.at === 'string') && thread.retainedFromVersion === thread.receipts[0].version, 'invalid', 'Invalid archived annotation receipt boundaries.');
       const old = current.find(t => t.annotationId === thread.annotationId);
@@ -101,14 +109,16 @@ const content = [
   '   entity key at that resource version. A submitted message and its source snapshot stay',
   '   exactly as submitted; a later edit does not silently move them.',
   '2. annotation.create submits; annotation.read and annotation.list observe; annotation.reply',
-  '   answers and must name replyTo explicitly. Threads advance conditionally.',
+  '   answers and must name replyTo explicitly. Threads advance conditionally. Include',
+  '   resources: [{id, version}] for outputs that your reply refers to; these are explicit',
+  '   author links, not proof of scientific correctness. Preserve the original anchor.',
   '3. To hand chosen feedback to an agent, build it with context.create and read it back',
   '   through the tool with context.read. Prepared, read and explicitly replied are three',
   '   different facts: reading is not understanding and not completion.',
   '4. Keep the original changeId after a lost acknowledgement and query the receipt boundary;',
   '   never resubmit the same feedback under a new identity.'
 ].join('\n');
-export const plugin = { entryVersion: '1.0', id: 'annotations', package: '@rho-workspace/plugin-annotations', version: '0.4.2', requires: ['documents'], capabilities: ['annotations'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'annotations', package: '@rho-workspace/plugin-annotations', version: '0.4.3', requires: ['documents'], capabilities: ['annotations'], presentation,
   components: [{ id: 'rho.feedback', version: '0.2.0', owner: 'rho-plugins.annotations', bindings: { draft: 'document' }, propsSchema: feedbackComposerPropsSchema, ui: './ui', presentation: { displayName: 'Feedback', description: 'Asks about selected objects and follows original delivery and linked replies.', readOnly: false, runsCode: false } }],
   operations: Object.entries(inputs).map(([method, inputSchema]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, inputSchema, outputSchema: outputs[method as keyof typeof outputs], requires: ['documents'], effect: method === 'annotation.create' || method === 'annotation.reply' ? 'metadata' as const : 'read' as const })),
   skills: [{
