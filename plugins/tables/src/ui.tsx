@@ -17,6 +17,10 @@ export interface TableViewProps {
   selectable?: boolean;
   renderObservation?: (value: TableRenderObservation) => Promise<void>;
   requestFeedback?: () => void;
+  // The channel the host assigns; views of one table version share it (a chart, another table).
+  selectionScope?: { kind: 'shared'; id: string };
+  // That channel as the host last read it, so another view's selection shows here too.
+  sharedSelection?: { version: number; resource: { id: string; version: string } | null; entities: string[] } | null;
 }
 type Column = { name: string; type: 'string' | 'number' | 'boolean' };
 type Filter = { column: string; op: 'eq' | 'lt' | 'gt' | 'isNull'; value?: string | number | boolean | null };
@@ -39,7 +43,7 @@ export function TableView(props: TableViewProps) {
   return <BoundTable key={props.projectId + ':' + resource?.id + ':' + resource?.version} {...props} />;
 }
 
-function BoundTable({ view, projectId, client, selectable = true, active, renderObservation, requestFeedback }: TableViewProps) {
+function BoundTable({ view, projectId, client, selectable = true, active, renderObservation, requestFeedback, selectionScope, sharedSelection }: TableViewProps) {
   const resource = view.bindings.data as { id: string; version: string } | undefined;
   const [meta, setMeta] = useState<{ columns: Column[]; total: number; filtered: number; entityKey: string | null; namespace: string | null } | null>(null);
   const [filter, setFilter] = useState<Filter | null>(null);
@@ -64,7 +68,7 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
   useEffect(() => {
     if (!resource) return;
     let disposed = false;
-    const shared = selectable ? client.call('interaction.selection.read', { projectId, scope: { kind: 'shared', id: view.id } }) : Promise.resolve(null);
+    const shared = selectable ? client.call('interaction.selection.read', { projectId, scope: selectionScope ?? { kind: 'shared', id: view.id } }) : Promise.resolve(null);
     void Promise.all([client.call('data.page', { projectId, resource, offset: 0, limit: pageRows }), shared]).then(([page, picked]) => {
       if (disposed) return;
       if (picked) {
@@ -76,7 +80,17 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
       initial.current = page; setMeta(page); setFailure('');
     }, error => { if (!disposed) setFailure(error?.message ?? 'Rows could not be read.'); });
     return () => { disposed = true; };
-  }, [client, projectId, resource?.id, resource?.version, attempt, selectable, view.id]);
+  }, [client, projectId, resource?.id, resource?.version, attempt, selectable, view.id, selectionScope?.id]);
+  // Another view of this version changed the shared selection: show it on the loaded rows
+  // and keep it for rows loaded later. Grid changes made here are not published again.
+  useEffect(() => {
+    if (!sharedSelection || !meta?.entityKey || sharedSelection.version === selection.current?.version) return;
+    const same = sharedSelection.resource?.id === resource?.id && sharedSelection.resource?.version === resource?.version;
+    entities.current = new Set(same ? sharedSelection.entities : []);
+    selection.current = { version: sharedSelection.version }; selectionConfirmed.current = true;
+    setSelected(entities.current.size);
+    api.current?.forEachNode(node => { if (node.data) node.setSelected(entities.current.has(String(node.data[meta.entityKey!]))); });
+  }, [sharedSelection?.version, meta?.entityKey, resource?.id, resource?.version]);
   const filterRef = useRef(filter); filterRef.current = filter;
 
   const datasource = useMemo<IDatasource>(() => ({
@@ -151,7 +165,7 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
     if (event.node.isSelected()) entities.current.add(id); else entities.current.delete(id);
     const chosen = [...entities.current]; setSelected(chosen.length);
     selectionConfirmed.current = false;
-    const scope = { kind: 'shared', id: view.id };
+    const scope = selectionScope ?? { kind: 'shared', id: view.id };
     selectionQueue.current = selectionQueue.current.catch(() => undefined).then(async () => {
       const current = selection.current ?? await client.call('interaction.selection.read', { projectId, scope });
       const input = { projectId, scope, expectedVersion: current.version, changeId: 'tab-' + globalThis.crypto.randomUUID(), selection: chosen.length ? { resource, entities: chosen } : null };
@@ -163,7 +177,7 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
         }
       }
     }).catch(() => { selection.current = null; setFailure('The shared selection could not be confirmed. Your picked rows are kept here.'); });
-  }, [client, projectId, resource?.id, resource?.version, meta?.entityKey, meta?.namespace, view.id, selectable]);
+  }, [client, projectId, resource?.id, resource?.version, meta?.entityKey, meta?.namespace, view.id, selectable, selectionScope?.id]);
 
   if (!resource) return <p style={{ padding: 12, fontSize: 12 }}>This view has no table.</p>;
   const bar: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', padding: '6px 12px', fontSize: 12, borderBottom: '1px solid var(--border, #e4e7eb)', flexWrap: 'wrap' };
@@ -194,7 +208,7 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
         defaultColDef={{ resizable: true, minWidth: 80, flex: 1 }}
         getRowId={meta?.entityKey && meta.namespace ? p => meta.namespace + ':' + String(p.data[meta.entityKey!]) : undefined}
         rowSelection={meta?.entityKey && meta.namespace && selectable ? { mode: 'multiRow', checkboxes: true, headerCheckbox: false, enableClickSelection: true } : undefined}
-        onModelUpdated={e => { if (meta.entityKey) e.api.forEachNode(node => { if (node.data && entities.current.has(String(node.data[meta.entityKey!]))) node.setSelected(true); }); schedule.current(); }}
+        onModelUpdated={e => { if (meta.entityKey) e.api.forEachNode(node => { if (node.data) { const on = entities.current.has(String(node.data[meta.entityKey!])); if (node.isSelected() !== on) node.setSelected(on); } }); schedule.current(); }}
         onViewportChanged={() => schedule.current()}
         onBodyScroll={() => schedule.current()}
         onSortChanged={() => { loadedPages.current.clear(); schedule.current(); }}

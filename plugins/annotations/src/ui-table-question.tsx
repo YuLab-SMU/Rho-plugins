@@ -11,9 +11,11 @@ interface Props {
   onOpenResource?: (ref: Ref) => void; onRoutedQuestion?: () => void; enabled: boolean;
   // Where the host keeps this view's own controls; without one they stay above the thread.
   headerTarget?: HTMLElement | null;
+  // The selection channel the host assigns to this table (shared by views of its version).
+  selectionScope?: { kind: 'shared'; id: string };
 }
 interface Intent { id: string; path: string; anchor: { kind: 'table'; resource: Ref; entities: string[] }; input?: any; contextId?: string }
-export function TableQuestion({ projectId, viewId, resource, client, principalId, documents, threads, contexts, onOpenResource, onRoutedQuestion, enabled, headerTarget }: Props) {
+export function TableQuestion({ projectId, viewId, resource, client, principalId, documents, threads, contexts, onOpenResource, onRoutedQuestion, enabled, headerTarget, selectionScope }: Props) {
   const key = ['rho-table-question/1', projectId, principalId, viewId, resource.id, resource.version].join(':');
   const [intent, setIntent] = useState<Intent | null>(() => { try { return JSON.parse(sessionStorage.getItem(key) ?? 'null'); } catch { return null; } });
   // Open while the person is writing or retrying; a submitted question folds to one status line
@@ -38,7 +40,7 @@ export function TableQuestion({ projectId, viewId, resource, client, principalId
     if (guard.current) return;
     guard.current = true; setBusy(true); setError('');
     try {
-      const channel = await client.call('interaction.selection.read', { projectId, scope: { kind: 'shared', id: viewId } });
+      const channel = await client.call('interaction.selection.read', { projectId, scope: selectionScope ?? { kind: 'shared', id: viewId } });
       const selected = channel.selection;
       if (!selected?.entities?.length || selected.resource?.id !== resource.id || selected.resource.version !== resource.version) throw new Error('Select rows in this table version before asking.');
       const id = 'q-' + crypto.randomUUID();
