@@ -177,7 +177,7 @@ export class AgentContext {
     for (const name of names) {
       requireThat((await fs.stat(path.join(directory, name))).size <= this.limits.maxContextBytes, 'limit', 'Context observation exceeds byte budget.');
       const context = await readJson<any>(path.join(directory, name));
-      if (context.principal === principal || context.fetchedBy === principal) states.push({ contextId: name.slice(0, -5), preparation: context.preparation ?? 'prepared', delivery: context.delivery, ...(context.fetchedBy ? { fetchedBy: context.fetchedBy, fetchedAt: context.fetchedAt } : {}), responses: await this.responses(context) });
+      if (context.principal === principal || context.fetchedBy === principal) states.push({ contextId: name.slice(0, -5), preparation: context.preparation ?? 'prepared', delivery: context.delivery, ...(context.run?.operationId ? { run: context.run.operationId } : {}), ...(context.fetchedBy ? { fetchedBy: context.fetchedBy, fetchedAt: context.fetchedAt } : {}), responses: await this.responses(context) });
     }
     return states;
   }
