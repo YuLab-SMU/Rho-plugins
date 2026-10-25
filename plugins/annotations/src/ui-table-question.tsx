@@ -1,6 +1,7 @@
 // Optional UI: a table question uses the Documents draft, immutable Annotations thread
 // and Agent context. There is no browser-owned copy of its text or delivery state.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { DocumentEditorView } from '@rho-workspace/plugin-documents/ui';
 type Ref = { id: string; version: string };
 interface Client { call(method: string, input: any): Promise<any> }
@@ -8,12 +9,16 @@ interface Props {
   projectId: string; viewId: string; resource: Ref; client: Client; principalId?: string;
   documents: { id: string; version: number }[]; threads: any[]; contexts: any[];
   onOpenResource?: (ref: Ref) => void; onRoutedQuestion?: () => void; enabled: boolean;
+  // Where the host keeps this view's own controls; without one they stay above the thread.
+  headerTarget?: HTMLElement | null;
 }
 interface Intent { id: string; path: string; anchor: { kind: 'table'; resource: Ref; entities: string[] }; input?: any; contextId?: string }
-export function TableQuestion({ projectId, viewId, resource, client, principalId, documents, threads, contexts, onOpenResource, onRoutedQuestion, enabled }: Props) {
+export function TableQuestion({ projectId, viewId, resource, client, principalId, documents, threads, contexts, onOpenResource, onRoutedQuestion, enabled, headerTarget }: Props) {
   const key = ['rho-table-question/1', projectId, principalId, viewId, resource.id, resource.version].join(':');
   const [intent, setIntent] = useState<Intent | null>(() => { try { return JSON.parse(sessionStorage.getItem(key) ?? 'null'); } catch { return null; } });
-  const [expanded, setExpanded] = useState(!!intent), [documentId, setDocumentId] = useState('');
+  // Open while the person is writing or retrying; a submitted question folds to one status line
+  // so the table it is about keeps the screen.
+  const [expanded, setExpanded] = useState(!!intent && !intent.contextId), [documentId, setDocumentId] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const guard = useRef(false), draft = useRef<{ version: number | null; ready: boolean }>({ version: null, ready: false });
   const [ready, setReady] = useState(false);
@@ -57,16 +62,28 @@ export function TableQuestion({ projectId, viewId, resource, client, principalId
       }
       await client.call('annotation.create', current.input);
       const context = await client.call('context.create', { projectId, changeId: current.id, expectedVersion: 0, annotations: [{ annotationId: current.id, version: 1 }] });
-      remember({ ...current, contextId: context.contextId });
+      remember({ ...current, contextId: context.contextId }); setExpanded(false);
     } catch (e: any) { setError(e.message ?? 'Outcome unknown. Retry keeps the original question identity.'); }
     finally { guard.current = false; setBusy(false); }
   }
   const relevant = threads.filter(t => t.anchor?.kind === 'table' && t.anchor.resource.id === resource.id && t.anchor.resource.version === resource.version);
-  return <section className="table-question" aria-label="Questions about this table version">
-    <div className="table-question-actions">
-      {onRoutedQuestion ? <button onClick={onRoutedQuestion}>Ask assigned Agent about selected rows</button> : enabled && <button disabled={busy} onClick={() => { if (intent && !intent.contextId) setExpanded(v => !v); else void begin(); }}>{intent && !intent.contextId ? 'Question draft' : 'Ask about selected rows'}</button>}
-      {relevant.length > 0 && <button aria-expanded={expanded} onClick={() => setExpanded(v => !v)}>{relevant.length} question{relevant.length === 1 ? '' : 's'} on this version</button>}
-    </div>
+  const facts = (thread: any) => {
+    const original = thread.messages[0], replies = thread.messages.filter((m: any) => m.replyTo === original.id);
+    const context = contexts.find(c => c.responses?.some((r: any) => r.annotationId === thread.annotationId));
+    const answered = replies.some((m: any) => m.author.startsWith('agent:'));
+    const status = answered ? 'Explicit Agent response' : context?.delivery === 'tool-fetched' && context.fetchedBy?.startsWith('agent:') ? 'Fetched by Agent · no linked response yet' : context ? 'Prepared · not fetched by Agent' : 'Question retained · context not confirmed';
+    return { original, replies, context, answered, status };
+  };
+  const latest = relevant.length ? facts(relevant[relevant.length - 1]) : null;
+  const links = (m: any) => m.resources?.map((r: Ref) => <button disabled={!onOpenResource} key={r.id + r.version} onClick={() => onOpenResource?.(r)}>Open linked result · {r.version.slice(0, 8)}</button>);
+  const region = useId(), drafting = !!intent && !intent.contextId;
+  const actions = <div className="table-question-actions" role="group" aria-label="Questions about this table version">
+    {onRoutedQuestion ? <button onClick={onRoutedQuestion}>Ask assigned Agent about selected rows</button> : enabled && <button disabled={busy} aria-expanded={drafting ? expanded : undefined} aria-controls={drafting && expanded ? region : undefined} onClick={() => { if (drafting) setExpanded(v => !v); else void begin(); }}>{drafting ? 'Question draft' : 'Ask about selected rows'}</button>}
+    {latest && <button className="table-question-toggle" aria-expanded={expanded} aria-controls={expanded ? region : undefined} aria-live="polite" onClick={() => setExpanded(v => !v)}>{relevant.length > 1 ? `${relevant.length} questions · ${latest.status}` : latest.status}</button>}
+    {!expanded && latest?.replies.flatMap(links)}
+  </div>;
+  return <section id={region} className="table-question" aria-label="Questions about this table version">
+    {headerTarget ? createPortal(actions, headerTarget) : actions}
     {error && <p role="alert">{error}</p>}
     {expanded && intent && !intent.contextId && <div className="table-question-compose">
       <p>Question about rows {intent.anchor.entities.join(', ')} · original table version retained</p>
@@ -75,15 +92,13 @@ export function TableQuestion({ projectId, viewId, resource, client, principalId
       <span role="status">{intent.input ? 'Original submission retained' : ready ? 'Draft confirmed in workspace' : 'Confirming draft…'}</span>
     </div>}
     {expanded && relevant.map(thread => {
-      const original = thread.messages[0], replies = thread.messages.filter((m: any) => m.replyTo === original.id);
-      const context = contexts.find(c => c.responses?.some((r: any) => r.annotationId === thread.annotationId));
-      const answered = replies.some((m: any) => m.author.startsWith('agent:'));
+      const { original, replies, context, answered, status } = facts(thread);
       return <article key={thread.annotationId} className="table-question-thread">
         <p>{original.draft.text}</p><small>Rows: {thread.anchor.entities.join(', ')}</small>
-        <p role="status">{answered ? 'Explicit Agent response' : context?.delivery === 'tool-fetched' && context.fetchedBy?.startsWith('agent:') ? 'Fetched by Agent · no linked response yet' : context ? 'Prepared · not fetched by Agent' : 'Question retained · context not confirmed'}</p>
+        <p role="status">{status}</p>
         {context && !onRoutedQuestion && !answered && <p>No session is assigned to this layout. The context reference can be passed to an Agent connected to this project.</p>}
         {context && <details><summary>Context reference</summary><code>{context.contextId}</code></details>}
-        {replies.map((m: any) => <div className="table-question-reply" key={m.id}><strong>{m.author.startsWith('agent:') ? 'Agent response' : 'Participant response'}</strong><p>{m.draft.text}</p>{m.resources?.map((r: Ref) => <button disabled={!onOpenResource} key={r.id + r.version} onClick={() => onOpenResource?.(r)}>Open linked result · {r.version.slice(0, 8)}</button>)}</div>)}
+        {replies.map((m: any) => <div className="table-question-reply" key={m.id}><strong>{m.author.startsWith('agent:') ? 'Agent response' : 'Participant response'}</strong><p>{m.draft.text}</p>{links(m)}</div>)}
         <details><summary>Original source and reply references</summary><p>{thread.anchor.resource.id}@{thread.anchor.resource.version}</p><p>{thread.annotationId} · {original.id}</p><p>{thread.sourceStatus?.state ?? 'Source status not observed'}</p></details>
       </article>;
     })}

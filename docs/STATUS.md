@@ -5,7 +5,8 @@ single Documents buffer, exact source/row anchors, original submission identitie
 and explicit Agent replies. Replies may name up to 16 exact output refs, resolved
 through Files; these author links do not establish domain correctness. UI intent
 retention is capped at 16 KiB; exceeding it preserves the draft and refuses a new
-submission. Assigned task feedback keeps its existing delivery entry. Agent 0.4.4
+submission. A submitted question folds to one status control; a host may place the
+question's actions in the view's own header and keep only the open thread below. Assigned task feedback keeps its existing delivery entry. Agent 0.4.4
 adds document-open identity, resource id/version and output-stream metadata to its
 bounded activity log, without tool inputs, code or row/output contents. Owner
 checks pass 67/67, including retry/archive links and bounded metadata after restart.
