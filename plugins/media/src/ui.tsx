@@ -70,8 +70,11 @@ function Figure({ url, title, fit, onSize }: { url: string; title: string; fit: 
   }, [fit]);
   const scale = fit && natural && room ? Math.max(0, Math.min(room.width / natural.width, room.height / natural.height, maxUpscale)) : 1;
   const size = natural ? { width: Math.floor(natural.width * scale), height: Math.floor(natural.height * scale) } : undefined;
+  // A fitted figure that fills less than half its room's height sits at the top, under the
+  // line that names it, instead of floating in the middle of a tall narrow screen.
+  const middle = fit && !(size && room && size.height < room.height / 2);
   return <figure ref={box} data-fit={fit ? 'fit' : 'actual'} {...(fit ? {} : { 'data-scroll-region': '', tabIndex: 0, 'aria-label': title + ' at its own size' })}
-    style={{ margin: 0, padding: 12, flex: 1, minHeight: 0, height: '100%', display: 'flex', alignItems: fit ? 'center' : 'flex-start', justifyContent: fit ? 'center' : 'flex-start', overflow: fit ? 'hidden' : 'auto' }}>
+    style={{ margin: 0, padding: 12, flex: 1, minHeight: 0, height: '100%', display: 'flex', alignItems: middle ? 'center' : 'flex-start', justifyContent: fit ? 'center' : 'flex-start', overflow: fit ? 'hidden' : 'auto' }}>
     <img src={url} alt={title} onLoad={event => { const image = event.currentTarget, next = { width: image.naturalWidth, height: image.naturalHeight }; setNatural(next); onSize?.(next); }}
       style={{ flex: 'none', width: size?.width, height: size?.height, maxWidth: fit ? '100%' : 'none', visibility: natural ? 'visible' : 'hidden' }} />
   </figure>;
