@@ -88,6 +88,21 @@ export function describeSubset(subset: Subset | null) {
   return parts.join(' · ');
 }
 
+// A number in a table cell, as a reader of results expects it: four significant digits,
+// and an exponent wherever the magnitude would otherwise be lost, so 2.93e-18 never reads
+// as 2.93 (Rho H0 audit P0-1). Integers stay exact; the full value is the cell's title.
+const superscript = (n: number) => [...String(n)].map(c => '⁻⁰¹²³⁴⁵⁶⁷⁸⁹'.charAt('-0123456789'.indexOf(c))).join('');
+export function formatCell(value: number) {
+  if (!Number.isFinite(value)) return String(value);
+  const sign = value < 0 ? '\u2212' : '', abs = Math.abs(value);
+  if (Number.isInteger(value) && abs < 1e7) return sign + String(abs);
+  if (abs !== 0 && (abs < 1e-3 || abs >= 1e7)) {
+    const [mantissa, exponent] = abs.toExponential(2).split('e');
+    return `${sign}${mantissa} × 10${superscript(Number(exponent))}`;
+  }
+  return sign + abs.toPrecision(4);
+}
+
 // Numbers keep their precision; only very small or large values use exponents.
 export function formatValue(value: unknown) {
   if (value === null || value === undefined) return 'empty';

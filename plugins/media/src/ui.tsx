@@ -2,7 +2,7 @@
 // exact bound version and shown as an object URL; the renderer never writes and never
 // changes the resource. A file larger than the budget is reported, not truncated
 // silently.
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { readWhole, mediaByteBudget, type UiClient, type Ref } from './ui-bytes.js';
 export { readWhole, mediaByteBudget } from './ui-bytes.js';
 
@@ -14,6 +14,10 @@ export interface MediaViewProps {
   maxReadBytes?: number;
   maxDisplayBytes?: number;
   mimeType?: string;
+  // Fit scales the figure to the room it has, at most twice its own pixels; otherwise it
+  // shows at its own size and scrolls. The host draws the switch and learns the size.
+  fit?: boolean;
+  onSize?: (size: { width: number; height: number }) => void;
 }
 type Loaded = { url: string; bytes: number; mimeType: string } | { problem: string };
 
@@ -51,8 +55,24 @@ export function MediaView(props: MediaViewProps) {
   if (!props.active && !state) return <p style={message}>{title}{label && <> · version {label}</>} — open this tab to load it.</p>;
   if (!state || 'problem' in state && state.problem === 'reading') return <p style={message}>Reading {title}…</p>;
   if ('problem' in state) return <p style={message} role="status">{state.problem}{label && <> · version {label}</>}</p>;
-  return <figure style={{ margin: 0, padding: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
-    <img src={state.url} alt={title} style={{ maxWidth: '100%', height: 'auto', alignSelf: 'flex-start', border: '1px solid var(--hairline, #e4e7eb)' }} />
-    <figcaption style={{ fontSize: 12, color: 'var(--text-muted, #8b939d)' }}>{title} · {(state.bytes / 1024).toFixed(0)} KB{label && <> · version {label}</>}</figcaption>
+  return <Figure url={state.url} title={title} fit={props.fit ?? true} onSize={props.onSize} />;
+}
+
+const maxUpscale = 2;
+function Figure({ url, title, fit, onSize }: { url: string; title: string; fit: boolean; onSize?: MediaViewProps['onSize'] }) {
+  const box = useRef<HTMLDivElement>(null), [natural, setNatural] = useState<{ width: number; height: number } | null>(null);
+  const [room, setRoom] = useState<{ width: number; height: number } | null>(null);
+  useLayoutEffect(() => {
+    const element = box.current; if (!element || !fit) return;
+    const measure = () => setRoom({ width: element.clientWidth - 24, height: element.clientHeight - 24 });
+    measure(); const observer = new ResizeObserver(measure); observer.observe(element);
+    return () => observer.disconnect();
+  }, [fit]);
+  const scale = fit && natural && room ? Math.max(0, Math.min(room.width / natural.width, room.height / natural.height, maxUpscale)) : 1;
+  const size = natural ? { width: Math.floor(natural.width * scale), height: Math.floor(natural.height * scale) } : undefined;
+  return <figure ref={box} data-fit={fit ? 'fit' : 'actual'} {...(fit ? {} : { 'data-scroll-region': '', tabIndex: 0, 'aria-label': title + ' at its own size' })}
+    style={{ margin: 0, padding: 12, flex: 1, minHeight: 0, height: '100%', display: 'flex', alignItems: fit ? 'center' : 'flex-start', justifyContent: fit ? 'center' : 'flex-start', overflow: fit ? 'hidden' : 'auto' }}>
+    <img src={url} alt={title} onLoad={event => { const image = event.currentTarget, next = { width: image.naturalWidth, height: image.naturalHeight }; setNatural(next); onSize?.(next); }}
+      style={{ flex: 'none', width: size?.width, height: size?.height, maxWidth: fit ? '100%' : 'none', visibility: natural ? 'visible' : 'hidden' }} />
   </figure>;
 }

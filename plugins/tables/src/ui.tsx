@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import { AgGridReact } from 'ag-grid-react';
 import { CellStyleModule, InfiniteRowModelModule, ModuleRegistry, RowApiModule, RowSelectionModule, themeQuartz, type ColDef, type GridApi, type IDatasource, type RowSelectedEvent } from 'ag-grid-community';
 import { observeTableDom, canonicalDom, type TableRenderObservation } from './dom-observation.js';
+import { formatCell } from './ui-card-model.js';
 
 ModuleRegistry.registerModules([CellStyleModule, InfiniteRowModelModule, RowApiModule, RowSelectionModule]);
 
@@ -143,7 +144,7 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
   const columnDefs = useMemo<ColDef[]>(() => (meta?.columns ?? []).map(c => ({
     field: c.name, colId: c.name, valueGetter: p => p.data?.[c.name], headerName: c.name + (c.name === meta?.entityKey ? ' · key' : ''), sortable: true,
     type: c.type === 'number' ? 'rightAligned' : undefined,
-    cellRenderer: (p: { value: unknown }) => p.value === null ? <Empty /> : String(p.value ?? ''),
+    cellRenderer: (p: { value: unknown }) => p.value === null ? <Empty /> : typeof p.value === 'number' ? <span title={String(p.value)} style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCell(p.value)}</span> : String(p.value ?? ''),
   })), [meta?.columns, meta?.entityKey]);
 
   const applyFilter = (next: Filter | null) => { loadedPages.current.clear(); setFilter(next); filterRef.current = next; api.current?.purgeInfiniteCache(); };

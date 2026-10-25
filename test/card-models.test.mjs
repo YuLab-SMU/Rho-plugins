@@ -112,6 +112,18 @@ test('table columns pin the key, then highlighted and new columns; values keep N
   assert.equal(tableCard.formatValue(0.0871), '0.0871');
   assert.equal(tableCard.formatValue(5.1e-11), '5.1e-11');
   assert.equal(tableCard.formatValue(2627), '2,627');
+  // A grid cell never cuts a number before its exponent (Rho H0 audit P0-1).
+  assert.equal(tableCard.formatCell(2.93189659247788e-18), '2.93 × 10⁻¹⁸');
+  assert.equal(tableCard.formatCell(3.149109e-11), '3.15 × 10⁻¹¹');
+  assert.equal(tableCard.formatCell(2.428703), '2.429');
+  assert.equal(tableCard.formatCell(-0.2423), '\u22120.2423');
+  assert.equal(tableCard.formatCell(116), '116');
+  assert.equal(tableCard.formatCell(0.005198), '0.005198');
+  assert.equal(tableCard.formatCell(12345678.9), '1.23 × 10⁷');
+  for (const value of [2.93189659247788e-18, 0.7577, 1.840179, -146.995, 6.656, 0.0112, 21.22]) {
+    const shown = tableCard.formatCell(value).replace('\u2212', '-').replace(/ × 10([⁻⁰¹²³⁴⁵⁶⁷⁸⁹]+)/, (_, e) => 'e' + [...e].map(c => '-0123456789'['⁻⁰¹²³⁴⁵⁶⁷⁸⁹'.indexOf(c)]).join(''));
+    assert.ok(Math.abs(Number(shown) - value) / Math.abs(value) <= 0.005, `${value} shown as ${shown}`);
+  }
   assert.equal(tableCard.hiddenNote('card', 'rows', { total: 2627, inSubset: 3, shownRows: 3, columns: 8, shownColumns: 3 }), 'Not shown: 2,624 rows outside this subset · 5 more columns');
   assert.equal(tableCard.hiddenNote('summary', '', { total: 40, shownRows: 12, columns: 4, shownColumns: 4 }), 'Not shown: 28 more rows');
   assert.equal(tableCard.hiddenNote('card', 'count', { total: 1, columns: 1 }), 'Not shown: all rows');
