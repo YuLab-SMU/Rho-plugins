@@ -139,6 +139,10 @@ export const operationContracts = {
         "actionVersion": {
           "const": "0.2.0"
         },
+        "repairOf": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+        },
         "input": {
           "type": "object",
           "additionalProperties": false,
@@ -636,6 +640,10 @@ export const operationContracts = {
         },
         "cancellation": {
           "type": "object"
+        },
+        "repairOf": {
+          "type": "string",
+          "minLength": 1
         }
       },
       "required": [
