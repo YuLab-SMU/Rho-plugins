@@ -23,6 +23,8 @@ export interface EditorViewProps {
   saveable?: boolean;
   appearance?: 'document' | 'message';
   onDraftState?: (state: { documentId: string; version: number | null; ready: boolean }) => void;
+  // True when this session may prepare context for the Agent (context.create).
+  askable?: boolean;
 }
 
 const remote = Annotation.define<boolean>();
@@ -70,6 +72,7 @@ const styles = `
 .rho-doc-changes .what{color:var(--text-muted,#5f6873)}
 .rho-doc-changes .row{display:flex;gap:6px}
 .rho-doc-highlight{display:flex;flex-direction:row;gap:6px;align-items:center;padding:0 12px;font-size:12px;font-weight:400;white-space:nowrap;color:var(--text-muted,#545e63)}
+.rho-doc-problem{font-size:12px;color:var(--color-failed,#b23b37);white-space:normal}
 .rho-doc-highlight input{width:14px;height:14px;min-width:14px;min-height:0;margin:0;padding:0;accent-color:var(--accent,#3a68f0)}
 .rho-doc-changes pre{margin:4px 0 0;white-space:pre-wrap;font-family:var(--font-mono,ui-monospace,monospace);font-variant-ligatures:none;font-size:11px;max-height:160px;overflow:auto;padding:6px;border-radius:4px;background:var(--surface,#fff)}
 .rho-doc-changes del{background:rgba(207,34,46,.12);text-decoration:none}
@@ -138,7 +141,7 @@ function PinnedDocumentView({ view, projectId, client, documentId, version }: Ed
   </div>;
 }
 
-function LiveDocumentView({ view, projectId, client, active, documentVersion, documentRevision, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, saveable = false, appearance = 'document', onDraftState }: EditorViewProps) {
+function LiveDocumentView({ view, projectId, client, active, documentVersion, documentRevision, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, saveable = false, appearance = 'document', onDraftState, askable = false }: EditorViewProps) {
   injectStyles();
   const binding = view.bindings.document as { documentId: string; version?: number; kind?: string } | undefined;
   const documentId = binding?.documentId ?? '';
@@ -148,6 +151,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
   const [showAgent, setShowAgent] = useState(true);
   const [failure, setFailure] = useState('');
   const [composing, setComposing] = useState(false);
+  const [range, setRange] = useState<{ from: number; to: number; lines: [number, number] } | null>(null);
   const held = useMemo(() => acquire(client, projectId, documentId, principalId, maxUnconfirmedBytes), [client, projectId, documentId, principalId, maxUnconfirmedBytes]);
   const sync = held.sync;
   const draftStateCallback = useRef(onDraftState);
@@ -175,6 +179,10 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
       ]),
       EditorView.domEventHandlers({ compositionstart: () => { draftStateCallback.current?.({ documentId, version: sync.confirmed?.version ?? null, ready: false }); setComposing(true); return false; }, compositionend: () => { setComposing(false); setTimeout(() => sync.flush(), 0); return false; } }),
       EditorView.updateListener.of(update => {
+        if (update.selectionSet || update.docChanged) {
+          const main = update.state.selection.main;
+          setRange(main.empty ? null : { from: main.from, to: main.to, lines: [update.state.doc.lineAt(main.from).number, update.state.doc.lineAt(main.to).number] });
+        }
         if (update.docChanged && !update.transactions.some(t => t.annotation(remote))) {
           draftStateCallback.current?.({ documentId, version: sync.confirmed?.version ?? null, ready: false });
           sync.local(port);
@@ -219,10 +227,39 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
       <button onClick={() => void navigator.clipboard?.writeText(sync.aside!.text)}>Copy them</button><button onClick={() => sync.discardAside()}>Dismiss</button></div>}
     {sync.notice && <div className="rho-doc-band" role="status"><span className="rho-doc-fill">{sync.notice}</span></div>}
     <div className="rho-doc-editor" ref={host} />
-    {active && headerTarget && createPortal(<>{save}<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Claude Code's edits</label></>, headerTarget)}
+    {active && headerTarget && createPortal(<>{save}{askable && appearance === 'document' && <AskAboutSelection client={client} projectId={projectId} documentId={documentId} range={range} version={sync.confirmed && !sync.busy && !sync.aside && !composing && sync.sent === sync.confirmed.content ? sync.confirmed.version : null} />}<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Claude Code's edits</label></>, headerTarget)}
     {active && !headerTarget && save && <div className="rho-doc-band">{save}</div>}
     {active && (contextTarget ? createPortal(changes, contextTarget) : contextTarget === null ? null : <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border,#e4e7eb)', maxHeight: '40%', overflow: 'auto' }}>{changes}</div>)}
   </div>;
+}
+
+// Handing a selection to the Agent: the exact UTF-16 range of one buffer version, which the
+// owner freezes with its path and whether that text is saved. Only settled text is handed
+// over; a selection the buffer has since moved past is refused, and the person selects again.
+function AskAboutSelection({ client, projectId, documentId, range, version }: { client: UiClient; projectId: string; documentId: string; range: { from: number; to: number; lines: [number, number] } | null; version: number | null }) {
+  const [prepared, setPrepared] = useState<{ request: string; unsaved: boolean } | null>(null), [problem, setProblem] = useState(''), [busy, setBusy] = useState(false), [copied, setCopied] = useState(false);
+  useEffect(() => { setPrepared(null); setCopied(false); setProblem(''); }, [range?.from, range?.to, version]);
+  if (!range && !prepared) return null;
+  async function ask() {
+    if (!range || version === null) return;
+    setBusy(true); setProblem('');
+    try {
+      const context = await client.call('context.create', { projectId, changeId: 'select-' + globalThis.crypto.randomUUID(), expectedVersion: 0, document: { documentId, version, from: range.from, to: range.to } });
+      const source = context.document.source as { path: string; version: number; dirty: boolean };
+      const lines = range.lines[0] === range.lines[1] ? `line ${range.lines[0]}` : `lines ${range.lines[0]}–${range.lines[1]}`;
+      setPrepared({ unsaved: source.dirty, request: `Read Rho context ${context.contextId}: ${lines} of ${source.path} at buffer version ${source.version}, ${source.dirty ? 'unsaved text that differs from the file on disk' : 'the same as the saved file'}.` });
+    } catch (error: any) {
+      setProblem(error?.error?.kind === 'stale' || error?.kind === 'stale' ? 'The text changed after you selected it. Select it again.' : error?.error?.message ?? error?.message ?? 'The selection could not be prepared.');
+    } finally { setBusy(false); }
+  }
+  async function copy() {
+    if (!prepared) return;
+    try { await navigator.clipboard.writeText(prepared.request); setCopied(true); } catch { setProblem('Could not copy. Try again.'); }
+  }
+  return <>{prepared
+    ? <button type="button" onClick={copy} title={prepared.unsaved ? 'The selected text is unsaved' : 'The selected text matches the saved file'}>{copied ? 'Copied' : 'Copy request for the Agent'}</button>
+    : <button type="button" disabled={busy || version === null} title={version === null ? 'Wait until your typing is saved to the shared buffer' : undefined} onClick={ask}>{busy ? 'Preparing…' : 'Ask the Agent about this'}</button>}
+    {problem && <span role="alert" className="rho-doc-problem">{problem}</span>}</>;
 }
 
 function groupsActive(buffer: NonNullable<DocumentSync['confirmed']>) {
