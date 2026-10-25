@@ -45,6 +45,7 @@ test('browser input is sent once per identity, lost replies resend the same requ
   const docs = new Documents(root), opened = await docs.open('a.R', 'agent:a');
   const c = client(docs, 'browser:me', { 'document.edit': ['lost-reply'] });
   const sync = new DocumentSync(c, 'p', opened.id, 'browser:me'), view = port();
+  const unconfirmed = []; sync.subscribe(() => unconfirmed.push(sync.unconfirmed));
   sync.attach(view); await sync.load();
   assert.equal(view.text(), 'x <- 1\n');
   view.setComposing(true); view.type('x <- 1\n中'); sync.local(view);
@@ -55,6 +56,8 @@ test('browser input is sent once per identity, lost replies resend the same requ
   assert.equal(edits.length, 2); assert.deepEqual(edits[0].b, edits[1].b, 'the lost reply is retried with the identical request');
   assert.equal((await docs.read(opened.id)).content, 'x <- 1\n中');
   assert.equal(sync.confirmed.version, 2);
+  // While the reply is missing the change is said to be unconfirmed; the owner's answer clears it.
+  assert.ok(unconfirmed.includes(true)); assert.equal(sync.unconfirmed, false);
 });
 
 test('a stale edit is kept aside and the acknowledged buffer is shown; undo touches only own edits', async () => {

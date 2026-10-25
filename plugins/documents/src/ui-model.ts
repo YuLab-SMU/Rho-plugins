@@ -111,6 +111,9 @@ export class DocumentSync {
   sent = '';
   aside: { text: string; at: string } | null = null;
   notice = '';
+  // A change the owner has not confirmed because its reply did not arrive: it stays here and is
+  // sent again unchanged, so it is applied once, but until then it is not in the shared buffer.
+  unconfirmed = false;
   stateVersion = 0;
   private ports = new Set<Port>();
   private source: Port | null = null;
@@ -167,9 +170,10 @@ export class DocumentSync {
   // Retain the exact request; a lost reply resends it unchanged.
   private async deliver(method: string, input: any) {
     for (let attempt = 0; ; attempt++) {
-      try { return await this.client.call(method, input); }
+      try { const result = await this.client.call(method, input); if (this.unconfirmed) { this.unconfirmed = false; this.changed(); } return result; }
       catch (error) {
-        if (kindOf(error) !== undefined) throw error;
+        if (kindOf(error) !== undefined) { if (this.unconfirmed) { this.unconfirmed = false; this.changed(); } throw error; }
+        if (!this.unconfirmed) { this.unconfirmed = true; this.changed(); }
         await new Promise(resolve => setTimeout(resolve, this.retryDelays[Math.min(attempt, this.retryDelays.length - 1)]));
       }
     }
