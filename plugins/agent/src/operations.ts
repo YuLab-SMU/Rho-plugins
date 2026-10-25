@@ -82,6 +82,19 @@ const legacyOperationContracts = {
           "minItems": 1,
           "maxItems": 128
         },
+        "run": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "operationId": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9._:@-]{1,128}$"
+            }
+          },
+          "required": [
+            "operationId"
+          ]
+        },
         "changeId": {
           "type": "string",
           "pattern": "^[A-Za-z0-9._:@-]{1,128}$"

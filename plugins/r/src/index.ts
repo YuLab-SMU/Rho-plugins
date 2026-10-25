@@ -110,7 +110,7 @@ const rSkillContent = [
   'and an Agent-run figure cannot be shown in a view. Do not claim it is presented.'
 ].join('\n');
 const rSkill = {
-  ...declaredSkill('r.workspace', rSkillContent),
+  ...declaredSkill('r.workspace', rSkillContent, '1.1'),
   intent: 'Run an R script in this project and keep its produced artifacts.',
   requires: ['action.submit', 'action.lookup', 'artifact.check'],
   example: {

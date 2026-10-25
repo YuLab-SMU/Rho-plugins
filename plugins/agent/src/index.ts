@@ -11,6 +11,16 @@ export { NativeActivity, nativeActivityLimits } from './native.js';
 export { FeedbackDelivery, agentDeliveryLimits } from './delivery.js';
 export { retainAgentIntent } from './agent-intents.js';
 
+// One run as the host read it for a context. The error text is the end of the retained
+// stderr: `from` is its byte offset, `retainedBytes` how much Core kept, `truncated` whether
+// Core dropped output it observed.
+export interface RunContext {
+  operationId: string; action: string; actionVersion: string; execution: string; acceptedAt: string; submittedBy: string;
+  exit: string | null; stop: { state: string; by: string } | null; repairOf: string | null;
+  error: { stream: 'stderr'; text: string; from: number; retainedBytes: number; observedBytes: number; truncated: boolean } | null;
+  script: { kind: string; path?: string; digest?: string; documentId?: string; version?: number } | null;
+  args: string[]; declared: Array<{ path: string; present: boolean; bytes: number }>; output: string | null;
+}
 export const agentLimits = { maxContexts: 128, maxBindings: 64, maxActivities: 256, maxContextBytes: 1024 * 1024 };
 export interface ContextSources {
   documents?: DocumentSnapshotSource;
@@ -63,8 +73,11 @@ export class AgentContext {
       ...(body.contextId ? { contextId: body.contextId } : {}), ...(body.skillId ? { skillId: body.skillId } : {}), ...(body.annotationId ? { annotationId: body.annotationId } : {}) });
     retained.entries = retained.entries.slice(-this.limits.maxActivities); await atomicJson(file, retained);
   }
-  async createContext(b: any, principal: string) {
-    requireThat(b.document || b.resource || b.annotations?.length, 'invalid', 'Choose explicit source objects or submitted feedback.');
+  // A run is not this owner's to read: the host resolves its facts (state, exit, the end
+  // of its error stream, the files it was asked to write) and they are frozen here as given.
+  async createContext(b: any, principal: string, facts: { run?: RunContext } = {}) {
+    requireThat(b.document || b.resource || b.annotations?.length || b.run, 'invalid', 'Choose explicit source objects, a run or submitted feedback.');
+    requireThat(!b.run || facts.run?.operationId === b.run.operationId, 'unavailable', "The host did not supply this run's facts.");
     const directory = await stateDirectory(this.root, '.rho/rho/contexts');
     const requestDigest = digest(canonical({ b, principal }));
     const stableId = b.changeId ? digest(canonical([principal, b.changeId])) : null;
@@ -116,6 +129,7 @@ export class AgentContext {
         context.resource = { reference: b.resource, metadata: page.resource, ...content, offset: page.offset, nextOffset: page.nextOffset, more: page.more };
       }
     }
+    if (b.run) context.run = facts.run;
     requireThat(!b.region || b.resource, 'invalid', 'Coordinate context requires a media resource.');
     const contextId = stableId ?? digest(canonical(context));
     requireThat(Buffer.byteLength(JSON.stringify(context)) <= this.limits.maxContextBytes, 'limit', 'Context package exceeds its byte budget.', { limit: 'maxContextBytes' });
@@ -183,9 +197,10 @@ const agentSkillContent = [
   'Prepare exact context and work through one registered native binding.',
   'Use capability.list to discover context.create, context.read and the binding operations.',
   '',
-  '1. context.create freezes an exact source snapshot: a document range at one version or a',
-  '   table selection at one resource version. It prepares facts; it does not decide what',
-  '   they mean.',
+  '1. context.create freezes an exact source snapshot: a document range at one version, a',
+  '   table selection at one resource version, or one run (its state, exit, the end of',
+  '   its stderr, its script and declared files). It prepares facts; it does not decide',
+  '   what they mean.',
   '2. Fetch that context with context.read and use the tool result as your context. Reading',
   '   is not understanding, and neither is task completion.',
   '3. binding.open attaches one native session to one task and role. The attachment names',
@@ -195,7 +210,7 @@ const agentSkillContent = [
   '   opening a second binding under a new identity.'
 ].join('\n');
 const agentSkill = {
-  ...declaredSkill('agent.workspace', agentSkillContent, '1.1'),
+  ...declaredSkill('agent.workspace', agentSkillContent, '1.2'),
   intent: 'Give a native session exact prepared context and keep its binding identity.',
   requires: ['context.create', 'context.read', 'binding.open', 'binding.list', 'binding.activity'],
   example: { method: 'context.create', input: { document: { documentId: '5df1e6280c70fa8475dfd6bb1a6165b302443640224c893510eed728058adac0', version: 1, from: 0, to: 12 } } },
