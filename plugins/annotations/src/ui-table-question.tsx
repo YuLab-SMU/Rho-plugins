@@ -18,11 +18,16 @@ interface Intent { id: string; path: string; anchor: { kind: 'table'; resource: 
 // The Agent learns of a question when the person hands it over: MCP gives Rho no way to push
 // one into a conversation. The request names the context by its identity, which is the Agent's
 // to read, so the identity goes to the clipboard rather than onto the page.
-function CopyRequest({ request }: { request: string }) {
+// Contexts are listed per browser session: a question sent from another session has none here,
+// so copying prepares this session's context first, under the question's own changeId.
+function CopyRequest({ contextId, prepare }: { contextId?: string; prepare: () => Promise<string> }) {
   const [copied, setCopied] = useState(false), [problem, setProblem] = useState('');
   async function copy() {
     setProblem('');
-    try { await navigator.clipboard.writeText(request); setCopied(true); } catch { setProblem('Could not copy. Try again.'); }
+    try {
+      const id = contextId ?? await prepare();
+      await navigator.clipboard.writeText(`Answer my question in Rho: read context ${id}. It holds the table version, the rows I asked about and my question. Reply to it with annotation.reply, and link any new result you make.`); setCopied(true);
+    } catch { setProblem('Could not copy. Try again.'); }
   }
   return <p className="table-question-handoff"><button onClick={copy}>{copied ? 'Copied' : 'Copy request for the Agent'}</button>{problem && <span role="alert"> {problem}</span>}</p>;
 }
@@ -104,12 +109,13 @@ export function TableQuestion({ projectId, viewId, resource, client, principalId
       <button disabled={busy || !intent.input && !ready} onClick={() => void send()}>{busy ? 'Submitting…' : intent.input ? 'Retry original question' : 'Send question'}</button>
       <span role="status">{intent.input ? 'Original submission retained' : ready ? 'Draft confirmed in workspace' : 'Confirming draft…'}</span>
     </div>}
-    {expanded && relevant.map(thread => {
+    {/* Newest first, so the first thread is the one the toggle's status names. */}
+    {expanded && [...relevant].reverse().map(thread => {
       const { original, replies, context, answered, status } = facts(thread);
       return <article key={thread.annotationId} className="table-question-thread">
         <p>{original.draft.text}</p><small>Rows: {thread.anchor.entities.join(', ')}</small>
         <p role="status">{status}</p>
-        {context && !onRoutedQuestion && !answered && <CopyRequest request={`Answer my question in Rho: read context ${context.contextId}. It holds the table version, the rows I asked about and my question. Reply to it with annotation.reply, and link any new result you make.`} />}
+        {!onRoutedQuestion && !answered && <CopyRequest contextId={context?.contextId} prepare={async () => (await client.call('context.create', { projectId, changeId: thread.version === 1 ? thread.annotationId : thread.annotationId + '@' + thread.version, expectedVersion: 0, annotations: [{ annotationId: thread.annotationId, version: thread.version }] })).contextId} />}
         {replies.map((m: any) => <div className="table-question-reply" key={m.id}><strong>{m.author.startsWith('agent:') ? 'Agent response' : 'Participant response'}</strong><p>{m.draft.text}</p>{links(m)}</div>)}
         <details><summary>Original source and reply references</summary><p>{thread.anchor.resource.id}@{thread.anchor.resource.version}</p><p>{thread.annotationId} · {original.id}</p><p>{thread.sourceStatus?.state ?? 'Source status not observed'}</p></details>
       </article>;

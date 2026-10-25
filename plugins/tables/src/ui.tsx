@@ -2,11 +2,11 @@
 // the exact bound table version; the shell supplies the scoped client.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { AgGridReact } from 'ag-grid-react';
-import { CellStyleModule, InfiniteRowModelModule, ModuleRegistry, RowApiModule, RowSelectionModule, themeQuartz, type ColDef, type GridApi, type IDatasource, type RowSelectedEvent } from 'ag-grid-community';
+import { CellStyleModule, ColumnAutoSizeModule, InfiniteRowModelModule, ModuleRegistry, RowApiModule, RowSelectionModule, themeQuartz, type ColDef, type GridApi, type IDatasource, type RowSelectedEvent } from 'ag-grid-community';
 import { observeTableDom, canonicalDom, type TableRenderObservation } from './dom-observation.js';
 import { formatCell } from './ui-card-model.js';
 
-ModuleRegistry.registerModules([CellStyleModule, InfiniteRowModelModule, RowApiModule, RowSelectionModule]);
+ModuleRegistry.registerModules([CellStyleModule, ColumnAutoSizeModule, InfiniteRowModelModule, RowApiModule, RowSelectionModule]);
 
 export interface UiClient { call(method: string, input: any): Promise<any> }
 export interface TableViewProps {
@@ -140,6 +140,16 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
     // Callback may change with a snapshot without resetting owner input/state.
   }, [!!renderObservation, resource?.id, resource?.version]);
   useEffect(() => { lastObservation.current = ''; schedule.current(); }, [active, renderObservation, meta]);
+  // A grid drawn in a hidden tab measured nothing; it sizes its columns again once seen.
+  // Columns wider than the view fade at the right edge until the last one is reached: an
+  // overlay scrollbar would hide that the last columns (p values among them) are there at all.
+  const [more, setMore] = useState(false);
+  const measureMore = () => { const v = root.current?.querySelector<HTMLElement>('.ag-body-horizontal-scroll-viewport'); setMore(!!v && v.scrollLeft + v.clientWidth < v.scrollWidth - 1); };
+  const fitColumns = () => requestAnimationFrame(() => {
+    if (!root.current?.offsetWidth || !api.current) return;
+    api.current.autoSizeAllColumns(); requestAnimationFrame(measureMore);
+  });
+  useEffect(() => { if (active) fitColumns(); }, [active]);
 
   const columnDefs = useMemo<ColDef[]>(() => (meta?.columns ?? []).map(c => ({
     field: c.name, colId: c.name, valueGetter: p => p.data?.[c.name], headerName: c.name + (c.name === meta?.entityKey ? ' · key' : ''), sortable: true,
@@ -204,14 +214,17 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
     </div>
     {failure && <div role="alert" style={{ ...bar, color: 'var(--danger, #cf222e)' }}>{failure}<button style={control} onClick={() => { setAttempt(n => n + 1); api.current?.purgeInfiniteCache(); }}>Try again</button></div>}
     {observationFailure && <div role="status" style={bar}>{observationFailure}</div>}
-    <div style={{ flex: 1, minHeight: 0 }}>
+    <div style={{ flex: 1, minHeight: 0, maskImage: more ? 'linear-gradient(to right, #000 calc(100% - 48px), transparent)' : undefined }}>
       {meta && <AgGridReact theme={theme} rowModelType="infinite" datasource={datasource} cacheBlockSize={pageRows} maxBlocksInCache={5} suppressMultiSort maxConcurrentDatasourceRequests={1} columnDefs={columnDefs}
-        defaultColDef={{ resizable: true, minWidth: 80, flex: 1 }}
+        // Columns take their contents' width, headers included, so a number is never cut to
+        // an ellipsis that hides its exponent; a wide table scrolls sideways instead.
+        defaultColDef={{ resizable: true, minWidth: 64 }} suppressColumnVirtualisation={(meta?.columns.length ?? 0) <= 40}
+        onFirstDataRendered={fitColumns}
         getRowId={meta?.entityKey && meta.namespace ? p => meta.namespace + ':' + String(p.data[meta.entityKey!]) : undefined}
         rowSelection={meta?.entityKey && meta.namespace && selectable ? { mode: 'multiRow', checkboxes: true, headerCheckbox: false, enableClickSelection: true } : undefined}
         onModelUpdated={e => { if (meta.entityKey) e.api.forEachNode(node => { if (node.data) { const on = entities.current.has(String(node.data[meta.entityKey!])); if (node.isSelected() !== on) node.setSelected(on); } }); schedule.current(); }}
         onViewportChanged={() => schedule.current()}
-        onBodyScroll={() => schedule.current()}
+        onBodyScroll={e => { schedule.current(); if (e.direction === 'horizontal') measureMore(); }}
         onSortChanged={() => { loadedPages.current.clear(); schedule.current(); }}
         onColumnResized={() => schedule.current()}
         onRowSelected={onSelection}
