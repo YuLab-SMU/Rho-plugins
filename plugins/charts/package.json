@@ -9,7 +9,8 @@
   },
   "exports": {
     ".": "./dist/index.js",
-    "./operations": "./dist/operations.js"
+    "./operations": "./dist/operations.js",
+    "./ui": "./dist/ui.js"
   },
   "files": [
     "dist",
@@ -21,5 +22,13 @@
   },
   "dependencies": {
     "@rho-workspace/plugin-contracts": "0.4.0"
+  },
+  "peerDependencies": {
+    "react": "19.3.1"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }
