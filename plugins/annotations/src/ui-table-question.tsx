@@ -15,6 +15,17 @@ interface Props {
   selectionScope?: { kind: 'shared'; id: string };
 }
 interface Intent { id: string; path: string; anchor: { kind: 'table'; resource: Ref; entities: string[] }; input?: any; contextId?: string }
+// The Agent learns of a question when the person hands it over: MCP gives Rho no way to push
+// one into a conversation. The request names the context by its identity, which is the Agent's
+// to read, so the identity goes to the clipboard rather than onto the page.
+function CopyRequest({ request }: { request: string }) {
+  const [copied, setCopied] = useState(false), [problem, setProblem] = useState('');
+  async function copy() {
+    setProblem('');
+    try { await navigator.clipboard.writeText(request); setCopied(true); } catch { setProblem('Could not copy. Try again.'); }
+  }
+  return <p className="table-question-handoff"><button onClick={copy}>{copied ? 'Copied' : 'Copy request for the Agent'}</button>{problem && <span role="alert"> {problem}</span>}</p>;
+}
 export function TableQuestion({ projectId, viewId, resource, client, principalId, documents, threads, contexts, onOpenResource, onRoutedQuestion, enabled, headerTarget, selectionScope }: Props) {
   const key = ['rho-table-question/1', projectId, principalId, viewId, resource.id, resource.version].join(':');
   const [intent, setIntent] = useState<Intent | null>(() => { try { return JSON.parse(sessionStorage.getItem(key) ?? 'null'); } catch { return null; } });
@@ -98,8 +109,7 @@ export function TableQuestion({ projectId, viewId, resource, client, principalId
       return <article key={thread.annotationId} className="table-question-thread">
         <p>{original.draft.text}</p><small>Rows: {thread.anchor.entities.join(', ')}</small>
         <p role="status">{status}</p>
-        {context && !onRoutedQuestion && !answered && <p>No session is assigned to this layout. The context reference can be passed to an Agent connected to this project.</p>}
-        {context && <details><summary>Context reference</summary><code>{context.contextId}</code></details>}
+        {context && !onRoutedQuestion && !answered && <CopyRequest request={`Answer my question in Rho: read context ${context.contextId}. It holds the table version, the rows I asked about and my question. Reply to it with annotation.reply, and link any new result you make.`} />}
         {replies.map((m: any) => <div className="table-question-reply" key={m.id}><strong>{m.author.startsWith('agent:') ? 'Agent response' : 'Participant response'}</strong><p>{m.draft.text}</p>{links(m)}</div>)}
         <details><summary>Original source and reply references</summary><p>{thread.anchor.resource.id}@{thread.anchor.resource.version}</p><p>{thread.annotationId} · {original.id}</p><p>{thread.sourceStatus?.state ?? 'Source status not observed'}</p></details>
       </article>;
