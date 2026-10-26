@@ -1,6 +1,7 @@
 # Agent bridge and context plugin
 
-`@rho-workspace/plugin-agent` 0.4.3 is the native-observation, original-feedback and optional-presentation source candidate.
+`@rho-workspace/plugin-agent` 0.4.5 adds selected native-log collection into Core,
+alongside the existing native-observation, original-feedback and presentation entries.
 
 Public entries: `AgentContext`, `retainAgentIntent`, `NativeActivity`,
 `ClaudeCodeObserver`; `rho-agent-mcp` / `./mcp`, pure `./contract`, `./native`
@@ -12,6 +13,22 @@ Scoped MCP tools, durable original caller intents, versioned explicit context, b
 Selected services: Only the read-only sources actually used by a context: documents, files, tables or media.
 
 Only this plugin depends on the MCP SDK. The external client owns the conversation/model loop.
+
+## Core activity collection
+
+`rho-agent-observe` / `./activity-reader`, `./activity-normalize` and
+`./activity-collect` read selected Claude Code JSONL and dsh native session events
+into an explicitly selected, already-running Core Host. `collect` can attach late,
+watch for a bounded interval, and reconnect with the original source and ordinal.
+It starts no Agent/model/tool/Host. This entry uses Core's public `activity-*` CLI;
+it does not write the application's `NativeActivity` store or change its bindings.
+
+`summary` / `summarizeActivity` derives tool requests, returns, unknown outcomes and
+native exit evidence, with original call IDs and receipt cursors. Optional
+`./activity-artifacts` records hashes of current files in one selected project
+output directory. These are candidates, not proof of which tool produced them.
+Instructions, budgets, content policy, native version scope and reproducible
+acceptance are in [Agent observation](../../examples/agent-observation/README.md).
 
 ## Native observation entry
 

@@ -14,15 +14,19 @@ test('package imports stay within their owner and declared dependencies; contrac
     const folder = path.join(root, owner);
     const manifest = JSON.parse(await fs.readFile(path.join(folder, 'package.json'), 'utf8'));
     const dependencies = Object.keys(manifest.dependencies ?? {});
-    // Optional browser entries may use optional peers; headless code may not.
+    // Optional browser/native entries declare their selected peer modules.
     const peers = Object.keys(manifest.peerDependencies ?? {});
-    for (const peer of peers) assert.equal(manifest.peerDependenciesMeta?.[peer]?.optional, true, owner + ': UI peer must stay optional: ' + peer);
+    for (const peer of peers) assert.equal(manifest.peerDependenciesMeta?.[peer]?.optional, true, owner + ': peer must stay optional: ' + peer);
     if (peers.length) assert.equal(manifest.exports['./ui'], './dist/ui.js', owner);
     assert.ok(dependencies.every(d => d === '@rho-workspace/plugin-contracts' || !d.startsWith('@rho-workspace/')), owner);
     for (const name of await fs.readdir(path.join(folder, 'src'))) {
       const file = path.join(folder, 'src', name);
       // Browser entry files (ui.tsx and its ui-*.tsx parts) may use the optional UI peers.
       const browser = name.startsWith('ui') && name.endsWith('.tsx');
+      // This selected reader mounts only the installed dsh persistence services.
+      // Keep the literal-import check below, and do not allow these peers in other entries.
+      const nativePeers = owner === 'plugins/agent' && name === 'activity-reader.ts'
+        ? ['@deepseek-ai/cordis', '@deepseek-ai/dsh-session', '@deepseek-ai/dsh-session-persistence-jsonl'] : [];
       const source = ts.createSourceFile(file, await fs.readFile(file, 'utf8'), ts.ScriptTarget.Latest, true);
       function inspect(node) {
         const specifier = ts.isImportDeclaration(node) || ts.isExportDeclaration(node) ? node.moduleSpecifier
@@ -38,7 +42,7 @@ test('package imports stay within their owner and declared dependencies; contrac
           }
           else if (spec.startsWith('node:')) {
             if (owner === 'packages/contracts') assert.ok(['node:fs/promises', 'node:path', 'node:crypto'].includes(spec), 'Contracts cannot execute native processes: ' + spec);
-          } else assert.ok(dependencies.some(d => spec === d || spec.startsWith(d + '/')) || (browser && peers.some(d => spec === d || spec.startsWith(d + '/'))) || (browser && spec === 'react/jsx-runtime' && peers.includes('react')), file + ': undeclared dependency ' + spec);
+          } else assert.ok(dependencies.some(d => spec === d || spec.startsWith(d + '/')) || (nativePeers.includes(spec) && peers.includes(spec)) || (browser && peers.some(d => !d.startsWith('@deepseek-ai/') && (spec === d || spec.startsWith(d + '/')))) || (browser && spec === 'react/jsx-runtime' && peers.includes('react')), file + ': undeclared dependency ' + spec);
         }
         ts.forEachChild(node, inspect);
       }

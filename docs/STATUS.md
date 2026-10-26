@@ -1,5 +1,20 @@
 # Current status
 
+Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code
+JSONL and dsh read-only native persistence feed Core's public activity CLI.
+Immutable selection, original call IDs, prefix verification and retained cursors
+allow late attachment and observer restart. Deterministic summaries preserve
+tool return, native exit and unknown outcome separately; optional bounded output
+inspection supplies current hashes without claiming historical production.
+Four actual WestlakeHPC runs covered both clients: analysis backfill yielded
+14/28 events, live attachment yielded 2/6 final events, and collector/owned Host
+restart preserved the original invocation (one run marker each). Repeated scans
+added zero events. Build and all 74 owner tests passed after the explicit native
+dependency correction; actual evidence and limitations are in
+[Agent observation acceptance](../examples/agent-observation/ACCEPTANCE.md).
+Rho browser composition, user installation and Linux observation acceptance remain
+separate. Existing application observation/feedback entries are unchanged.
+
 Updated: 2026-10-24. Annotations 0.4.3 adds an optional table-question UI using the
 single Documents buffer, exact source/row anchors, original submission identities
 and explicit Agent replies. Replies may name up to 16 exact output refs, resolved

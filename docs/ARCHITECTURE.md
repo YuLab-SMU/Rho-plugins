@@ -34,6 +34,13 @@ Headless consumers can use Core's public resident CLI without a UI dependency.
 Rho can assemble component views and interactions. Core owns execution guarantees;
 it does not host React views or the Agent's model loop.
 
+The selected [Agent activity collector](../examples/agent-observation/README.md)
+reads native Claude Code/dsh session evidence and supplies versioned normalized
+events through Core's public CLI. Core owns durable receipt identity, retention
+and replay pages; this plugin owns native format interpretation, content selection
+and derived summaries. External execution keeps its original owner and lifetime.
+The application adopts this entry only through a separately selected composition.
+
 ## Shared interaction concepts
 
 The initial composition uses four shared concepts. The [headless plugins](HEADLESS.md)
