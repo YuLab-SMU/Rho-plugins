@@ -7,6 +7,14 @@ import type { TableFormat } from './contract.js';
 const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 export type { TableFormat } from './contract.js';
 export const tableLimits = { maxRows: 100000, maxPageRows: 1000 };
+// Opening an observed CSV supplies a lexical view, with no guessed numeric,
+// missing-value or entity semantics. The usual table reader validates all rows.
+export function lexicalCsvDeclaration(data: Buffer, relative: string): Declaration {
+  requireThat(data.length <= 8 * 1024 * 1024, 'limit', 'CSV preview exceeds 8 MiB.');
+  const records: string[][] = parse(data, { bom: true, skip_empty_lines: true, max_record_size: 1024 * 1024, to: 1 });
+  const declaration: Declaration = { path: relative, kind: 'table', format: { encoding: 'csv', columns: (records[0] ?? []).map(name => ({ name, type: 'string', nullValues: [] })), key: null } };
+  validateTableDeclaration(declaration); return declaration;
+}
 export function validateTableDeclaration(d: Declaration) {
   validateEnvelope(d); requireThat(d.kind === 'table', 'invalid', 'Select a table declaration.');
     const f = d.format as TableFormat;
@@ -122,6 +130,6 @@ const tablesSkill = {
   ],
   verify: { command: 'npm run test:tables', description: 'Declared types keep leading zeros and literal NA, joins retain nulls, namespaces and both input versions, and unkeyed tables never fabricate keys.' }
 };
-export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.2', requires: ['files'], capabilities: ['tables'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.3', requires: ['files'], capabilities: ['tables'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...tablesSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

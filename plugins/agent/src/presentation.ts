@@ -21,6 +21,9 @@ export const presentation: PluginPresentation = {
   readOnly: false, runsCode: false,
 };
 export const operationPresentation = {
+  'agent.activity.read': { order: 62, displayName: 'Agent activity', description: 'Reads selected Claude Code and dsh activity retained by the project Core Host, with cursors and gaps. Starts nothing.', readOnly: true, runsCode: false },
+  'agent.activity.outputs': { order: 63, displayName: 'Observed outputs', description: 'Observes bounded current files and hashes inside a selected project output folder, without attributing them to an Agent.', readOnly: true, runsCode: false },
+  'agent.activity.capture': { order: 64, displayName: 'Open observed output', description: 'Captures the exact observed CSV or media file version through Files. CSV columns remain text; no producer or scientific claim is made.', readOnly: false, runsCode: false },
   'feedback.submit': { order: 70, displayName: 'Feedback', description: 'Freezes selected feedback and retains its original business-session delivery.', readOnly: false, runsCode: false },
   'feedback.read': { order: 71, displayName: 'Feedback', description: 'Serves feedback only to its original business binding and records a bounded fetch receipt.', readOnly: false, runsCode: false },
   'feedback.status': { order: 72, displayName: 'Feedback', description: 'Observes original delivery, actual fetch and explicit reply facts without sending again.', readOnly: true, runsCode: false },

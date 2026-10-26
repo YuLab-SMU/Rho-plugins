@@ -1,5 +1,16 @@
 # Current status
 
+Updated: 2026-10-26. Agent 0.4.7 adds a display-only activity UI and three pure
+operation contracts for reading Core pages, observing a selected output folder
+and capturing an exact file version through Files. Native tool flags, process
+exits, missing results and retention gaps remain separate. Tables 0.4.3 adds a
+lexical CSV declaration helper: values stay strings, with no inferred nulls or
+entity keys. Optional content details retain redaction/truncation facts.
+All 76 owner checks passed, including scoped output capture and independent
+old/new snapshots and unsupported-preview refusal. Rho owns authorization, transport and layout;
+its [activity episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-ACTIVITY.md)
+records actual Claude Code/dsh/browser integration. Core source is unchanged.
+
 Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code
 JSONL and dsh read-only native persistence feed Core's public activity CLI.
 Immutable selection, original call IDs, prefix verification and retained cursors
@@ -38,7 +49,6 @@ conditional browser saves that flush pending edits and preserve retry identity.
 Media description leaves browser rendering unobserved; it does not claim the UI
 is unavailable. Owner checks pass 65/65; focused media checks pass 5/5. Rho records
 the composed real browser, actual R execution and Claude Code trials separately.
-
 
 Updated: 2026-10-22. Documents and Tables now draw their own bodies in an
 application's item frame, following the Paper page

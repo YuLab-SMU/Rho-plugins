@@ -51,6 +51,7 @@ const copy = {
   ]],
 };
 const names = {
+  'agent.activity.read': 'Agent activity', 'agent.activity.outputs': 'Observed outputs', 'agent.activity.capture': 'Open observed output',
   'feedback.submit': 'Feedback', 'feedback.read': 'Feedback', 'feedback.status': 'Feedback',
   'document.open': 'Open', 'document.read': 'Read', 'document.edit': 'Edit', 'document.undo': 'Undo', 'document.undoOwn': 'Undo my edits', 'document.revert': 'Revert one change', 'document.history': 'Read change history', 'document.change.read': 'Read a change', 'document.save': 'Save', 'document.abandonSave': 'Give up an interrupted save',
   'resource.list': 'List', 'resource.read': 'Read', 'resource.register': 'Register', 'artifact.check': 'Check outputs',

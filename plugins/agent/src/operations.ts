@@ -1,5 +1,6 @@
 import { feedbackSchemas } from './feedback-contract.js';
 import { nativeSchemas } from './contract.js';
+import { activityOperationContracts } from './activity-contract.js';
 // Owner business contracts. Application project/authentication fields are separate.
 const legacyOperationContracts = {
   "context.create": {
@@ -425,6 +426,7 @@ const legacyOperationContracts = {
 
 const business = (schema: any) => structuredClone(schema);
 export const operationContracts = {
+  ...activityOperationContracts,
   ...legacyOperationContracts,
   'feedback.submit': { inputSchema: feedbackSchemas.FeedbackSubmitInput, outputSchema: feedbackSchemas.SubmissionRecord, requires: ['documents', 'annotations'], effect: 'metadata' as const },
   'feedback.read': { inputSchema: feedbackSchemas.FeedbackReadInput, outputSchema: feedbackSchemas.FeedbackReadOutput, requires: ['annotations'], effect: 'metadata' as const },
