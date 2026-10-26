@@ -28,7 +28,9 @@ type Filter = { column: string; op: 'eq' | 'lt' | 'gt' | 'isNull'; value?: strin
 
 export const pageRows = 200;
 const opLabel = { eq: 'is', lt: 'is below', gt: 'is above', isNull: 'is empty' } as const;
-const theme = themeQuartz.withParams({ fontFamily: 'inherit', fontSize: 13, headerFontWeight: 600, borderColor: 'var(--border, #e4e7eb)', backgroundColor: 'var(--surface, #fff)', foregroundColor: 'var(--text, #1f2328)', headerBackgroundColor: 'var(--surface-muted, #f6f7f9)', accentColor: 'var(--agent, #2f6fde)', rowHeight: 30, headerHeight: 32, wrapperBorderRadius: 0 });
+// Rows have room to read; the header is quieter than the data it names, and the grid draws no
+// frame of its own, so an empty stretch under a short table is page, not an empty box.
+const theme = themeQuartz.withParams({ fontFamily: 'inherit', fontSize: 13, headerFontSize: 12, headerFontWeight: 500, headerTextColor: 'var(--text-muted, #5f6873)', borderColor: 'var(--border, #e4e7eb)', backgroundColor: 'var(--surface, #fff)', foregroundColor: 'var(--text, #1f2328)', headerBackgroundColor: 'var(--surface-muted, #f6f7f9)', accentColor: 'var(--agent, #2f6fde)', rowHeight: 40, headerHeight: 36, wrapperBorder: false, wrapperBorderRadius: 0 });
 
 // Converts a typed filter value; numbers and booleans are compared as typed.
 export function typedValue(column: Column, raw: string): Filter['value'] {
@@ -191,8 +193,8 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
   }, [client, projectId, resource?.id, resource?.version, meta?.entityKey, meta?.namespace, view.id, selectable, selectionScope?.id]);
 
   if (!resource) return <p style={{ padding: 12, fontSize: 12 }}>This view has no table.</p>;
-  const bar: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', padding: '6px 12px', fontSize: 12, borderBottom: '1px solid var(--border, #e4e7eb)', flexWrap: 'wrap' };
-  const control: CSSProperties = { font: 'inherit', fontSize: 12, border: '1px solid var(--border, #d6dae0)', borderRadius: 6, padding: '2px 8px', maxWidth: '100%', minWidth: 0, background: 'var(--surface, #fff)', color: 'inherit' };
+  const bar: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0 12px', fontSize: 13, color: 'var(--text-muted, #5f6873)', flexWrap: 'wrap' };
+  const control: CSSProperties = { font: 'inherit', fontSize: 13, minHeight: 30, border: '1px solid var(--border, #d6dae0)', borderRadius: 8, padding: '0 10px', maxWidth: '100%', minWidth: 0, background: 'var(--surface, #fff)', color: 'var(--text, #1f2328)' };
   const count = meta ? (filter ? `${meta.filtered.toLocaleString()} of ${meta.total.toLocaleString()} rows` : `${meta.total.toLocaleString()} rows`) : 'Reading rows…';
   return <div ref={root} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
     <div style={bar} role="toolbar" aria-label="Table">
