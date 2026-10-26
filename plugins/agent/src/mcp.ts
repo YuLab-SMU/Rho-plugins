@@ -6,7 +6,7 @@ import { layeredSchemas } from './layered-contract.js';
 import { LayeredMcp } from './layered.js';
 import { ResultPages, resultLimits } from './result-pages.js';
 import { Ajv } from 'ajv';
-import { Fault, digest, requireThat } from '@rho-workspace/plugin-contracts';
+import { Fault, atomicJson, canonical, digest, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
@@ -39,7 +39,60 @@ async function invoke(method: string, input: Record<string, unknown> = {}, contr
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 const connection = { ...c, profile: c.profile ?? 'layered-business' };
-const layer = new LayeredMcp(connection, { invoke, retain: (method, input) => retainAgentIntent(descriptor, c, method, input, Number(process.env.RHO_MAX_AGENT_INTENTS ?? 256)) }, Number(process.env.RHO_KNOWLEDGE_CACHE_ENTRIES ?? 128), Number(process.env.RHO_KNOWLEDGE_CACHE_BYTES ?? 4194304));
+const cacheEntries = Number(process.env.RHO_KNOWLEDGE_CACHE_ENTRIES ?? 128), cacheBytes = Number(process.env.RHO_KNOWLEDGE_CACHE_BYTES ?? 4194304);
+// A conversation runs one MCP server per message, so knowledge resolved in an earlier message
+// is kept beside the connection and restored when the next message starts its own server. Only
+// the complete immutable bodies this cache actually retained are kept, one file per reference,
+// bounded by the same entry and byte budgets the cache itself uses. The service still re-checks
+// the current contract reference on every call, so a kept body never widens what may execute.
+async function knowledgeStore(descriptor: string, who: { projectId: string; externalSessionId: string }) {
+  const owner = await fs.realpath(path.dirname(descriptor));
+  const directory = await stateDirectory(owner, 'mcp-knowledge-' + digest(canonical([who.projectId, who.externalSessionId])));
+  // References reach the cache only after their digest is verified, so this is a name the
+  // filesystem can hold; keeping it checked stops any other shape from becoming a path.
+  const file = (ref: string) => { requireThat(/^[a-f0-9]{64}$/.test(ref), 'condition', 'A retained body is named by its own content digest.'); return path.join(directory, ref + '.json'); };
+  const kept = async () => {
+    const names = (await fs.readdir(directory)).filter(name => /^[a-f0-9]{64}\.json$/.test(name));
+    return Promise.all(names.map(async name => { const stat = await fs.stat(path.join(directory, name)); return { name, at: stat.mtimeMs, size: stat.size }; }));
+  };
+  let writes = Promise.resolve();
+  return {
+    // Newest first: the bodies this conversation used last are the ones it is most likely to
+    // reach for next, and the budgets are the cache's own.
+    async load() {
+      const objects: any[] = []; let bytes = 0;
+      for (const entry of (await kept()).sort((a, b) => b.at - a.at).slice(0, cacheEntries)) {
+        if (bytes + entry.size > cacheBytes) continue;
+        try { objects.push(await readJson(path.join(directory, entry.name))); bytes += entry.size; }
+        catch { /* a body that cannot be read is not knowledge this process holds */ }
+      }
+      return objects;
+    },
+    remember(object: any) {
+      writes = writes.then(async () => {
+        const bytes = Buffer.byteLength(JSON.stringify(object));
+        if (bytes > cacheBytes) return;
+        await atomicJson(file(object.ref), object);
+        // Oldest files go first, so the kept bodies stay inside the same budgets as the cache.
+        const sized = await kept(); let total = sized.reduce((sum, x) => sum + x.size, 0), count = sized.length;
+        for (const old of sized.sort((a, b) => a.at - b.at)) {
+          if (count <= cacheEntries && total <= cacheBytes) break;
+          if (old.name === object.ref + '.json') continue;
+          await fs.rm(path.join(directory, old.name), { force: true }); total -= old.size; count--;
+        }
+      }).catch(() => {});
+      return writes;
+    },
+    forget(ref: string) {
+      writes = writes.then(() => fs.rm(file(ref), { force: true })).catch(() => {});
+      return writes;
+    }
+  };
+}
+const knowledge = await knowledgeStore(descriptor, c);
+const layer = new LayeredMcp(connection, { invoke, retain: (method, input) => retainAgentIntent(descriptor, c, method, input, Number(process.env.RHO_MAX_AGENT_INTENTS ?? 256)), remember: object => knowledge.remember(object), forget: ref => knowledge.forget(ref) }, cacheEntries, cacheBytes);
+// Restored before the first tool call, so a resumed message works from what it already resolved.
+layer.seed(await knowledge.load());
 const results = new ResultPages(path.dirname(descriptor), digest(c.projectId + ':' + c.externalSessionId + ':' + c.token), async operation => {
   const index = await layer.index({ search: operation });
   requireThat(index.ok && index.value.entries.some((e: any) => e.id === operation), 'scope', 'The operation that produced this result is no longer available to this connection.');

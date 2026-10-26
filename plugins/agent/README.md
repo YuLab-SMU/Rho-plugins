@@ -155,12 +155,19 @@ retain exact fetch attribution; an unrelated operation or prose cannot create it
 
 The selected knowledge profile caps selections/knownRefs at 16/128 and responses
 at 64 KiB (16 KiB convention). It pages whole objects, exposes first-object
-requiredBytes and refuses one object over the maximum. The process-local cache
-holds at most 128 complete bodies and 4 MiB serialized bytes by default, configured
-by `RHO_KNOWLEDGE_CACHE_ENTRIES/BYTES`. Eviction or process loss requires refetch;
-newly fetched bodies are still returned if the chosen cache cannot retain them.
-Context loss explicitly omits missing knownRefs. These limits do not claim a hard
-OS heap or external model-token budget. Project enablement and authorization
+requiredBytes and refuses one object over the maximum. The cache holds at most 128
+complete bodies and 4 MiB serialized bytes by default, configured by
+`RHO_KNOWLEDGE_CACHE_ENTRIES/BYTES`. Bodies it retained are kept beside the private
+connection, one file per reference, keyed by project and native session, so the next
+process under the same connection — the next message of one conversation — starts with
+what it already resolved instead of being refused once. Only content-addressed
+immutable bodies are kept, each re-verified on load, and the service still rechecks the
+current contract reference on every call: a kept body cannot authorize an operation the
+composition no longer offers, and a superseded contract is dropped rather than kept.
+Eviction, another connection, a missing or unreadable file and a body over the budget
+all require refetch; newly fetched bodies are still returned if the chosen cache cannot
+retain them. Context loss explicitly omits missing knownRefs. These limits do not claim
+a hard OS heap or external model-token budget. Project enablement and authorization
 are never answered from cached guidance.
 
 The optional `./ui` entry supplies `rho.agent-note` 0.2.0: read-only plain text,
