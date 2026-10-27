@@ -22,9 +22,11 @@ createInterface({ input: process.stdin }).on('line', line => {
     if (text === 'observe') {
       update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Read shared notes 你好', priority: 'high', status: 'in_progress' }] });
       update(p.sessionId, { sessionUpdate: 'usage_update', used: 128, size: 4096, cost: { amount: 0.125, currency: 'EUR' } });
-      update(p.sessionId, { sessionUpdate: 'tool_call', toolCallId: 'read-notes', title: 'Read', status: 'in_progress', locations: [{ path: process.cwd() + '/project-notes.md' }] });
+      update(p.sessionId, { sessionUpdate: 'tool_call', toolCallId: 'read-notes', title: 'Read the shared notes', name: 'Read', kind: 'read', status: 'in_progress', rawInput: { file_path: process.cwd() + '/project-notes.md' }, locations: [{ path: process.cwd() + '/project-notes.md' }] });
+      update(p.sessionId, { sessionUpdate: 'tool_call', toolCallId: 'run-analysis', title: 'Run the analysis', kind: 'execute', status: 'in_progress', rawInput: { command: 'Rscript analysis.R --input data.csv' } });
       setTimeout(() => {
         update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId: 'read-notes', status: 'completed' });
+        update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId: 'run-analysis', status: 'failed' });
         update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Idle replacement', priority: 'low', status: 'completed' }] });
         update(p.sessionId, { sessionUpdate: 'session_info_update', title: 'Idle title 你好' });
       }, 40);

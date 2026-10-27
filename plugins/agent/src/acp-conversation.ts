@@ -2,10 +2,27 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { Readable, Writable, Transform } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
-import type { AgentConversation, AgentTurn, AgentCompletion, AgentProcessLimits, AgentMcpServer, AgentSessionIdentity } from './conversation.js';
+import type { AgentConversation, AgentTurn, AgentCompletion, AgentProcessLimits, AgentMcpServer, AgentSessionIdentity, AgentToolKind } from './conversation.js';
 import { visibleError } from './conversation.js';
 import { SessionObserver, type SessionObservation, type ObservationOrigin, type sessionObservationLimits } from './session-observation.js';
 import { stopAcpProcess } from './acp-process.js';
+
+const toolKinds: AgentToolKind[] = ['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other'];
+// A step keeps the meaning of what the Agent is doing, not a transcript of it.
+// One bounded line is enough to identify a command, path, pattern or query.
+function stepText(value: unknown, max = 512) {
+  if (typeof value !== 'string') return undefined;
+  const line = value.split(/\r?\n/).map(part => part.trim()).find(Boolean);
+  if (!line) return undefined;
+  return line.length > max ? line.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, '') + '…' : line;
+}
+function toolDetail(input: Record<string, unknown> | undefined) {
+  for (const key of ['command', 'file_path', 'notebook_path', 'path', 'pattern', 'query', 'url', 'description']) {
+    const value = stepText(input?.[key]);
+    if (value) return value;
+  }
+  return undefined;
+}
 
 export interface AcpConversationOptions {
   cwd: string; mcpServers: AgentMcpServer[]; limits: AgentProcessLimits;
@@ -59,8 +76,11 @@ export class AcpConversation implements AgentConversation {
       const input = u.rawInput as Record<string, unknown> | undefined;
       const name = ('name' in u && typeof u.name === 'string' ? u.name : undefined) ?? (typeof meta?.toolName === 'string' ? meta.toolName : undefined);
       const operation = name === 'mcp__rho__rho_call' && typeof input?.operation === 'string' ? input.operation : undefined;
+      const title = stepText(u.title), detail = toolDetail(input);
+      const toolKind = 'kind' in u && toolKinds.includes(u.kind as AgentToolKind) ? u.kind as AgentToolKind : undefined;
       this.active.event({ type: 'step', step: { kind: 'tool', at, id: u.toolCallId,
         ...(name || u.title ? { tool: (name ?? u.title)!.slice(0, 512) } : {}), ...(operation ? { operation } : {}),
+        ...(title ? { title } : {}), ...(toolKind ? { toolKind } : {}), ...(detail ? { detail } : {}),
         ...(u.status ? { outcome: u.status === 'completed' ? 'returned' : u.status === 'failed' ? 'rejected' : 'requested' } : {}) } });
     }
     // Thought chunks, arbitrary raw tool content and vendor diagnostics are not retained.
@@ -115,7 +135,7 @@ export class AcpConversation implements AgentConversation {
     const timer = setTimeout(() => { this.fault = 'The Agent did not establish a session within connectTimeoutMs.'; void this.close(); }, o.limits.connectTimeoutMs);
     timer.unref();
     try {
-      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.10' }, clientCapabilities: {} });
+      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.11' }, clientCapabilities: {} });
       if (initialized.protocolVersion !== 1) throw new Error('The selected Agent does not support ACP v1.');
       this.canCloseSession = initialized.agentCapabilities?.sessionCapabilities?.close != null;
       const params: acp.NewSessionRequest = { cwd: o.cwd, mcpServers: o.mcpServers, ...(o.sessionMeta ? { _meta: o.sessionMeta } : {}) };

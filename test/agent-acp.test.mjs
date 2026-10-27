@@ -45,6 +45,13 @@ test('session projection observes idle updates, separates replay, replaces plans
     const driver = f.create(undefined, { observe: value => { assert.ok(acknowledged); observations.push(value); } });
     const t = turn('observe', { async session() { acknowledged = true; } });
     assert.equal((await driver.run(t.request)).state, 'completed');
+    // Tool steps retain what the Agent is doing: its own title, the ACP category
+    // and one identifying input, never raw tool output.
+    const read = t.events.find(e => e.step?.id === 'read-notes').step;
+    assert.equal(read.title, 'Read the shared notes'); assert.equal(read.toolKind, 'read');
+    assert.match(read.detail, /project-notes\.md$/);
+    const run = t.events.find(e => e.step?.id === 'run-analysis').step;
+    assert.equal(run.toolKind, 'execute'); assert.equal(run.detail, 'Rscript analysis.R --input data.csv');
     const turnEvents = structuredClone(t.events);
     // The next message's durable acknowledgement may overlap a late update from
     // the previous turn. Reusing a connection is not a history replay phase.

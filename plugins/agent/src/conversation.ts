@@ -1,8 +1,13 @@
 // The Agent entry owns native/protocol behavior. The embedding application owns
 // acknowledged user messages, their identities, persistence and presentation.
+// ACP tool categories, kept so an embedding application can choose the display treatment.
+export type AgentToolKind = 'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'switch_mode' | 'other';
 export interface ConversationStep {
   kind: 'text' | 'tool' | 'error'; at: string; text?: string; cut?: boolean;
   id?: string; tool?: string; operation?: string;
+  // What the Agent said it was doing and the one native input that identifies it
+  // (a command, file path, pattern or query). Bounded, never raw tool output.
+  title?: string; toolKind?: AgentToolKind; detail?: string;
   outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
 }
 export interface ConversationResult {

@@ -1,7 +1,9 @@
 # Agent bridge and context plugin
 
-`@rho-workspace/plugin-agent` 0.4.10 adds Claude/Codex ACP conversations and an external-client relay alongside
-native-log collection, original feedback, MCP and presentation entries.
+`@rho-workspace/plugin-agent` 0.4.11 adds visible tool titles, ACP tool categories
+and one identifying input (command, path, pattern or query) to conversation steps,
+plus Claude/Codex ACP conversations and an external-client relay, native-log
+collection, original feedback, MCP and presentation entries.
 
 Public entries: `AgentContext`, `retainAgentIntent`, `NativeActivity`,
 `ClaudeCodeObserver`; `rho-agent-mcp` / `./mcp`, pure `./contract`, `./native`
@@ -30,7 +32,10 @@ loss. Unsupported loading fails without creating another session or resending wo
 The embedding application's `session(identity)` callback must durably retain the
 ACP identity before `run()` dispatches the prompt. The native transcript ID is not
 inferred from that identity. `event()` receives visible text and original tool IDs;
-load-history replay, hidden thoughts and raw tool output are excluded. `run()`
+each tool step also carries the Agent's bounded human title, its ACP tool category
+(`read`, `edit`, `execute`, `search`, …) and one identifying native input (command,
+file path, pattern or query) when the Agent reports one. Load-history replay, hidden
+thoughts and raw tool output are excluded. `run()`
 reports completion, failure, confirmed cancellation or an unknown transport outcome.
 Calling `close()` releases the owned connection; it does not prove native work or
 arbitrary background descendants finished. A cancelled original prompt confirms ACP
