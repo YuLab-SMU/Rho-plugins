@@ -2,7 +2,8 @@
 args <- commandArgs(TRUE)
 out <- args[[1L]]
 cat("entry\n", file=paste0(out, ".entries.jsonl"), append=TRUE)
-stopifnot(!file.exists(out), dir.create(out))
+dir.create(out, showWarnings = FALSE)
+stopifnot(dir.exists(out), length(list.files(out, all.files = TRUE, no.. = TRUE)) == 0L)
 model <- readRDS(args[[2L]])
 observed <- read.csv(args[[3L]], colClasses=c("character", "character", "numeric", "numeric"), na.strings="", check.names=FALSE)
 stopifnot(identical(observed$sample_id, c("001", "002", "003", "NA")),

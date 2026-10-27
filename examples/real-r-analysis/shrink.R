@@ -4,8 +4,8 @@ stopifnot(length(args) == 3L)
 for (p in c("DESeq2", "apeglm", "jsonlite", "digest")) if (!requireNamespace(p, quietly=TRUE)) stop("missing installed package: ", p)
 out <- args[[1L]]
 cat(jsonlite::toJSON(list(pid=Sys.getpid(), action="airway.shrink"), auto_unbox=TRUE), "\n", file=paste0(out,".entries.jsonl"), append=TRUE)
-if (file.exists(out)) stop("output already exists; preserving original artifacts")
-stopifnot(dir.create(out, recursive=FALSE))
+dir.create(out, showWarnings=FALSE)
+stopifnot(dir.exists(out), length(list.files(out, all.files=TRUE, no..=TRUE)) == 0L)
 write_json <- function(x, file) { tmp <- paste0(file,".partial"); writeLines(jsonlite::toJSON(x,auto_unbox=TRUE,pretty=TRUE,na="null",null="null",digits=NA),tmp); stopifnot(file.rename(tmp,file)) }
 tryCatch({
   dds <- readRDS(args[[2L]])

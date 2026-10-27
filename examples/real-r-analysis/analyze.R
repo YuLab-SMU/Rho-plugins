@@ -22,8 +22,12 @@ json <- function(x) jsonlite::toJSON(x, auto_unbox = TRUE, pretty = TRUE,
 entry <- list(pid = Sys.getpid(), entered_at = stamp(), output_directory = out)
 cat(jsonlite::toJSON(entry, auto_unbox = TRUE), "\n", sep = "",
     file = paste0(out, ".entries.jsonl"), append = TRUE)
-if (file.exists(out)) stop("output directory already exists; original artifacts preserved")
-if (!dir.create(out, recursive = FALSE)) stop("could not create output directory")
+dir.create(out, showWarnings = FALSE, recursive = FALSE)
+# The run's declared artifact subdirectories already exist, so the directory is
+# not empty before the script starts. What must hold is that it holds no files:
+# a re-run over existing artifacts would overwrite the original results.
+existing <- list.files(out, recursive = TRUE, all.files = TRUE, no.. = TRUE, include.dirs = FALSE)
+if (length(existing)) stop("output directory already holds ", length(existing), " file(s); original artifacts preserved")
 
 write_json <- function(x, path) {
   tmp <- paste0(path, ".partial")
@@ -40,7 +44,7 @@ progress <- function(stage, ...) {
 main <- function() {
   RNGkind("Mersenne-Twister", "Inversion", "Rejection")
   set.seed(52778L)
-  for (name in c("input", "results", "models", "plots", "bootstrap")) dir.create(file.path(out, name))
+  for (name in c("input", "results", "models", "plots", "bootstrap")) dir.create(file.path(out, name), showWarnings = FALSE)
   suppressPackageStartupMessages(library(DESeq2))
   suppressPackageStartupMessages(library(airway))
   data("airway", package = "airway")

@@ -2,7 +2,8 @@
 rho_check_args <- commandArgs(TRUE)
 rho_check_output <- rho_check_args[[1L]]
 cat("entry\n", file=paste0(rho_check_output, ".entries.jsonl"), append=TRUE)
-stopifnot(!file.exists(rho_check_output), dir.create(rho_check_output))
+dir.create(rho_check_output, showWarnings = FALSE)
+stopifnot(dir.exists(rho_check_output), length(list.files(rho_check_output, all.files = TRUE, no.. = TRUE)) == 0L)
 scope <- new.env(parent=globalenv())
 scope$out <- NULL # The original checker assigns out with <<- inside main().
 scope$commandArgs <- local({ frozen <- c(rho_check_args[[2L]], file.path(rho_check_output, "native.json")); function(...) frozen })
