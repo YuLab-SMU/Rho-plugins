@@ -11,6 +11,8 @@ export { NativeActivity, nativeActivityLimits } from './native.js';
 export { FeedbackDelivery, agentDeliveryLimits } from './delivery.js';
 export { retainAgentIntent } from './agent-intents.js';
 export { readAgentActivity, activityOutputs, captureActivityArtifact } from './activity-api.js';
+export { readExternalAcp } from './external-acp.js';
+export { observeSessionFiles } from './session-files.js';
 
 // One run as the host read it for a context. The error text is the end of the retained
 // stderr: `from` is its byte offset, `retainedBytes` how much Core kept, `truncated` whether
@@ -289,7 +291,7 @@ const presentationSkill = {
   ],
   verify: { command: 'npm run test:presenter', description: 'Presentation enhances display within its witness and role, and refuses business feedback or document access.' }
 };
-export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.8', requires: [], capabilities: ['agent-context'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.10', requires: [], capabilities: ['agent-context'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   components: [{ id: 'rho.agent-note', version: '0.2.0', owner: 'rho-plugins.agent', bindings: {}, propsSchema: layeredSchemas.AgentNoteProps, ui: './ui', presentation: { displayName: 'Agent note', description: 'A plain presentation explanation with authenticated author and binding basis.', readOnly: true, runsCode: false } }],
   skills: [{ ...agentSkill, presentation: skillPresentation }, { ...feedbackSkill, presentation: { displayName: 'Business feedback', description: 'Reads original feedback, preserves current human edits and links an explicit reply.' } }, { ...presentationSkill, presentation: { displayName: 'Presentation', description: 'Enhances the assigned visible layout without business feedback or document access.' } }],

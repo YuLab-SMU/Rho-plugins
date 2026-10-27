@@ -1,15 +1,15 @@
 # Current status
 
-Updated: 2026-10-27. Agent 0.4.8 owns Claude ACP v1 through its optional
-`./conversation` entry: multi-turn reuse, original-session load, visible text/tools,
-native permission choices and confirmed cancellation.
-Transport loss stays unknown without replay; the embedding application retains
-messages and durably accepts session identity before dispatch. Existing CLI records
-keep their driver. ACP SDK 2.0.2 / Claude adapter 0.97.0 are pinned. All 80 owner
-checks and isolated installation pass. See [Rho's real ACP episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-EPISODE.md).
-Core and the collector are unchanged. Agent's display, Tables 0.4.3's CSV helper
-and their prior 76 checks remain covered by Rho's
-[activity episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-ACTIVITY.md).
+Updated: 2026-10-27. Agent 0.4.10 connects Claude and Codex through shared ACP v1
+identity, permission and recovery handling. External clients can select the stdio
+relay to expose bounded observations while retaining their input and runtime.
+Advertised session close releases native writers; process-group escalation survives
+wrapper exit. Standard diff paths supply file references without retaining contents.
+All 89 owner checks pass. Rho's installed Westlake HPC acceptance passed eight turns
+for each Agent plus external Codex load, live observation across Rho restart and
+same-session reconnect; [the record](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-MULTI-AGENT-EPISODE.md)
+keeps native-job cancellation limits, failed attempts and installation evidence.
+Core and the native collector are unchanged; uninstrumented clients still need the transcript fallback.
 
 Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code
 JSONL and dsh read-only native persistence feed Core's public activity CLI.

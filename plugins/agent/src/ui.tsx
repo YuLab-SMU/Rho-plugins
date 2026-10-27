@@ -1,6 +1,7 @@
 // Optional plain display entry. It owns no model loop, document or feedback.
 import { layeredSchemas } from './layered-contract.js';
 export { ActivityFeed, type ActivityFeedProps } from './ui-activity.js';
+export { SessionProgress } from './ui-session.js';
 interface Props { view: { props: Record<string, any> }; active: boolean }
 export function AgentNote({ view }: Props) {
   return <section aria-label="Agent note" style={{ padding: '16px 22px', fontSize: 13, lineHeight: '19px', height: '100%', overflow: 'auto', overflowWrap: 'anywhere' }}>
