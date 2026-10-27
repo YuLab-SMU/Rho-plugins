@@ -10,8 +10,9 @@ createInterface({ input: process.stdin }).on('line', line => {
   const r = JSON.parse(line), p = r.params;
   const reply = result => send({ id: r.id, result });
   if (!r.method) { if (permission) { log({ kind: 'choice', result: r.result }); permission(); permission = null; } return; }
-  log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text });
-  if (r.method === 'initialize') return reply({ protocolVersion: 1, agentInfo: { name: 'fault-fixture', version: '1' }, agentCapabilities: { loadSession: !process.env.ACP_NO_LOAD } });
+  log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text, ...(r.method === 'session/new' ? { claudeMetadata: !!p?._meta?.claudeCode } : {}) });
+  if (r.method === 'initialize') return reply({ protocolVersion: 1, agentInfo: { name: 'fault-fixture', version: '1' }, agentCapabilities: { loadSession: !process.env.ACP_NO_LOAD, ...(process.env.ACP_CAN_CLOSE ? { sessionCapabilities: { close: {} } } : {}) } });
+  if (r.method === 'session/close') return reply({});
   if (r.method === 'session/new') return reply({ sessionId: 'original-session' });
   if (r.method === 'session/load') { update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'replayed history' } }); update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Historical plan', priority: 'medium', status: 'completed' }] }); return reply({}); }
   if (r.method === 'session/cancel') { if (active && !process.env.ACP_NO_CANCEL) { permission = null; send({ id: active, result: { stopReason: 'cancelled' } }); active = null; } return; }

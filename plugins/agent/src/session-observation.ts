@@ -72,9 +72,15 @@ export class SessionObserver {
         ...(name || u.title ? { tool: this.text(name ?? u.title!) } : {}),
         ...(name === 'mcp__rho__rho_call' && typeof input?.operation === 'string' ? { operation: this.text(input.operation) } : {}),
         ...(u.status ? { outcome: u.status === 'completed' ? 'returned' : u.status === 'failed' ? 'rejected' : 'requested' } : {}) };
-      if (u.locations != null) {
-        tool.locations = u.locations.filter(l => Buffer.byteLength(l.path) <= 1024).slice(0, this.limits.maxLocations).map(l => ({ path: l.path, ...(l.line != null ? { line: l.line } : {}) }));
-        this.value.omitted += u.locations.length - tool.locations.length;
+      const diffLocations: SessionTool['locations'] = (u.content ?? []).flatMap(c => c.type === 'diff' ? [{ path: c.path }] : []);
+      if (u.locations != null || diffLocations.length) {
+        // ACP file edits can name their path in a standard diff content block
+        // without a separate locations field (as Codex does). Retain only the ref.
+        const locations = [...new Map([...(u.locations ?? old?.locations ?? []), ...diffLocations]
+          .map(l => [l.path + ':' + ('line' in l ? l.line ?? '' : ''), l])).values()];
+        tool.locations = locations.filter(l => Buffer.byteLength(l.path) <= 1024).slice(0, this.limits.maxLocations)
+          .map(l => ({ path: l.path, ...('line' in l && l.line != null ? { line: l.line } : {}) }));
+        this.value.omitted += locations.length - tool.locations.length;
       }
       if (old) this.value.tools[this.value.tools.indexOf(old)] = tool;
       else { this.value.tools.push(tool); if (this.value.tools.length > this.limits.maxTools) { this.value.tools.shift(); this.value.omitted++; } }

@@ -6,6 +6,14 @@ import { createHash } from 'node:crypto';
 import { observeSessionFiles } from '../plugins/agent/dist/session-files.js';
 import { SessionObserver } from '../plugins/agent/dist/session-observation.js';
 
+test('standard ACP diff paths become file references without retaining file contents', () => {
+  let seen; const observer = new SessionObserver(v => { seen = v; }); observer.attached('codex-session');
+  observer.update({ sessionId: 'codex-session', update: { sessionUpdate: 'tool_call', toolCallId: 'edit', status: 'in_progress', title: 'Editing files', locations: [], content: [{ type: 'diff', path: 'result.txt', oldText: null, newText: 'PRIVATE FILE CONTENT' }] } }, 'live');
+  observer.update({ sessionId: 'codex-session', update: { sessionUpdate: 'tool_call_update', toolCallId: 'edit', status: 'completed' } }, 'live');
+  assert.deepEqual(seen.tools[0].locations, [{ path: 'result.txt' }]); assert.equal(seen.tools[0].outcome, 'returned');
+  assert.ok(!JSON.stringify(seen).includes('PRIVATE'));
+});
+
 test('file references observe current bytes, exclude outside/internal/link paths and retain limits', async () => {
   const base = await fs.mkdtemp('/tmp/rho-session-files-'), root = path.join(base, 'project');
   try {

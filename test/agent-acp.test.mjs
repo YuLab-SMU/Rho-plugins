@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ClaudeAcpConversation } from '../plugins/agent/dist/conversation.js';
+import { ClaudeAcpConversation, CodexAcpConversation } from '../plugins/agent/dist/conversation.js';
 const fixture = fileURLToPath(new URL('./fixtures/acp-agent.mjs', import.meta.url));
 async function setup(extra = {}) {
   const root = await fs.mkdtemp('/tmp/rho-acp-owner-'), log = path.join(root, 'calls.jsonl');
@@ -112,4 +112,21 @@ test('ACP forwards only offered permission choices and bounds output before an u
     assert.equal((await driver.run(t.request)).state, 'unknown');
     assert.ok(t.events.some(x => x.type === 'limit' && x.reason === 'line-limit'));
   } finally { await f.close(); }
+});
+
+test('Codex uses the same ACP identity and cancellation contract without Claude session metadata', async () => {
+  const f = await setup({ ACP_CAN_CLOSE: '1' }); let driver;
+  try {
+    driver = new CodexAcpConversation(f.options);
+    const a = turn('first'); assert.equal((await driver.run(a.request)).state, 'completed');
+    const b = turn('second'); assert.equal((await driver.run(b.request)).state, 'completed');
+    const waiting = turn('wait', { event(e) { if (e.step?.id === 'slow') waiting.controller.abort(); } });
+    assert.equal((await driver.run(waiting.request)).state, 'stopped');
+    await driver.close();
+    const calls = await f.calls(); assert.equal(calls.filter(c => c.kind === 'session/new').length, 1);
+    assert.equal(calls.filter(c => c.kind === 'session/prompt').length, 3);
+    assert.equal(calls.filter(c => c.kind === 'session/cancel').length, 1);
+    assert.equal(calls.filter(c => c.kind === 'session/close').length, 1);
+    assert.equal(calls.find(c => c.kind === 'session/new').claudeMetadata, false);
+  } finally { await driver?.close(); await f.close(); }
 });

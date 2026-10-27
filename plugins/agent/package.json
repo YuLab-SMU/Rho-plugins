@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-agent",
-  "version": "0.4.9",
+  "version": "0.4.10",
   "type": "module",
   "description": "Rho agent plugin",
   "license": "AGPL-3.0-only",
@@ -26,7 +26,10 @@
     "./claude-feedback-worker": "./dist/claude-feedback-worker.js",
     "./ui": "./dist/ui.js",
     "./layered-contract": "./dist/layered-contract.js",
-    "./layered": "./dist/layered.js"
+    "./layered": "./dist/layered.js",
+    "./external-acp": "./dist/external-acp.js",
+    "./acp-command": "./dist/acp-command.js",
+    "./acp-cli": "./dist/acp-cli.js"
   },
   "files": [
     "dist",
@@ -38,6 +41,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "0.97.0",
+    "@agentclientprotocol/codex-acp": "2.3.0",
     "@agentclientprotocol/sdk": "2.0.2",
     "@modelcontextprotocol/sdk": "1.29.0",
     "@rho-workspace/plugin-contracts": "0.4.0",
@@ -45,7 +49,8 @@
   },
   "bin": {
     "rho-agent-observe": "./dist/activity-cli.js",
-    "rho-agent-mcp": "./dist/mcp.js"
+    "rho-agent-mcp": "./dist/mcp.js",
+    "rho-agent-acp": "./dist/acp-cli.js"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "4.0.5",

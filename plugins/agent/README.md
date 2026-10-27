@@ -1,6 +1,6 @@
 # Agent bridge and context plugin
 
-`@rho-workspace/plugin-agent` 0.4.9 adds a Claude ACP conversation entry alongside
+`@rho-workspace/plugin-agent` 0.4.10 adds Claude/Codex ACP conversations and an external-client relay alongside
 native-log collection, original feedback, MCP and presentation entries.
 
 Public entries: `AgentContext`, `retainAgentIntent`, `NativeActivity`,
@@ -12,13 +12,17 @@ Scoped MCP tools, durable original caller intents, versioned explicit context, b
 
 Selected services: Only the read-only sources actually used by a context: documents, files, tables or media.
 
-Only this plugin depends on the MCP and ACP SDKs. Claude retains its model loop.
+Only this plugin depends on the MCP and ACP SDKs. Native Agents retain their model loops.
 
-## Claude ACP conversations
+## ACP conversations
 
-`./conversation` exports `ClaudeAcpConversation`, `ClaudeCliConversation` and their
+`./conversation` exports `ClaudeAcpConversation`, `CodexAcpConversation`, `ClaudeCliConversation` and their
 shared types. The ACP entry pins `@agentclientprotocol/sdk` 2.0.2 and
 `@agentclientprotocol/claude-agent-acp` 0.97.0 (Claude Agent SDK 0.3.310).
+Codex uses the official `@agentclientprotocol/codex-acp` 2.3.0 (native Codex 0.164.0).
+`codex` / `CODEX_PATH` selects an optional native executable; `CODEX_CONFIG` keeps
+the adapter's native provider settings. An explicit `model` merges into that config.
+No Claude-specific session metadata or permissions are sent to Codex.
 It uses stable ACP v1 over an owned stdio process. One connection carries multiple
 prompts; an explicit later prompt can load the recorded session after connection
 loss. Unsupported loading fails without creating another session or resending work.
@@ -31,9 +35,13 @@ reports completion, failure, confirmed cancellation or an unknown transport outc
 Calling `close()` releases the owned connection; it does not prove native work or
 arbitrary background descendants finished. A cancelled original prompt confirms ACP
 cancellation. Without that response, cancellation timeout retains an unknown outcome.
+When the Agent advertises `sessionCapabilities.close`, normal shutdown first sends
+`session/close` within `stopGraceMs`, releasing the native writer before process
+termination. Unsupported/failed/timed-out close still ends the owned transport;
+it never deletes or replaces the native session.
 
 `permission()` receives bounded native titles, command/path details and offered
-choices. Only an offered option can be returned. Native policy remains in Claude;
+choices. Only an offered option can be returned. Native policy remains in the selected Agent;
 the four Rho MCP tools already covered by the application's grant are allowed
 without a second prompt. Native tools run with the CLI's OS authority. Applications
 own the user-message ledger, authorization of human choices, pooling and wall limits.
@@ -43,7 +51,8 @@ embedding configuration, never values supplied by model output.
 Required process limits protect stdout/stderr bytes per prompt (`maxOutputBytes`),
 one NDJSON line before decoding (`maxLineBytes`), session setup time
 (`connectTimeoutMs`), cancellation wait (`stopGraceMs`) and native step count
-(`maxAgentTurns`). Exceeding output/line/setup limits closes the connection and keeps
+(`maxAgentTurns`, Claude only). Codex uses the embedding application's wall/output
+limits, without a fabricated native step cap. Exceeding output/line/setup limits closes the connection and keeps
 received output; a dispatched prompt without a result stays unknown. The embedding
 application also bounds retained content and connections. Stderr is drained but not
 retained. `ClaudeCliConversation` keeps the earlier one-process-per-message behavior
@@ -55,6 +64,8 @@ seeds it from a previous retained projection. Plans replace the complete prior l
 usage preserves reported context size and cost currency; session titles and original
 tool IDs/locations retain their source. Each update is marked `initial`, `history` or
 `live`; loading history does not append a new turn. A read never connects an Agent.
+Standard ACP diff paths also supply bounded file references when a tool omits a
+separate locations field; the projection retains no old/new file contents.
 `./session-contract` exports the pure schema and `./ui` exports `SessionProgress`.
 
 `observationLimits` can reduce the defaults: 32 plan entries, 32 recent tools,
@@ -81,6 +92,37 @@ identity-before-prompt, wrong-session rejection, cancellation/unknown outcomes,
 offered permission choices, retention limits and contained file observation.
 Actual browser/provider evidence belongs to
 [Rho's ACP episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-EPISODE.md#shared-workspace-loop).
+
+## External ACP client observation
+
+Select `rho-agent-acp --project /absolute/project --agent codex` as an external
+client's ACP command (`claude` selects Claude). Rho's installed CLI exposes the same
+entry as `rho --acp /absolute/project --acp-agent codex`. `./acp-cli` exports
+`runExternalAcp`; `./external-acp` exports the observer, bounded reader and limits.
+The original client creates or loads the native session. The relay forwards the
+original stdio bytes and owns only its child connection; Rho owns neither its input
+nor its lifetime. Views and reads start no process. ACP v1 has no standard passive
+attachment to another live client; an existing session must reopen through its
+client with the relay selected. Native transcript collection remains a fallback.
+
+The relay retains selected session observations and up to 8,192 characters of the
+latest visible reply, not prompts, permission choices, reasoning or raw tool I/O.
+Records live under the selected project's `.rho/agent/acp/`, with one live writer
+per agent/session identity. Failed/unknown prompt outcomes and load-history origin
+stay distinct. Disconnect expires the connection and marks unfinished work unknown;
+it never resends a prompt. Cancellation of a Codex turn can leave an independent
+native terminal running; an ACP cancelled response does not certify process exit.
+
+`externalAcpLimits` protects 64 retained sessions, 512 KiB per record, 128 pending
+requests/permission observations, and 128 pre-identity updates within 512 KiB.
+The transport tap bounds one parsed line at 4 MiB. Overflow or a projection write
+failure disables observation, preserves the last record and forwards ACP traffic.
+Heartbeat writes occur every two seconds; a ten-second lease or a dead relay PID
+makes a read disconnected. Reads scan at most 256 directory entries, reject unsafe
+paths/symlinks and count unavailable records. Setup refuses an unsafe store; it does
+not silently write outside the project. Retention exhaustion refuses new observed
+identities without deleting old records. These bounds do not cap the external
+Agent's native execution or the original client's transcript.
 
 ## Core activity collection
 
