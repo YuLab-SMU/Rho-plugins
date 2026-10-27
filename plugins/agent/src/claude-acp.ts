@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentConversation, AgentTurn, AgentCompletion, AgentProcessLimits, AgentMcpServer, AgentSessionIdentity } from './conversation.js';
 import { visibleError } from './conversation.js';
+import { SessionObserver, type SessionObservation, type ObservationOrigin, type sessionObservationLimits } from './session-observation.js';
 
 export interface ClaudeAcpOptions {
   cwd: string; mcpServers: AgentMcpServer[]; limits: AgentProcessLimits;
@@ -12,6 +13,8 @@ export interface ClaudeAcpOptions {
   // Trusted embedding configuration, never supplied by a model or a prompt.
   command?: { file: string; args: string[] }; env?: NodeJS.ProcessEnv;
   model?: string; allowedTools?: string[]; settingSources?: Array<'user' | 'project' | 'local'>;
+  observation?: SessionObservation; observe?: (observation: SessionObservation) => void;
+  observationLimits?: Partial<typeof sessionObservationLimits>;
 }
 
 /** One selected Claude ACP connection, independent of views and prompt turns. */
@@ -28,17 +31,25 @@ export class ClaudeAcpConversation implements AgentConversation {
   private outputBytes = 0;
   private stopTimer: ReturnType<typeof setTimeout> | undefined;
   private closing: Promise<void> | null = null;
-  constructor(private options: ClaudeAcpOptions) { this.sessionId = options.sessionId; }
+  private observer: SessionObserver;
+  private observationOrigin: ObservationOrigin = 'initial';
+  constructor(private options: ClaudeAcpOptions) {
+    this.sessionId = options.sessionId;
+    this.observer = new SessionObserver(value => options.observe?.(value), options.observation, options.observationLimits);
+    if (this.sessionId) this.observer.identity(this.sessionId);
+  }
   get connected() { return !!this.connection && !this.connection.signal.aborted && !!this.identity && !this.closing; }
   get pid() { return this.child?.pid ?? null; }
 
   private observe(params: acp.SessionNotification) {
-    // Loading history is not new execution and must not duplicate the Rho ledger.
-    if (this.phase !== 'prompt' || !this.active) return;
-    if (params.sessionId !== this.sessionId) {
+    if (this.sessionId && params.sessionId !== this.sessionId) {
       this.fault = 'The Agent reported another session; the original message was kept.';
-      this.active.event({ type: 'limit', reason: 'identity' }); void this.close(); return;
+      this.active?.event({ type: 'limit', reason: 'identity' }); void this.close(); return;
     }
+    // Session observation outlives a prompt. Replayed history stays distinguishable
+    // and never enters the current message's steps.
+    this.observer.update(params, this.observationOrigin);
+    if (this.phase !== 'prompt' || !this.active) return;
     const u = params.update, at = new Date().toISOString();
     if (u.sessionUpdate === 'agent_message_chunk' && u.content.type === 'text') {
       this.active.event({ type: 'step', append: true, step: { kind: 'text', at, id: u.messageId ?? 'message', text: u.content.text } });
@@ -56,7 +67,9 @@ export class ClaudeAcpConversation implements AgentConversation {
 
   private async connect(turn: AgentTurn) {
     const o = this.options;
-    const env = { ...process.env, ...o.env, ...(o.claude ? { CLAUDE_CODE_EXECUTABLE: o.claude } : {}) };
+    // Claude omits task tools for some provider/model names unless requested.
+    // Expose native plans without changing the native permission policy.
+    const env = { CLAUDE_CODE_ENABLE_TODO_TOOLS: '1', ...process.env, ...o.env, ...(o.claude ? { CLAUDE_CODE_EXECUTABLE: o.claude } : {}) };
     const command = o.command ?? { file: process.execPath, args: [fileURLToPath(import.meta.resolve('@agentclientprotocol/claude-agent-acp/dist/index.js'))] };
     const child = spawn(command.file, command.args, { cwd: o.cwd, env, detached: true, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child; this.exit = null;
@@ -83,7 +96,7 @@ export class ClaudeAcpConversation implements AgentConversation {
     child.stderr.on('data', (chunk: Buffer) => { this.outputBytes += chunk.length; if (this.outputBytes > o.limits.maxOutputBytes) overflow('output-limit'); });
     this.connection = acp.client({ name: 'rho-agent' })
       .onNotification(acp.methods.client.session.update, ({ params }) => {
-        try { this.observe(params); } catch { this.fault = 'Rho could not retain an Agent update.'; void this.close(); }
+        try { this.observe(params); } catch (error) { this.fault = visibleError(error, env); void this.close(); }
       })
       .onRequest(acp.methods.client.session.requestPermission, async ({ params, signal }) => {
         if (!this.active || this.phase !== 'prompt' || params.sessionId !== this.sessionId || this.active.signal.aborted || signal.aborted) return { outcome: { outcome: 'cancelled' as const } };
@@ -100,10 +113,11 @@ export class ClaudeAcpConversation implements AgentConversation {
         } catch { return { outcome: { outcome: 'cancelled' as const } }; }
       }).connect(acp.ndJsonStream(Writable.toWeb(child.stdin), Readable.toWeb(bounded) as unknown as Parameters<typeof acp.ndJsonStream>[1]));
     const connection = this.connection;
+    connection.signal.addEventListener('abort', () => this.observer.disconnected(), { once: true });
     const timer = setTimeout(() => { this.fault = 'The Agent did not establish a session within connectTimeoutMs.'; void this.close(); }, o.limits.connectTimeoutMs);
     timer.unref();
     try {
-      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.8' }, clientCapabilities: {} });
+      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.9' }, clientCapabilities: {} });
       if (initialized.protocolVersion !== 1) throw new Error('The selected Agent does not support ACP v1.');
       const params: acp.NewSessionRequest = { cwd: o.cwd, mcpServers: o.mcpServers, _meta: { claudeCode: { options: {
         maxTurns: o.limits.maxAgentTurns, promptSuggestions: false,
@@ -111,6 +125,7 @@ export class ClaudeAcpConversation implements AgentConversation {
         allowedTools: [...new Set([...['rho_index', 'rho_resolve', 'rho_call', 'rho_read'].map(x => 'mcp__rho__' + x), ...(o.allowedTools ?? [])])]
       } } } };
       let model: string | undefined;
+      this.observationOrigin = this.sessionId ? 'history' : 'initial';
       if (this.sessionId) {
         if (!initialized.agentCapabilities?.loadSession) throw new Error('This Agent cannot load the original session. Nothing was resent.');
         await connection.agent.request(acp.methods.agent.session.load, { ...params, sessionId: this.sessionId });
@@ -121,6 +136,7 @@ export class ClaudeAcpConversation implements AgentConversation {
       }
       this.identity = { acpSessionId: this.sessionId, protocolVersion: 1,
         ...(initialized.agentInfo ? { adapter: { name: initialized.agentInfo.name, version: initialized.agentInfo.version } } : {}), ...(model ? { model } : {}) };
+      this.observationOrigin = 'live';
     } finally { clearTimeout(timer); }
   }
 
@@ -142,6 +158,9 @@ export class ClaudeAcpConversation implements AgentConversation {
       if (!this.connected) await this.connect(turn);
       else turn.event({ type: 'started', pid: this.pid });
       await turn.session(this.identity!);
+      if (this.connection?.signal.aborted) throw new Error('The Agent disconnected while its session was being retained.');
+      try { this.observer.attached(this.sessionId!); }
+      catch (error) { this.fault = visibleError(error, this.options.env); void this.close(); throw error; }
       if (turn.signal.aborted) return { state: 'stopped', result: null, exit: this.exit, problem: null };
       if (this.identity?.model) turn.event({ type: 'model', model: this.identity.model });
       this.phase = 'prompt'; sent = true;

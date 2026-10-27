@@ -1,6 +1,6 @@
 # Agent bridge and context plugin
 
-`@rho-workspace/plugin-agent` 0.4.8 adds a Claude ACP conversation entry alongside
+`@rho-workspace/plugin-agent` 0.4.9 adds a Claude ACP conversation entry alongside
 native-log collection, original feedback, MCP and presentation entries.
 
 Public entries: `AgentContext`, `retainAgentIntent`, `NativeActivity`,
@@ -49,10 +49,38 @@ application also bounds retained content and connections. Stderr is drained but 
 retained. `ClaudeCliConversation` keeps the earlier one-process-per-message behavior
 for existing CLI sessions; it does not translate their IDs into ACP sessions.
 
-Four owner fault-fixture tests cover reuse/load, cancel acknowledgement and timeout,
-identity-before-prompt, unsupported load, offered permission choices and line limits.
+The connection's optional `observe(SessionObservation)` callback receives a bounded
+projection after durable identity acceptance, including between prompts. `observation`
+seeds it from a previous retained projection. Plans replace the complete prior list;
+usage preserves reported context size and cost currency; session titles and original
+tool IDs/locations retain their source. Each update is marked `initial`, `history` or
+`live`; loading history does not append a new turn. A read never connects an Agent.
+`./session-contract` exports the pure schema and `./ui` exports `SessionProgress`.
+
+`observationLimits` can reduce the defaults: 32 plan entries, 32 recent tools,
+4 locations per tool and 1,024 characters per text field. Overruns keep bounded
+content and count omissions. Unrepresented v1 variants are counted explicitly:
+reasoning, user/compaction content, mode/configuration/command and notice updates
+have no display here. Visible prompt text remains in the turn ledger. These are
+selected observations, not a complete protocol transcript.
+
+Claude omits task tools for some provider/model names. The driver defaults
+`CLAUDE_CODE_ENABLE_TODO_TOOLS=1`, as documented in the SDK's
+[todo tracking guide](https://code.claude.com/docs/en/agent-sdk/todo-tracking).
+Trusted environment configuration can override it. It exposes native planning tools;
+it does not pre-approve their execution or manufacture a plan from model prose.
+
+`observeSessionFiles` checks explicitly referenced current project files separately.
+Its limits argument defaults to 16 files and 2 MiB per file; outside/internal paths,
+symlink traversal and excess references are omitted or reported unavailable. Missing,
+changed and oversized files retain those states. Each file has its own observed
+SHA-256 and time, never inferred Agent authorship or a global project revision.
+
+Fault fixtures cover idle updates, complete plan replacement, history origin,
+identity-before-prompt, wrong-session rejection, cancellation/unknown outcomes,
+offered permission choices, retention limits and contained file observation.
 Actual browser/provider evidence belongs to
-[Rho's ACP episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-EPISODE.md).
+[Rho's ACP episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-EPISODE.md#shared-workspace-loop).
 
 ## Core activity collection
 

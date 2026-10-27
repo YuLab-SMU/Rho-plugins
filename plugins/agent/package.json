@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-agent",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "type": "module",
   "description": "Rho agent plugin",
   "license": "AGPL-3.0-only",
@@ -8,6 +8,7 @@
     "node": ">=22.22.0 <23"
   },
   "exports": {
+    "./session-contract": "./dist/session-contract.js",
     "./conversation": "./dist/conversation.js",
     "./activity-normalize": "./dist/activity-normalize.js",
     "./activity-reader": "./dist/activity-reader.js",

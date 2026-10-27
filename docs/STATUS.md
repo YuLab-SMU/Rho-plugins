@@ -1,15 +1,15 @@
 # Current status
 
-Updated: 2026-10-27. Agent 0.4.8 owns Claude ACP v1 through its optional
-`./conversation` entry: multi-turn reuse, original-session load, visible text/tools,
-native permission choices and confirmed cancellation.
-Transport loss stays unknown without replay; the embedding application retains
-messages and durably accepts session identity before dispatch. Existing CLI records
-keep their driver. ACP SDK 2.0.2 / Claude adapter 0.97.0 are pinned. All 80 owner
-checks and isolated installation pass. See [Rho's real ACP episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-EPISODE.md).
-Core and the collector are unchanged. Agent's display, Tables 0.4.3's CSV helper
-and their prior 76 checks remain covered by Rho's
-[activity episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-ACTIVITY.md).
+Updated: 2026-10-27. Agent 0.4.9 adds connection-level ACP observation:
+plans, usage, session metadata and bounded tool/file references survive idle time.
+History is labelled and never appended as a new turn; native permission and
+unknown-outcome rules remain intact. Claude task tools are enabled for providers
+that omit them by default, without bypassing native permissions. The display and
+pure session contract are optional entries; current file hashes do not establish
+Agent authorship. All 84 owner checks pass. Rho's eight-turn Westlake HPC episode
+covers shared notes, real plans, result bytes, cancellation and recovery;
+see [the record](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-EPISODE.md#shared-workspace-loop).
+Core and the native collector are unchanged; prior native observation evidence remains in [the activity episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-ACTIVITY.md).
 
 Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code
 JSONL and dsh read-only native persistence feed Core's public activity CLI.

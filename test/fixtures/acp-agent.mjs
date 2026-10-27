@@ -13,10 +13,21 @@ createInterface({ input: process.stdin }).on('line', line => {
   log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text });
   if (r.method === 'initialize') return reply({ protocolVersion: 1, agentInfo: { name: 'fault-fixture', version: '1' }, agentCapabilities: { loadSession: !process.env.ACP_NO_LOAD } });
   if (r.method === 'session/new') return reply({ sessionId: 'original-session' });
-  if (r.method === 'session/load') { update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'replayed history' } }); return reply({}); }
+  if (r.method === 'session/load') { update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'replayed history' } }); update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Historical plan', priority: 'medium', status: 'completed' }] }); return reply({}); }
   if (r.method === 'session/cancel') { if (active && !process.env.ACP_NO_CANCEL) { permission = null; send({ id: active, result: { stopReason: 'cancelled' } }); active = null; } return; }
   if (r.method === 'session/prompt') {
     active = r.id; const text = p.prompt[0].text;
+    if (text === 'wrong-session') { update('different-session', { sessionUpdate: 'plan', entries: [] }); return; }
+    if (text === 'observe') {
+      update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Read shared notes 你好', priority: 'high', status: 'in_progress' }] });
+      update(p.sessionId, { sessionUpdate: 'usage_update', used: 128, size: 4096, cost: { amount: 0.125, currency: 'EUR' } });
+      update(p.sessionId, { sessionUpdate: 'tool_call', toolCallId: 'read-notes', title: 'Read', status: 'in_progress', locations: [{ path: process.cwd() + '/project-notes.md' }] });
+      setTimeout(() => {
+        update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId: 'read-notes', status: 'completed' });
+        update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Idle replacement', priority: 'low', status: 'completed' }] });
+        update(p.sessionId, { sessionUpdate: 'session_info_update', title: 'Idle title 你好' });
+      }, 40);
+    }
     update(p.sessionId, { sessionUpdate: 'agent_thought_chunk', content: { type: 'text', text: 'private reasoning fixture' } });
     update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'retained ' }, messageId: 'one' });
     if (text === 'disconnect') { log({ kind: 'effect' }); process.exit(7); }
