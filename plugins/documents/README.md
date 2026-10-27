@@ -26,6 +26,14 @@ condition nor its intended content, so it can never complete. It requires a
 `changeId`/`expectedRevision` and the pending `requestDigest`, never writes disk,
 and keeps the buffer, dirty state and undo; a resumable save is refused.
 
+A buffer with no unsaved text follows its file. When another program (an Agent's
+own editor, a terminal, Git) changed the file, `open` adopts the disk text as one
+`edit` whose author is `disk`, recorded as the smallest changed span: views show
+the current text, history keeps the text before and the person's own undo is
+untouched. Unsaved text or a pending save is never replaced; the save's disk check
+reports that divergence. A missing, non-UTF-8 or over-budget file leaves the buffer
+as it was. Who wrote the adopted bytes is not observed and is not claimed.
+
 Rho accepts `{kind:"live-document",documentId}` for a registered document view;
 exact `{documentId,version}` bindings retain their meaning. See the
 [U2 handoff](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-BACKEND-HANDOFF.md).

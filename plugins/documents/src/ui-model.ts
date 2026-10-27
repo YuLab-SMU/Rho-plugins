@@ -30,6 +30,7 @@ export function authorLabel(author: string, me?: string) {
   if (me && author === me) return 'You';
   if (author.startsWith('agent:')) return 'Claude Code';
   if (author === 'operator') return 'Rho';
+  if (author === 'disk') return 'File on disk';
   if (author.startsWith('browser:')) return 'Another tab';
   return 'Someone else';
 }

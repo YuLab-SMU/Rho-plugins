@@ -1,5 +1,17 @@
 # Current status
 
+Updated: 2026-10-27 (later). Documents 0.4.3: a buffer with no unsaved text follows
+its file. `open` adopts changed disk text as one `edit` by the author `disk`, as the
+smallest changed span; history keeps the text before, own undo is untouched, unsaved
+text or a pending save is never replaced, and missing, non-UTF-8 or over-budget files
+leave the buffer. The editor labels it "File on disk" and highlights it. Agent 0.4.12:
+`agent.activity.capture` observes only the named regular file (inside the project, no
+symlinks, at most 8 MiB) instead of scanning its folder, with `expectedDigest`
+optional. Annotations 0.4.4 only widens its optional Documents peer to 0.4.3. Rho's
+Agent canvas needed both owner changes; all 90 owner checks pass, and Rho's
+[canvas record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md)
+keeps the composed browser and real-Agent evidence.
+
 Updated: 2026-10-27. Agent 0.4.11 adds each tool step's bounded title, ACP category
 and identifying input (command, path, pattern or query) to the shared ACP v1
 identity, permission and recovery accepted at 0.4.10. External clients can select
@@ -38,17 +50,12 @@ bounded activity log, without tool inputs, code or row/output contents. Owner
 checks pass 67/67, including retry/archive links and bounded metadata after restart.
 Rho owns the composed browser/real-model acceptance; S6 remains human unverified.
 
-Updated: 2026-10-23. Agent now defaults to four tools: owner discovery, selected
-contract resolution, invocation and retained-result reading. Large results have
-scoped references with bounded JSON-pointer and Unicode text pages, explicit
-release, fresh authorization checks and no replay. Files streams hashes/snapshots
-and reads ranges through a bounded digest/fingerprint cache. Media negotiates the
-owner page size, enforces a display byte cap and cancels inactive reads.
-Documents supplies metadata-only summaries, bounded record/aggregate reads and
-conditional browser saves that flush pending edits and preserve retry identity.
-Media description leaves browser rendering unobserved; it does not claim the UI
-is unavailable. Owner checks pass 65/65; focused media checks pass 5/5. Rho records
-the composed real browser, actual R execution and Claude Code trials separately.
+Updated: 2026-10-23. Agent defaults to four tools (discovery, contract resolution,
+invocation, retained-result reading); large results have scoped, bounded, released
+references without replay. Files streams hashes/snapshots through a bounded cache;
+Media negotiates page size, caps display bytes and cancels inactive reads; Documents
+adds metadata-only summaries, bounded reads and conditional browser saves that keep
+retry identity. Owner checks passed 65/65; Rho records composed trials separately.
 
 Updated: 2026-10-22. Documents and Tables now draw their own bodies in an
 application's item frame, following the Paper page
@@ -58,24 +65,15 @@ summary, compare); compare is reached by naming a change or a recorded compariso
 not by zooming. The Agent names `show`; without it Tables shows a count when an
 earlier table is given, else rows, and Documents shows a passage for an anchor, a
 change for a named group, else the outline. People may switch `show` on the card.
-Size caps are form parameters with maxima (Tables 3×3 card, 12×6 summary, 50 rows
-and 12 columns; Documents one section, three changes, ten at most), and each body
-reports what it left out, counted from the whole resource. A missing comparison
-reads "No comparison recorded yet". Null cells read "empty", since a null may be a
-genuine NA. Source checks pass 53/53, with seven new DOM-free card-model tests on
-real owners. Browser files named `ui*.tsx` may now use the optional UI peers.
-Rho's composed browser check is recorded in Rho; versions are unchanged.
+Size caps are form parameters with maxima, and each body reports what it left out,
+counted from the whole resource; null cells read "empty". Source checks passed 53/53
+with seven DOM-free card-model tests; Rho recorded the composed browser check.
 
 Updated: 2026-10-22. Files 0.4.1 provides an optional finite source-folder resolver;
-Documents 0.4.2 uses the injected file-path port for real reads, conditional saves
-and restoration checks. R 0.4.1 can freeze a saved script through the same file
-service. Unknown folders, traversal, internal source state and symlinks refuse;
-equal filenames remain distinct and overlapping aliases share a buffer within
-one workspace. Source checks pass 46/46, including actual two-folder reads/saves,
-external-write conflict and saved-script planning. Rho selects and persists folders;
-these owner checks do not accept its UI or installation. No Core changes or
-scientific refits were needed. Annotations 0.4.2 accepts both selected Documents
-0.4.1 and 0.4.2 as optional peers; its behavior is unchanged.
+Documents 0.4.2 and R 0.4.1 use it for reads, conditional saves, restoration and saved
+scripts. Unknown folders, traversal, internal state and symlinks refuse; equal names
+stay distinct and overlapping aliases share a buffer. Source checks passed 46/46.
+Annotations accepted Documents 0.4.1 and 0.4.2 as optional peers, behavior unchanged.
 
 Updated: 2026-10-21. Application phase 5 now accepts the selected external offline
 grades candidate with Agent 0.4.3 and the existing Documents/Files/Tables/Annotations

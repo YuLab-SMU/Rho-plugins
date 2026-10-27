@@ -49,6 +49,17 @@ test('observed CSV captures exact bytes through Files and preserves lexical valu
     await assert.rejects(activityOutputs(root, '../outside'), /inside/);
     await assert.rejects(activityOutputs(root, path.join(root, 'outputs')), /inside/);
     assert.throws(() => lexicalCsvDeclaration(Buffer.from('a,a\n1,2\n'), 'bad.csv'), /unique/);
+    // One file is observed on its own: at the project root, beside more files than an
+    // output scan reads, and without a digest it is the current bytes.
+    await fs.writeFile(path.join(root, 'top.csv'), 'id,value\n9,9\n');
+    for (let i = 0; i < 70; i++) await fs.writeFile(path.join(root, 'outputs', `extra-${i}.txt`), String(i));
+    const top = await captureActivityArtifact(root, 'p', 'top.csv', undefined, files, lexicalCsvDeclaration);
+    assert.equal(top.version, digest('id,value\n9,9\n'));
+    assert.deepEqual((await new Tables(files).page(top, 0, 20)).rows, [{ id: '9', value: '9' }]);
+    const again = await captureActivityArtifact(root, 'p', 'outputs/table.csv', undefined, files, lexicalCsvDeclaration);
+    assert.equal(again.id, next.id);
+    await assert.rejects(captureActivityArtifact(root, 'p', 'missing.csv', undefined, files, lexicalCsvDeclaration), /not in the project/);
+    await assert.rejects(captureActivityArtifact(root, 'p', '.rho/x.csv', undefined, files, lexicalCsvDeclaration), /internal state/);
     await fs.writeFile(path.join(root, 'outputs/report.pdf'), '%PDF-1.7');
     await assert.rejects(captureActivityArtifact(root, 'p', 'outputs/report.pdf', digest('%PDF-1.7'), files, lexicalCsvDeclaration), /compatible viewer/);
   } finally { await fs.rm(root, { recursive: true, force: true }); }

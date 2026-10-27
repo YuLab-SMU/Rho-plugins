@@ -55,3 +55,36 @@ test('serialized document and aggregate budgets refuse before replacing acknowle
   await assert.rejects(tooSmall.open('a.md', 'human'), e => e.kind === 'limit');
   assert.deepEqual(await owner.read(original.id), original);
 });
+
+test('a clean buffer adopts its changed file on open; unsaved text is never replaced', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'rho-document-disk-'));
+  await writeFile(path.join(root, 'analysis.R'), 'x <- 1\ny <- 2\n# 中文 🧬\n');
+  const d = new Documents(root);
+  const first = await d.open('analysis.R', 'human');
+  // Another program (an Agent's own editor) changes one line on disk.
+  await writeFile(path.join(root, 'analysis.R'), 'x <- 1\ny <- mean(x)\n# 中文 🧬\n');
+  const followed = await d.open('analysis.R', 'human');
+  assert.equal(followed.content, 'x <- 1\ny <- mean(x)\n# 中文 🧬\n');
+  assert.equal(followed.version, first.version + 1);
+  assert.equal(followed.dirty, false);
+  const entry = followed.history.at(-1);
+  assert.equal(entry.author, 'disk');
+  assert.deepEqual(entry.edits, [{ from: 12, to: 13, insert: 'mean(x)', removed: '2' }]);
+  // The text before stays readable through the owner's history.
+  assert.equal((await d.readChange(first.id, entry.changeId)).before.content, 'x <- 1\ny <- 2\n# 中文 🧬\n');
+  // Opening an unchanged file is a read: no new version.
+  assert.equal((await d.open('analysis.R', 'human')).version, followed.version);
+  // The person's unsaved text is kept even though the file changed again.
+  const typed = await d.edit(first.id, followed.version, [{ from: 0, to: 0, insert: '# mine\n' }], 'h', 'human');
+  await writeFile(path.join(root, 'analysis.R'), 'z <- 3\n');
+  const kept = await d.open('analysis.R', 'human');
+  assert.equal(kept.content, typed.content);
+  assert.equal(kept.version, typed.version);
+  await assert.rejects(d.save(first.id, typed.version, typed.diskDigest, 'human'), { kind: 'conflict' });
+  // A file that is no longer UTF-8 leaves a clean buffer as it was.
+  const other = path.join(root, 'notes.md');
+  await writeFile(other, 'notes\n');
+  const notes = await d.open('notes.md', 'human');
+  await writeFile(other, Buffer.from([0xff, 0xfe, 0x00]));
+  assert.equal((await d.open('notes.md', 'human')).content, notes.content);
+});

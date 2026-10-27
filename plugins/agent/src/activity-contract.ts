@@ -19,7 +19,7 @@ export const activityOperationContracts = {
     requires: [], effect: 'read' as const,
   },
   'agent.activity.capture': {
-    inputSchema: obj({ path: filePath, expectedDigest: hash }),
+    inputSchema: obj({ path: filePath, expectedDigest: hash }, ['path']),
     outputSchema: obj({ id: hash, version: hash, kind: text, path: filePath }),
     requires: ['files'], effect: 'metadata' as const,
   },

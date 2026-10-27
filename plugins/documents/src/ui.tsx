@@ -211,7 +211,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
   useEffect(() => {
     const cm = editor.current, buffer = sync.confirmed;
     if (!cm || !buffer) return;
-    const ranges = showAgent ? currentRanges(buffer.history ?? [], e => e.kind === 'edit' && e.author.startsWith('agent:')) : [];
+    const ranges = showAgent ? currentRanges(buffer.history ?? [], e => e.kind === 'edit' && (e.author.startsWith('agent:') || e.author === 'disk')) : [];
     const live = (buffer.history ?? []).length ? groupsActive(buffer) : new Set<string>();
     cm.dispatch({ effects: marks.of(ranges.filter(r => live.has(r.changeId))) });
   }, [sync, tick, showAgent]);
@@ -228,7 +228,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
     {sync.notice && <div className="rho-doc-band" role="status"><span className="rho-doc-fill">{sync.notice}</span></div>}
     {sync.unconfirmed && <div className="rho-doc-band" role="status" data-rho-unconfirmed=""><span className="rho-doc-fill">Your last change is not confirmed yet. It stays here and is sent again until Rho answers.</span></div>}
     <div className="rho-doc-editor" ref={host} />
-    {active && headerTarget && createPortal(<>{save}{askable && appearance === 'document' && <AskAboutSelection client={client} projectId={projectId} documentId={documentId} range={range} version={sync.confirmed && !sync.busy && !sync.aside && !composing && sync.sent === sync.confirmed.content ? sync.confirmed.version : null} />}<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Claude Code's edits</label></>, headerTarget)}
+    {active && headerTarget && createPortal(<>{save}{askable && appearance === 'document' && <AskAboutSelection client={client} projectId={projectId} documentId={documentId} range={range} version={sync.confirmed && !sync.busy && !sync.aside && !composing && sync.sent === sync.confirmed.content ? sync.confirmed.version : null} />}<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Highlight changes</label></>, headerTarget)}
     {active && !headerTarget && save && <div className="rho-doc-band">{save}</div>}
     {active && (contextTarget ? createPortal(changes, contextTarget) : contextTarget === null ? null : <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border,#e4e7eb)', maxHeight: '40%', overflow: 'auto' }}>{changes}</div>)}
   </div>;

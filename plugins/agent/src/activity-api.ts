@@ -28,24 +28,33 @@ export async function activityOutputs(root: string, directory: string) {
   catch (e: any) { if (e.code === 'ENOENT') return { files: [] }; throw e; }
 }
 
-// Capture the exact file the person selected. File identity is current observed
-// bytes; it is deliberately not attributed to a particular Agent invocation.
-export async function captureActivityArtifact(root: string, projectId: string, relative: string, expectedDigest: string,
+// Capture one CSV or image file in the project as an immutable Files snapshot. File
+// identity is the bytes observed now; it is deliberately not attributed to a particular
+// Agent invocation. Only that one file is observed: a regular file inside the project,
+// reached without symlinks. With an expected digest the capture is of that exact version
+// and a changed file is refused; without one it is of the current bytes.
+export async function captureActivityArtifact(root: string, projectId: string, relative: string, expectedDigest: string | undefined,
   files: Pick<ResourceStore, 'restore'> & { validateDeclaration(declaration: Declaration): void }, csvDeclaration?: (data: Buffer, relative: string) => Declaration) {
   publicPath(relative);
-  const observations = await inspectActivityArtifacts(root, path.dirname(relative));
-  const observed = observations.find(f => f.path === relative && f.state === 'observed');
-  requireThat(observed?.sha256 === expectedDigest, 'stale', 'This output changed. Refresh the output list before opening its new version.');
-  const handle = await fs.open(path.join(root, relative), constants.O_RDONLY | constants.O_NOFOLLOW);
+  const base = await fs.realpath(root), file = path.resolve(base, relative);
+  const inside = path.relative(base, file);
+  requireThat(inside !== '' && !inside.startsWith('..' + path.sep) && inside !== '..' && !path.isAbsolute(inside), 'scope', 'Choose an output inside the project, outside internal state.');
+  const real = await fs.realpath(file).catch((e: any) => { requireThat(e.code !== 'ENOENT', 'not_found', 'This file is not in the project any more.'); throw e; });
+  requireThat(real === file, 'scope', 'Files reached through a symlink are not opened.');
+  const observedAt = new Date().toISOString();
+  const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
   let bytes: Buffer;
   try {
     const stat = await handle.stat();
-    requireThat(stat.isFile() && stat.size <= 8 * 1024 * 1024, 'limit', 'Output capture exceeds 8 MiB.');
+    requireThat(stat.isFile(), 'invalid', 'Only a regular file can be opened.');
+    requireThat(stat.size <= 8 * 1024 * 1024, 'limit', 'Output capture exceeds 8 MiB.');
     const buffer = Buffer.alloc(stat.size + 1); let size = 0;
     while (size < buffer.length) { const r = await handle.read(buffer, size, buffer.length - size, null); if (!r.bytesRead) break; size += r.bytesRead; }
     bytes = buffer.subarray(0, size);
-    requireThat(size === stat.size && digest(bytes) === expectedDigest, 'stale', 'This output changed during observation. Refresh before opening.');
+    requireThat(size === stat.size, 'stale', 'This output changed during observation. Refresh before opening.');
   } finally { await handle.close(); }
+  const version = digest(bytes);
+  requireThat(expectedDigest === undefined || version === expectedDigest, 'stale', 'This output changed. Refresh the output list before opening its new version.');
   const ext = path.extname(relative).toLowerCase();
   const mime: Record<string, string> = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml' };
   let declaration: Declaration;
@@ -57,12 +66,12 @@ export async function captureActivityArtifact(root: string, projectId: string, r
     declaration = { path: relative, kind: 'media', format: { mimeType: mime[ext] } };
   }
   files.validateDeclaration(declaration);
-  const id = digest(canonical({ declaration, version: expectedDigest }));
+  const id = digest(canonical({ declaration, version }));
   // Files owns the immutable stored bytes. Its public restore/import primitive
   // creates a resource whose source is that snapshot, so later external edits
   // cannot silently rebind or invalidate a previously opened version.
-  const result = await files.restore({ id, version: expectedDigest, projectId, owner: 'rho-plugins.' + declaration.kind, kind: declaration.kind, path: relative, bytes: bytes.length,
-    provenance: { source: 'current-filesystem-observation', originalPath: relative, producerConfirmed: false }, coverage: { observedAt: observed.observed_at }, availability: 'available', storage: '', format: declaration.format }, bytes);
+  const result = await files.restore({ id, version, projectId, owner: 'rho-plugins.' + declaration.kind, kind: declaration.kind, path: relative, bytes: bytes.length,
+    provenance: { source: 'current-filesystem-observation', originalPath: relative, producerConfirmed: false }, coverage: { observedAt }, availability: 'available', storage: '', format: declaration.format }, bytes);
   requireThat(result.state === 'available', 'conflict', 'The observed output snapshot conflicts with a retained resource.');
-  return { id, version: expectedDigest, kind: declaration.kind, path: relative };
+  return { id, version, kind: declaration.kind, path: relative };
 }

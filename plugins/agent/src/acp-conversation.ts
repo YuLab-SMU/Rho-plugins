@@ -135,7 +135,7 @@ export class AcpConversation implements AgentConversation {
     const timer = setTimeout(() => { this.fault = 'The Agent did not establish a session within connectTimeoutMs.'; void this.close(); }, o.limits.connectTimeoutMs);
     timer.unref();
     try {
-      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.11' }, clientCapabilities: {} });
+      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.12' }, clientCapabilities: {} });
       if (initialized.protocolVersion !== 1) throw new Error('The selected Agent does not support ACP v1.');
       this.canCloseSession = initialized.agentCapabilities?.sessionCapabilities?.close != null;
       const params: acp.NewSessionRequest = { cwd: o.cwd, mcpServers: o.mcpServers, ...(o.sessionMeta ? { _meta: o.sessionMeta } : {}) };

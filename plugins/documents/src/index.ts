@@ -36,6 +36,9 @@ export interface PendingSave {
 export type DocumentResult = DocumentState & { receipt?: DocumentReceipt };
 export interface TextEdit { from: number; to: number; insert: string }
 export interface DocumentPaths { resolve(relative: string, missing?: boolean): Promise<{ file: string; relative: string }> }
+// The author of text a buffer adopted from its file on disk. Who wrote those bytes is not
+// observed here, so it is never attributed to a person or an Agent.
+export const diskAuthor = 'disk';
 export const documentLimits = { maxBufferBytes: 1024 * 1024, maxTotalBytes: 8 * 1024 * 1024, maxUndoBytes: 8 * 1024 * 1024, maxRecordBytes: 64 * 1024 * 1024, maxTotalRecordBytes: 64 * 1024 * 1024, maxDocuments: 64, maxReceipts: 256, maxHistoryEntries: 256, maxHistoryEdits: 4096 };
 export const summarizeDocument = (doc: DocumentState) => ({ id: doc.id, path: doc.path, version: doc.version, revision: doc.revision ?? doc.version - 1, dirty: doc.dirty, diskDigest: doc.diskDigest, author: doc.author, acknowledgedAt: doc.acknowledgedAt, bytes: Buffer.byteLength(doc.content) });
 export class Documents {
@@ -89,7 +92,9 @@ export class Documents {
     requireThat(!relative.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal state is not an editable document.');
     const { file, relative: normalized } = await this.source(relative);
     const id = digest(normalized);
-    try { return await this.read(id); } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
+    let existing: DocumentState | null = null;
+    try { existing = await this.read(id); } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
+    if (existing) return this.followDisk(existing, file);
     const all = await this.list();
     requireThat(all.length < this.limits.maxDocuments, 'limit', 'Document count limit reached.', { limit: 'maxDocuments', maximum: this.limits.maxDocuments });
     let content = '';
@@ -103,6 +108,43 @@ export class Documents {
     } catch (e: any) { if (e.code !== 'ENOENT') throw e; }
     const doc: DocumentState = { id, path: normalized, content, version: 1, diskDigest, dirty: false, author, acknowledgedAt: now(), undo: [], revision: 0, receipts: [], retainedFromRevision: 1, history: [], historyRetainedFromVersion: 2 };
     await this.persist(doc, all);
+    return doc;
+  }
+  // A buffer nobody has unsaved text in follows its file. When the file changed on disk
+  // (an Agent's own editor, a terminal, Git), opening it again adopts the disk text as one
+  // edit authored by the disk: every view shows what is there now, the history keeps the
+  // text before, and the person's own undo is untouched. Unsaved text or a save in flight
+  // is never replaced; the save's disk check reports that divergence instead. A file that
+  // is missing, too large for a buffer or not UTF-8 leaves the buffer as it is.
+  private async followDisk(doc: DocumentState, file: string): Promise<DocumentState> {
+    if (doc.dirty || doc.pendingSave) return doc;
+    let bytes: Buffer;
+    try {
+      if ((await fs.stat(file)).size > this.limits.maxBufferBytes) return doc;
+      bytes = await fs.readFile(file);
+    } catch (e: any) { if (e.code === 'ENOENT') return doc; throw e; }
+    const actual = digest(bytes);
+    if (actual === doc.diskDigest) return doc;
+    let content: string;
+    try { content = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return doc; }
+    const before = doc.content;
+    if (content !== before) {
+      // The smallest single span that turns the buffer into the disk text, on UTF-16 boundaries.
+      let from = 0, tail = 0;
+      while (from < before.length && from < content.length && before[from] === content[from]) from++;
+      while (tail < before.length - from && tail < content.length - from && before[before.length - 1 - tail] === content[content.length - 1 - tail]) tail++;
+      if (from > 0 && /[\uD800-\uDBFF]/.test(before[from - 1]!)) from--;
+      if (tail > 0 && /[\uDC00-\uDFFF]/.test(before[before.length - tail]!)) tail--;
+      const edits = [{ from, to: before.length - tail, insert: content.slice(from, content.length - tail), removed: before.slice(from, before.length - tail) }];
+      const changeId = 'disk:' + actual.slice(0, 40) + ':' + (doc.version + 1);
+      const requestDigest = digest(canonical({ id: doc.id, kind: 'disk', expectedVersion: doc.version, diskDigest: actual }));
+      doc.undo.push({ content: before, group: changeId, author: diskAuthor, changeIds: [changeId] });
+      doc.content = content; doc.version++;
+      this.acknowledge(doc, 'edit', requestDigest, diskAuthor, now());
+      this.recordEdit(doc, before, edits, 'edit', requestDigest, changeId, changeId, changeId);
+    }
+    doc.diskDigest = actual; doc.dirty = false;
+    await this.persist(doc);
     return doc;
   }
   private async persist(doc: DocumentState, all?: DocumentState[]) {
@@ -356,7 +398,7 @@ const documentSkill = {
 };
 export const plugin = {
   entryVersion: '1.0',
-  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.2', requires: [], capabilities: ['documents'], presentation,
+  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.3', requires: [], capabilities: ['documents'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...documentSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]
