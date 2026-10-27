@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-agent",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "type": "module",
   "description": "Rho agent plugin",
   "license": "AGPL-3.0-only",
@@ -8,6 +8,7 @@
     "node": ">=22.22.0 <23"
   },
   "exports": {
+    "./conversation": "./dist/conversation.js",
     "./activity-normalize": "./dist/activity-normalize.js",
     "./activity-reader": "./dist/activity-reader.js",
     "./activity-collect": "./dist/activity-collect.js",
@@ -35,8 +36,10 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@rho-workspace/plugin-contracts": "0.4.0",
+    "@agentclientprotocol/claude-agent-acp": "0.97.0",
+    "@agentclientprotocol/sdk": "2.0.2",
     "@modelcontextprotocol/sdk": "1.29.0",
+    "@rho-workspace/plugin-contracts": "0.4.0",
     "ajv": "8.20.0"
   },
   "bin": {

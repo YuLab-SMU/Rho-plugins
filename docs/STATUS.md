@@ -1,15 +1,15 @@
 # Current status
 
-Updated: 2026-10-26. Agent 0.4.7 adds a display-only activity UI and three pure
-operation contracts for reading Core pages, observing a selected output folder
-and capturing an exact file version through Files. Native tool flags, process
-exits, missing results and retention gaps remain separate. Tables 0.4.3 adds a
-lexical CSV declaration helper: values stay strings, with no inferred nulls or
-entity keys. Optional content details retain redaction/truncation facts.
-All 76 owner checks passed, including scoped output capture and independent
-old/new snapshots and unsupported-preview refusal. Rho owns authorization, transport and layout;
-its [activity episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-ACTIVITY.md)
-records actual Claude Code/dsh/browser integration. Core source is unchanged.
+Updated: 2026-10-27. Agent 0.4.8 owns Claude ACP v1 through its optional
+`./conversation` entry: multi-turn reuse, original-session load, visible text/tools,
+native permission choices and confirmed cancellation.
+Transport loss stays unknown without replay; the embedding application retains
+messages and durably accepts session identity before dispatch. Existing CLI records
+keep their driver. ACP SDK 2.0.2 / Claude adapter 0.97.0 are pinned. All 80 owner
+checks and isolated installation pass. See [Rho's real ACP episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-EPISODE.md).
+Core and the collector are unchanged. Agent's display, Tables 0.4.3's CSV helper
+and their prior 76 checks remain covered by Rho's
+[activity episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-ACTIVITY.md).
 
 Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code
 JSONL and dsh read-only native persistence feed Core's public activity CLI.

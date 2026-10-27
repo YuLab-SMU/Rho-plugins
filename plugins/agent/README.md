@@ -1,7 +1,7 @@
 # Agent bridge and context plugin
 
-`@rho-workspace/plugin-agent` 0.4.5 adds selected native-log collection into Core,
-alongside the existing native-observation, original-feedback and presentation entries.
+`@rho-workspace/plugin-agent` 0.4.8 adds a Claude ACP conversation entry alongside
+native-log collection, original feedback, MCP and presentation entries.
 
 Public entries: `AgentContext`, `retainAgentIntent`, `NativeActivity`,
 `ClaudeCodeObserver`; `rho-agent-mcp` / `./mcp`, pure `./contract`, `./native`
@@ -12,7 +12,47 @@ Scoped MCP tools, durable original caller intents, versioned explicit context, b
 
 Selected services: Only the read-only sources actually used by a context: documents, files, tables or media.
 
-Only this plugin depends on the MCP SDK. The external client owns the conversation/model loop.
+Only this plugin depends on the MCP and ACP SDKs. Claude retains its model loop.
+
+## Claude ACP conversations
+
+`./conversation` exports `ClaudeAcpConversation`, `ClaudeCliConversation` and their
+shared types. The ACP entry pins `@agentclientprotocol/sdk` 2.0.2 and
+`@agentclientprotocol/claude-agent-acp` 0.97.0 (Claude Agent SDK 0.3.310).
+It uses stable ACP v1 over an owned stdio process. One connection carries multiple
+prompts; an explicit later prompt can load the recorded session after connection
+loss. Unsupported loading fails without creating another session or resending work.
+
+The embedding application's `session(identity)` callback must durably retain the
+ACP identity before `run()` dispatches the prompt. The native transcript ID is not
+inferred from that identity. `event()` receives visible text and original tool IDs;
+load-history replay, hidden thoughts and raw tool output are excluded. `run()`
+reports completion, failure, confirmed cancellation or an unknown transport outcome.
+Calling `close()` releases the owned connection; it does not prove native work or
+arbitrary background descendants finished. A cancelled original prompt confirms ACP
+cancellation. Without that response, cancellation timeout retains an unknown outcome.
+
+`permission()` receives bounded native titles, command/path details and offered
+choices. Only an offered option can be returned. Native policy remains in Claude;
+the four Rho MCP tools already covered by the application's grant are allowed
+without a second prompt. Native tools run with the CLI's OS authority. Applications
+own the user-message ledger, authorization of human choices, pooling and wall limits.
+`cwd`, MCP servers, model, settings sources, executable and environment are trusted
+embedding configuration, never values supplied by model output.
+
+Required process limits protect stdout/stderr bytes per prompt (`maxOutputBytes`),
+one NDJSON line before decoding (`maxLineBytes`), session setup time
+(`connectTimeoutMs`), cancellation wait (`stopGraceMs`) and native step count
+(`maxAgentTurns`). Exceeding output/line/setup limits closes the connection and keeps
+received output; a dispatched prompt without a result stays unknown. The embedding
+application also bounds retained content and connections. Stderr is drained but not
+retained. `ClaudeCliConversation` keeps the earlier one-process-per-message behavior
+for existing CLI sessions; it does not translate their IDs into ACP sessions.
+
+Four owner fault-fixture tests cover reuse/load, cancel acknowledgement and timeout,
+identity-before-prompt, unsupported load, offered permission choices and line limits.
+Actual browser/provider evidence belongs to
+[Rho's ACP episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-EPISODE.md).
 
 ## Core activity collection
 
@@ -59,7 +99,9 @@ retained 256 events / 4 MiB, 128 source epochs. The observer defaults to 2,048 t
 identities per process. Oversized writes reject before replacing retained state;
 event eviction exposes a gap and preserves source watermarks. Exhausted epochs
 reject new sources. No database, queue, native execution journal or delivery
-guarantee is added. Original-session feedback is supplied by the separate optional entries below; a resident model launcher remains later work. The real source trial used Claude Code 2.1.306 and two separate projects;
+guarantee is added. Original-session feedback is supplied by the separate optional
+entries below; the ACP conversation entry above has its own lifetime. The real
+source trial used Claude Code 2.1.306 and two separate projects;
 its explicit native resume repaired a manifest path without rerunning Python.
 
 The package depends on `@rho-workspace/plugin-contracts` 0.4.0 for generic envelopes and service ports

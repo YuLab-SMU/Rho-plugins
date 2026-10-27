@@ -28,15 +28,19 @@ assert.equal(typeof globalThis.document, 'undefined');
 const { createHash } = await import('node:crypto');
 for (const skill of plugin.skills) assert.equal(createHash('sha256').update(skill.content).digest('hex'), skill.digest);
 ${['documents', 'files', 'tables', 'media', 'r', 'requirements'].includes(item.id) ? `assert.ok(Object.keys(await import('${item.package}/contract')).length > 0);` : ''}
+${item.id === 'agent' ? `const conversation = await import('${item.package}/conversation');
+assert.equal(typeof conversation.ClaudeAcpConversation, 'function');
+assert.equal(typeof conversation.ClaudeCliConversation, 'function');
+await import('node:fs/promises').then(fs => fs.access(new URL(import.meta.resolve('@agentclientprotocol/claude-agent-acp/dist/index.js'))));` : ''}
 `;
     const file = path.join(directory, 'check.mjs'); await fs.writeFile(file, script);
     const result = spawnSync(process.execPath, [file], { cwd: directory, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
     const packages = await fs.readdir(path.join(directory, 'node_modules/@rho-workspace'));
     assert.deepEqual(packages.sort(), ['plugin-contracts', 'plugin-' + item.id].sort());
-    for (const dependency of ['csv-parse', '@modelcontextprotocol/sdk', 'react', 'react-dom', '@codemirror/state', '@codemirror/view', 'ag-grid-community', 'ag-grid-react']) {
+    for (const dependency of ['csv-parse', '@modelcontextprotocol/sdk', '@agentclientprotocol/sdk', '@agentclientprotocol/claude-agent-acp', 'react', 'react-dom', '@codemirror/state', '@codemirror/view', 'ag-grid-community', 'ag-grid-react']) {
       const exists = await fs.stat(path.join(directory, 'node_modules', dependency)).then(() => true, () => false);
-      assert.equal(exists, dependency === 'csv-parse' ? item.id === 'tables' : dependency === '@modelcontextprotocol/sdk' ? item.id === 'agent' : false);
+      assert.equal(exists, dependency === 'csv-parse' ? item.id === 'tables' : ['@modelcontextprotocol/sdk', '@agentclientprotocol/sdk', '@agentclientprotocol/claude-agent-acp'].includes(dependency) ? item.id === 'agent' : false);
     }
     assert.equal((await fs.lstat(path.join(directory, 'node_modules', item.package))).isSymbolicLink(), false);
     report.packages.push({ id: item.id, artifactSha256: item.sha256, state: 'passed' });
