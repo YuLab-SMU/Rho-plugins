@@ -137,3 +137,54 @@ test('Codex uses the same ACP identity and cancellation contract without Claude 
     assert.equal(calls.find(c => c.kind === 'session/new').claudeMetadata, false);
   } finally { await driver?.close(); await f.close(); }
 });
+
+test('session settings: offered settings are observed, chosen ones apply before the first message, changes apply between messages', async () => {
+  const f = await setup({ ACP_CONFIG: '1', ACP_CAN_CLOSE: '1' }), observations = [];
+  try {
+    const driver = f.create(undefined, { config: { model: 'westlakehpc/glm-5.3-flash', effort: 'max' }, observe: v => observations.push(v) });
+    const first = turn('which model');
+    assert.equal((await driver.run(first.request)).state, 'completed');
+    assert.equal(first.identities[0].model, 'westlakehpc/glm-5.3-flash', 'the identity names the model the session runs');
+    assert.ok(first.events.some(e => e.type === 'model' && e.model === 'westlakehpc/glm-5.3-flash'));
+    assert.ok(first.events.some(e => e.step?.text === 'model westlakehpc/glm-5.3-flash'), 'the setting applied before the message');
+    let calls = await f.calls();
+    assert.deepEqual(calls.filter(c => c.kind === 'set').map(c => [c.configId, c.value]), [['model', 'westlakehpc/glm-5.3-flash'], ['effort', 'max']]);
+    assert.ok(calls.findIndex(c => c.kind === 'set') < calls.findIndex(c => c.kind === 'session/prompt'));
+    const config = observations.at(-1).config;
+    assert.equal(config.options.length, 3);
+    const model = config.options.find(o => o.id === 'model');
+    assert.equal(model.current, 'westlakehpc/glm-5.3-flash');
+    assert.deepEqual(model.values.map(v => [v.value, v.group]), [['default', 'Routing group'], ['auto/deepseek-v4.1-flash', 'Routing group'], ['westlakehpc/glm-5.3-flash', 'WestlakeHPC']]);
+    assert.equal(config.options.find(o => o.id === 'fast').current, false);
+    // Between messages the person changes the model; the next message runs on it.
+    const changed = await driver.configure('model', 'auto/deepseek-v4.1-flash');
+    assert.equal(changed.options.find(o => o.id === 'model').current, 'auto/deepseek-v4.1-flash');
+    assert.equal(observations.at(-1).config.origin, 'live');
+    const second = turn('which model');
+    assert.equal((await driver.run(second.request)).state, 'completed');
+    assert.ok(second.events.some(e => e.step?.text === 'model auto/deepseek-v4.1-flash'));
+    await assert.rejects(driver.configure('model', 'not-offered'), /does not offer not-offered for Model/);
+    await assert.rejects(driver.configure('missing', 'x'), /does not offer the setting missing/);
+    await driver.close();
+    // A value the Agent does not offer fails the message before anything is sent.
+    const refused = f.create(undefined, { config: { model: 'gone/model' } }), t = turn('never sent');
+    const result = await refused.run(t.request);
+    assert.equal(result.state, 'failed'); assert.match(result.problem, /does not offer gone\/model for Model\. Nothing was sent\./);
+    calls = await f.calls();
+    assert.ok(!calls.some(c => c.kind === 'session/prompt' && c.text === 'never sent'));
+  } finally { await f.close(); }
+});
+test('inspect opens a session only to read its settings, removes it and ends the process', async () => {
+  const f = await setup({ ACP_CONFIG: '1', ACP_CAN_CLOSE: '1' });
+  try {
+    const driver = f.create();
+    const seen = await driver.inspect();
+    assert.deepEqual(seen.adapter, { name: 'fault-fixture', version: '1' });
+    assert.deepEqual(seen.options.map(o => o.id), ['model', 'effort', 'fast']);
+    assert.equal(seen.omitted, 0);
+    const calls = await f.calls();
+    assert.deepEqual(calls.filter(c => c.kind !== 'spawn').map(c => c.kind), ['initialize', 'session/new', 'session/delete']);
+    assert.equal(driver.connected, false);
+    await assert.rejects(f.create('original-session').inspect(), /Inspect a new session/);
+  } finally { await f.close(); }
+});

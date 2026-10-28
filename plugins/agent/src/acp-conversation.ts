@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentConversation, AgentTurn, AgentCompletion, AgentProcessLimits, AgentMcpServer, AgentSessionIdentity, AgentToolKind } from './conversation.js';
 import { visibleError } from './conversation.js';
-import { SessionObserver, type SessionObservation, type ObservationOrigin, type sessionObservationLimits } from './session-observation.js';
+import { SessionObserver, configOptions, type SessionObservation, type ObservationOrigin, type sessionObservationLimits } from './session-observation.js';
 import { stopAcpProcess } from './acp-process.js';
 
 const toolKinds: AgentToolKind[] = ['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other'];
@@ -30,6 +30,10 @@ export interface AcpConversationOptions {
   // Trusted embedding configuration, never supplied by a model or a prompt.
   command: { file: string; args: string[] }; env?: NodeJS.ProcessEnv;
   model?: string; sessionMeta?: acp.NewSessionRequest['_meta'];
+  // The person's choices among the settings the Agent offers (model, effort, mode…), by
+  // ACP setting id. Applied once the session exists and before any message is sent; a
+  // setting or value the Agent does not offer fails the message instead of being dropped.
+  config?: Record<string, string | boolean>;
   observation?: SessionObservation; observe?: (observation: SessionObservation) => void;
   observationLimits?: Partial<typeof sessionObservationLimits>;
 }
@@ -44,6 +48,8 @@ export class AcpConversation implements AgentConversation {
   private sessionId: string | undefined;
   private identity: AgentSessionIdentity | null = null;
   private canCloseSession = false;
+  private canDeleteSession = false;
+  private settings: acp.SessionConfigOption[] = [];
   private phase: 'setup' | 'prompt' | 'idle' = 'idle';
   private fault: string | null = null;
   private outputBytes = 0;
@@ -135,24 +141,71 @@ export class AcpConversation implements AgentConversation {
     const timer = setTimeout(() => { this.fault = 'The Agent did not establish a session within connectTimeoutMs.'; void this.close(); }, o.limits.connectTimeoutMs);
     timer.unref();
     try {
-      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.12' }, clientCapabilities: {} });
+      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.13' }, clientCapabilities: {} });
       if (initialized.protocolVersion !== 1) throw new Error('The selected Agent does not support ACP v1.');
       this.canCloseSession = initialized.agentCapabilities?.sessionCapabilities?.close != null;
+      this.canDeleteSession = initialized.agentCapabilities?.sessionCapabilities?.delete != null;
       const params: acp.NewSessionRequest = { cwd: o.cwd, mcpServers: o.mcpServers, ...(o.sessionMeta ? { _meta: o.sessionMeta } : {}) };
       let model: string | undefined;
       this.observationOrigin = this.sessionId ? 'history' : 'initial';
       if (this.sessionId) {
         if (!initialized.agentCapabilities?.loadSession) throw new Error('This Agent cannot load the original session. Nothing was resent.');
-        await connection.agent.request(acp.methods.agent.session.load, { ...params, sessionId: this.sessionId });
-        model = o.model;
+        const loaded = await connection.agent.request(acp.methods.agent.session.load, { ...params, sessionId: this.sessionId });
+        this.settings = (loaded as { configOptions?: acp.SessionConfigOption[] | null }).configOptions ?? [];
       } else {
         const created = await connection.agent.request(acp.methods.agent.session.new, params);
-        this.sessionId = created.sessionId; model = o.model;
+        this.sessionId = created.sessionId; this.settings = created.configOptions ?? [];
       }
+      for (const [id, value] of Object.entries(o.config ?? {})) await this.set(id, value);
+      model = this.currentModel() ?? o.model;
+      this.observer.configured(this.settings, this.observationOrigin === 'history' ? 'history' : 'initial');
       this.identity = { acpSessionId: this.sessionId, protocolVersion: 1,
         ...(initialized.agentInfo ? { adapter: { name: initialized.agentInfo.name, version: initialized.agentInfo.version } } : {}), ...(model ? { model } : {}) };
       this.observationOrigin = 'live';
     } finally { clearTimeout(timer); }
+  }
+
+  private currentModel() {
+    const option = this.settings.find(x => x.category === 'model' && x.type === 'select');
+    return option && typeof option.currentValue === 'string' ? option.currentValue : undefined;
+  }
+  // One setting on the open session, checked against what the Agent offers.
+  private async set(configId: string, value: string | boolean) {
+    const option = this.settings.find(x => x.id === configId);
+    if (!option) throw new Error(`The Agent does not offer the setting ${configId}. Nothing was sent.`);
+    if (option.currentValue === value) return;
+    if (option.type === 'boolean' ? typeof value !== 'boolean' : typeof value !== 'string' || !option.options.some(entry => 'group' in entry ? entry.options.some(v => v.value === value) : entry.value === value))
+      throw new Error(`The Agent does not offer ${String(value)} for ${option.name}. Nothing was sent.`);
+    const changed = await this.connection!.agent.request(acp.methods.agent.session.setConfigOption, option.type === 'boolean'
+      ? { sessionId: this.sessionId!, configId, type: 'boolean', value: value as boolean } : { sessionId: this.sessionId!, configId, value: value as string });
+    this.settings = changed.configOptions ?? this.settings;
+  }
+  /** The settings the Agent offers on this session now, bounded as observed. */
+  get configuration() { return configOptions(this.settings); }
+  /** Changes one setting for the messages that follow. Only between messages, on a connected session. */
+  async configure(configId: string, value: string | boolean) {
+    if (!this.connected || !this.sessionId) throw new Error('This Agent connection is not open.');
+    if (this.phase !== 'idle') throw new Error('The Agent is answering. Change its settings after this message.');
+    await this.set(configId, value);
+    if (this.identity) { const model = this.currentModel(); this.identity = { ...this.identity, ...(model ? { model } : {}) }; }
+    this.observer.configured(this.settings, 'live');
+    return this.configuration;
+  }
+  /** Opens a session only to read the settings the Agent offers, then removes it and ends the
+   * process. No message is sent. This starts the Agent, so it is an explicit action, never a read. */
+  async inspect() {
+    if (this.options.sessionId) throw new Error('Inspect a new session, not a retained one.');
+    const quiet: AgentTurn = { text: '', signal: new AbortController().signal, event() {}, async session() {}, async permission() { return null; } };
+    try {
+      await this.connect(quiet);
+      if (this.fault) throw new Error(this.fault);
+      return { adapter: this.identity?.adapter ?? null, ...this.configuration };
+    } catch (error) { throw new Error(this.fault ?? visibleError(error, this.options.env)); }
+    finally {
+      if (this.canDeleteSession && this.sessionId && this.connection && !this.connection.signal.aborted)
+        await this.connection.agent.request(acp.methods.agent.session.delete, { sessionId: this.sessionId }).then(() => { this.canCloseSession = false; }, () => {});
+      await this.close();
+    }
   }
 
   async run(turn: AgentTurn): Promise<AgentCompletion> {

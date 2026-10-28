@@ -5,19 +5,33 @@ const log = value => fs.appendFileSync(process.env.ACP_TEST_LOG, JSON.stringify(
 const send = value => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...value }) + '\n');
 const update = (sessionId, value) => send({ method: 'session/update', params: { sessionId, update: value } });
 let active, permission;
+// Session settings in ACP form, only when a test asks for them.
+let settings = process.env.ACP_CONFIG ? [
+  { id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: 'default', options: [{ group: 'gateway', name: 'Routing group', options: [{ value: 'default', name: 'Default (recommended)' }, { value: 'auto/deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash · routing group', description: 'via gateway' }] }, { group: 'hpc', name: 'WestlakeHPC', options: [{ value: 'westlakehpc/glm-5.3-flash', name: 'GLM-5.3-Flash · WestlakeHPC' }] }] },
+  { id: 'effort', name: 'Effort', category: 'thought_level', type: 'select', currentValue: 'high', options: [{ value: 'low', name: 'Low' }, { value: 'high', name: 'High' }, { value: 'max', name: 'Max' }] },
+  { id: 'fast', name: 'Fast mode', category: 'model_config', type: 'boolean', currentValue: false },
+] : undefined;
 log({ kind: 'spawn', pid: process.pid });
 createInterface({ input: process.stdin }).on('line', line => {
   const r = JSON.parse(line), p = r.params;
   const reply = result => send({ id: r.id, result });
   if (!r.method) { if (permission) { log({ kind: 'choice', result: r.result }); permission(); permission = null; } return; }
   log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text, ...(r.method === 'session/new' ? { claudeMetadata: !!p?._meta?.claudeCode } : {}) });
-  if (r.method === 'initialize') return reply({ protocolVersion: 1, agentInfo: { name: 'fault-fixture', version: '1' }, agentCapabilities: { loadSession: !process.env.ACP_NO_LOAD, ...(process.env.ACP_CAN_CLOSE ? { sessionCapabilities: { close: {} } } : {}) } });
-  if (r.method === 'session/close') return reply({});
-  if (r.method === 'session/new') return reply({ sessionId: 'original-session' });
-  if (r.method === 'session/load') { update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'replayed history' } }); update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Historical plan', priority: 'medium', status: 'completed' }] }); return reply({}); }
+  if (r.method === 'initialize') return reply({ protocolVersion: 1, agentInfo: { name: 'fault-fixture', version: '1' }, agentCapabilities: { loadSession: !process.env.ACP_NO_LOAD, ...(process.env.ACP_CAN_CLOSE ? { sessionCapabilities: { close: {}, delete: {} } } : {}) } });
+  if (r.method === 'session/close' || r.method === 'session/delete') return reply({});
+  if (r.method === 'session/new') return reply({ sessionId: 'original-session', ...(settings ? { configOptions: settings } : {}) });
+  if (r.method === 'session/set_config_option') {
+    log({ kind: 'set', configId: p.configId, value: p.value });
+    const option = settings?.find(x => x.id === p.configId);
+    if (!option) return send({ id: r.id, error: { code: -32602, message: 'Unknown setting' } });
+    option.currentValue = p.value;
+    return reply({ configOptions: settings });
+  }
+  if (r.method === 'session/load') { if (settings) { setTimeout(() => reply({ configOptions: settings }), 0); update(p.sessionId, { sessionUpdate: 'plan', entries: [] }); return; } update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'replayed history' } }); update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Historical plan', priority: 'medium', status: 'completed' }] }); return reply({}); }
   if (r.method === 'session/cancel') { if (active && !process.env.ACP_NO_CANCEL) { permission = null; send({ id: active, result: { stopReason: 'cancelled' } }); active = null; } return; }
   if (r.method === 'session/prompt') {
     active = r.id; const text = p.prompt[0].text;
+    if (text === 'which model') { update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'model ' + settings?.find(x => x.id === 'model')?.currentValue }, messageId: 'm' }); active = null; return reply({ stopReason: 'end_turn' }); }
     if (text === 'wrong-session') { update('different-session', { sessionUpdate: 'plan', entries: [] }); return; }
     if (text === 'observe') {
       update(p.sessionId, { sessionUpdate: 'plan', entries: [{ content: 'Read shared notes 你好', priority: 'high', status: 'in_progress' }] });

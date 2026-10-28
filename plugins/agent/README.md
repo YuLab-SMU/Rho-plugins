@@ -53,6 +53,15 @@ own the user-message ledger, authorization of human choices, pooling and wall li
 `cwd`, MCP servers, model, settings sources, executable and environment are trusted
 embedding configuration, never values supplied by model output.
 
+Session settings are the Agent's own ACP `configOptions` (model, effort, mode and the
+like). `config` holds a person's choices by setting id; they are set once the session
+opens and before any prompt, and a setting or value the Agent does not offer fails that
+message with nothing sent. `configure(id, value)` changes one between messages on a
+connected session; `configuration` returns what the session offers now. `inspect()`
+opens a new session only to read its settings, deletes it when the Agent supports
+`session/delete`, and ends the process; it sends no prompt and is an explicit action,
+never a read.
+
 Required process limits protect stdout/stderr bytes per prompt (`maxOutputBytes`),
 one NDJSON line before decoding (`maxLineBytes`), session setup time
 (`connectTimeoutMs`), cancellation wait (`stopGraceMs`) and native step count
@@ -74,10 +83,11 @@ separate locations field; the projection retains no old/new file contents.
 `./session-contract` exports the pure schema and `./ui` exports `SessionProgress`.
 
 `observationLimits` can reduce the defaults: 32 plan entries, 32 recent tools,
-4 locations per tool and 1,024 characters per text field. Overruns keep bounded
-content and count omissions. Unrepresented v1 variants are counted explicitly:
-reasoning, user/compaction content, mode/configuration/command and notice updates
-have no display here. Visible prompt text remains in the turn ledger. These are
+4 locations per tool, 1,024 characters per text field, and 12 settings of at most 256
+values each. Overruns keep bounded content and count omissions. Settings are observed
+when the session opens, after `configure()` and on `config_option_update`.
+Unrepresented v1 variants are counted explicitly: reasoning, user/compaction content,
+mode/command and notice updates have no display here. Visible prompt text remains in the turn ledger. These are
 selected observations, not a complete protocol transcript.
 
 Claude omits task tools for some provider/model names. The driver defaults

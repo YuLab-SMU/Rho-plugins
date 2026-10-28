@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-agent",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "type": "module",
   "description": "Rho agent plugin",
   "license": "AGPL-3.0-only",

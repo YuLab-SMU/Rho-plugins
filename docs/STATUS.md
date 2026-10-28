@@ -1,5 +1,11 @@
 # Current status
 
+Updated: 2026-10-27 (latest). Agent 0.4.13 keeps the settings an ACP session reports
+(model, effort, mode…; at most 12 of up to 256 values each) in its observation, applies
+an embedding's choices after the session opens and before any prompt, changes one between
+messages, and `inspect()` reads them from a session it then deletes without a prompt.
+92 owner checks pass; Rho's [record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model) keeps a real model switch.
+
 Updated: 2026-10-27 (later). Documents 0.4.3: a buffer with no unsaved text follows
 its file. `open` adopts changed disk text as one `edit` by the author `disk`, as the
 smallest changed span; history keeps the text before, own undo is untouched, unsaved
@@ -24,18 +30,14 @@ restart and same-session reconnect; [the record](https://github.com/YuLab-SMU/Rh
 keeps native-job cancellation limits, failed attempts and installation evidence.
 Core and the native collector are unchanged; uninstrumented clients still need the transcript fallback.
 
-Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code
-JSONL and dsh read-only native persistence feed Core's public activity CLI.
-Immutable selection, original call IDs, prefix verification and retained cursors
-allow late attachment and observer restart. Deterministic summaries preserve
-tool return, native exit and unknown outcome separately; optional bounded output
-inspection supplies current hashes without claiming historical production.
-Four actual WestlakeHPC runs covered both clients: analysis backfill yielded
-14/28 events, live attachment yielded 2/6 final events, and collector/owned Host
-restart preserved the original invocation (one run marker each). Repeated scans
-added zero events. Build and all 74 owner tests passed after the explicit native
-dependency correction; actual evidence and limitations are in
-[Agent observation acceptance](../examples/agent-observation/ACCEPTANCE.md).
+Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code JSONL
+and dsh read-only native persistence feed Core's public activity CLI. Immutable selection,
+original call IDs, prefix verification and retained cursors allow late attachment and
+observer restart; summaries keep tool return, native exit and unknown outcome apart, and
+bounded output inspection gives current hashes without claiming historical production.
+Four WestlakeHPC runs covered both clients: backfill 14/28 events, live attachment 2/6,
+and collector/Host restart kept the original invocation; repeated scans added none. All
+74 owner tests passed ([acceptance](../examples/agent-observation/ACCEPTANCE.md)).
 Rho browser composition, installation and Linux observation acceptance remain separate.
 
 Updated: 2026-10-24. Annotations 0.4.3 adds an optional table-question UI using the
