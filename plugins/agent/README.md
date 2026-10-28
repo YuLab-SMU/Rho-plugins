@@ -155,6 +155,11 @@ output directory. These are candidates, not proof of which tool produced them.
 Instructions, budgets, content policy, native version scope and reproducible
 acceptance are in [Agent observation](../../examples/agent-observation/README.md).
 
+`ActivityFeed` (`./ui`) shows these reads to a person. It brings its own `rho-act-`
+stylesheet and reads the embedding's `--color-*` tokens with fallbacks: a Host that does
+not answer is one card with Reconnect, counts are tiles, and each action is a card whose
+state is its colour.
+
 ## Native observation entry
 
 `ClaudeCodeObserver` consumes the selected Claude Code `stream-json` envelopes.

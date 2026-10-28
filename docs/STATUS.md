@@ -1,6 +1,10 @@
 # Current status
 
-Updated: 2026-10-27 (latest). Agent 0.4.13 keeps the settings an ACP session reports
+Updated: 2026-10-28. Agent 0.4.14 draws `ActivityFeed` with its own prefixed stylesheet on the
+embedding's colour tokens: a lost Host is one card with Reconnect, counts are tiles, actions are
+cards with their state, outputs a folder field and file rows. Facts unchanged; 92 checks pass.
+
+Updated: 2026-10-27. Agent 0.4.13 keeps the settings an ACP session reports
 (model, effort, mode…; at most 12 of up to 256 values each) in its observation, applies
 an embedding's choices after the session opens and before any prompt, changes one between
 messages, and `inspect()` reads them from a session it then deletes without a prompt.
@@ -14,9 +18,8 @@ leave the buffer. The editor labels it "File on disk" and highlights it. Agent 0
 `agent.activity.capture` observes only the named regular file (inside the project, no
 symlinks, at most 8 MiB) instead of scanning its folder, with `expectedDigest`
 optional. Annotations 0.4.4 only widens its optional Documents peer to 0.4.3. Rho's
-Agent canvas needed both owner changes; all 90 owner checks pass, and Rho's
-[canvas record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md)
-keeps the composed browser and real-Agent evidence.
+Agent canvas needed both owner changes; all 90 owner checks pass, and Rho's [canvas
+record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md) keeps the composed browser and real-Agent evidence.
 
 Updated: 2026-10-27. Agent 0.4.11 adds each tool step's bounded title, ACP category
 and identifying input (command, path, pattern or query) to the shared ACP v1
@@ -30,27 +33,24 @@ restart and same-session reconnect; [the record](https://github.com/YuLab-SMU/Rh
 keeps native-job cancellation limits, failed attempts and installation evidence.
 Core and the native collector are unchanged; uninstrumented clients still need the transcript fallback.
 
-Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code JSONL
-and dsh read-only native persistence feed Core's public activity CLI. Immutable selection,
-original call IDs, prefix verification and retained cursors allow late attachment and
-observer restart; summaries keep tool return, native exit and unknown outcome apart, and
-bounded output inspection gives current hashes without claiming historical production.
-Four WestlakeHPC runs covered both clients: backfill 14/28 events, live attachment 2/6,
-and collector/Host restart kept the original invocation; repeated scans added none. All
-74 owner tests passed ([acceptance](../examples/agent-observation/ACCEPTANCE.md)).
+Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code JSONL and dsh
+read-only native persistence feed Core's public activity CLI. Immutable selection, original call
+IDs, prefix verification and retained cursors allow late attachment and observer restart; summaries
+keep tool return, native exit and unknown outcome apart; output inspection gives current hashes only.
+Four WestlakeHPC runs covered both clients (backfill 14/28 events, live attachment 2/6, restart kept
+the invocation, rescans added none); 74 owner tests passed ([acceptance](../examples/agent-observation/ACCEPTANCE.md)).
 Rho browser composition, installation and Linux observation acceptance remain separate.
 
-Updated: 2026-10-24. Annotations 0.4.3 adds an optional table-question UI using the
-single Documents buffer, exact source/row anchors, original submission identities
-and explicit Agent replies. Replies may name up to 16 exact output refs, resolved
-through Files; these author links do not establish domain correctness. UI intent
-retention is capped at 16 KiB; exceeding it preserves the draft and refuses a new
-submission. A submitted question folds to one status control; a host may place the
-question's actions in the view's own header and keep only the open thread below. Assigned task feedback keeps its existing delivery entry. Agent 0.4.4
-adds document-open identity, resource id/version and output-stream metadata to its
-bounded activity log, without tool inputs, code or row/output contents. Owner
-checks pass 67/67, including retry/archive links and bounded metadata after restart.
-Rho owns the composed browser/real-model acceptance; S6 remains human unverified.
+Updated: 2026-10-24. Annotations 0.4.3 adds an optional table-question UI using the single
+Documents buffer, exact source/row anchors, original submission identities and explicit Agent
+replies. Replies may name up to 16 exact output refs, resolved through Files; these author links
+do not establish domain correctness. UI intent retention is capped at 16 KiB; exceeding it keeps
+the draft and refuses a new submission. A submitted question folds to one status control; a host
+may place its actions in the view's own header and keep only the open thread below. Assigned task
+feedback keeps its delivery entry. Agent 0.4.4 adds document-open identity, resource id/version and
+output-stream metadata to its bounded activity log, without tool inputs, code or row/output
+contents. Owner checks pass 67/67, including retry/archive links and bounded metadata after
+restart. Rho owns the composed browser/real-model acceptance; S6 remains human unverified.
 
 Updated: 2026-10-23. Agent defaults to four tools (discovery, contract resolution,
 invocation, retained-result reading); large results have scoped, bounded, released
