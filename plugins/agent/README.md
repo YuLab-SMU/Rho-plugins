@@ -158,7 +158,8 @@ acceptance are in [Agent observation](../../examples/agent-observation/README.md
 `ActivityFeed` (`./ui`) shows these reads to a person. It brings its own `rho-act-`
 stylesheet and reads the embedding's `--color-*` tokens with fallbacks: a Host that does
 not answer is one card with Reconnect, counts are tiles, and each action is a card whose
-state is its colour.
+state is its colour. An embedding may pass the project folder as `root`; a Read/Edit path
+inside it is then shown relative to it, while Action details keep the original input.
 
 ## Native observation entry
 

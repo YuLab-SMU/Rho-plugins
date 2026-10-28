@@ -1,8 +1,8 @@
 # Current status
 
-Updated: 2026-10-28. Agent 0.4.14 draws `ActivityFeed` with its own prefixed stylesheet on the
-embedding's colour tokens: a lost Host is one card with Reconnect, counts are tiles, actions are
-cards with their state, outputs a folder field and file rows. Facts unchanged; 92 checks pass.
+Updated: 2026-10-28. Agent 0.4.14 draws `ActivityFeed` as cards in its own prefixed stylesheet
+on the embedding's colours; 0.4.15 shows a path inside an optional `root` relative, details
+keep the original. Rho's real Claude Code/dsh runs 7–8 passed; 92 owner checks pass.
 
 Updated: 2026-10-27. Agent 0.4.13 keeps the settings an ACP session reports
 (model, effort, mode…; at most 12 of up to 256 values each) in its observation, applies

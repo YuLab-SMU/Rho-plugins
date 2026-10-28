@@ -8,9 +8,18 @@ export interface ActivityFeedProps {
   read: (streamId?: string, after?: number, signal?: AbortSignal) => Promise<{ streams: Stream[]; page: Page | null }>;
   outputs: (directory: string, signal?: AbortSignal) => Promise<{ files: Output[] }>;
   open: (file: Output) => Promise<void>;
+  /** The project folder; a path inside it is shown relative to it. Action details keep the original. */
+  root?: string;
 }
 const label = (s: Stream) => (s.producer === 'claude' ? 'Claude Code' : 'dsh') + ' · ' + s.id;
-const outputName = (input: any) => typeof input?.command === 'string' ? input.command : typeof input?.file_path === 'string' ? input.file_path : typeof input?.path === 'string' ? input.path : typeof input?.description === 'string' ? input.description : '';
+// macOS reports /tmp as /private/tmp, so a project there can be named either way.
+const inProject = (path: string, root?: string) => {
+  const base = root?.replace(/\/+$/, '');
+  if (!base) return path;
+  for (const prefix of new Set([base, '/private' + base, base.replace(/^\/private(?=\/)/, '')])) if (path.startsWith(prefix + '/')) return path.slice(prefix.length + 1);
+  return path;
+};
+const outputName = (input: any, root?: string) => typeof input?.command === 'string' ? input.command : typeof input?.file_path === 'string' ? inProject(input.file_path, root) : typeof input?.path === 'string' ? inProject(input.path, root) : typeof input?.description === 'string' ? input.description : '';
 
 // The view's own stylesheet, prefixed, reading the host application's colours when it has them.
 const styles = `
@@ -88,7 +97,7 @@ const bytes = (n?: number) => n === undefined ? '' : n < 1024 ? n + ' B' : n < 1
 
 /** Display-only consumer: a view owns its bounded cache and polling, never the
  * native session, collector, Core Host or a second durable action history. */
-export function ActivityFeed({ read, outputs, open }: ActivityFeedProps) {
+export function ActivityFeed({ read, outputs, open, root }: ActivityFeedProps) {
   useStyles();
   const [streams, setStreams] = useState<Stream[]>([]), [selected, setSelected] = useState('');
   const [entries, setEntries] = useState<ActivityEntry[]>([]), [gap, setGap] = useState(false), [omitted, setOmitted] = useState(false);
@@ -188,7 +197,7 @@ export function ActivityFeed({ read, outputs, open }: ActivityFeedProps) {
         const state = c.observation === 'rejected' ? 'Tool refused' : c.exit_code !== null && c.exit_code !== 0 ? `Exit ${c.exit_code}` : c.tool_error ? 'Tool error' : !c.returned ? 'Awaiting result' : c.exit_code === 0 ? 'Exit 0' : 'Tool returned';
         return <li key={c.call_id} className="rho-act-item" data-action-state={failed ? 'error' : c.returned ? 'returned' : 'pending'}>
           <header><strong>{c.tool ?? 'Tool result'}{!c.requested ? ' · request not retained' : ''}</strong><span className="rho-act-pill">{state}</span></header>
-          {outputName(c.input) && <pre>{outputName(c.input)}</pre>}
+          {outputName(c.input, root) && <pre>{outputName(c.input, root)}</pre>}
           <details><summary>Action details</summary><p>Call {c.call_id}</p><pre>{JSON.stringify(c.input, null, 2)}</pre>
             {c.returned && <p>Native tool result: {c.observation === 'rejected' ? 'refused' : c.tool_error === true ? 'marked as error' : c.tool_error === false ? 'not marked as error' : 'unknown error flag'}{c.denial_kind ? ' · ' + c.denial_kind : ''}. {c.exit_code !== null ? `Process exit: ${c.exit_code}.` : 'No process exit code observed.'}</p>}
             {c.result_detail !== null ? <pre>{typeof c.result_detail === 'string' ? c.result_detail : JSON.stringify(c.result_detail, null, 2)}</pre> : c.returned && <p>Result body was not captured.</p>}
