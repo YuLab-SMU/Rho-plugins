@@ -2,9 +2,9 @@
 // client and a place in its context panel; this entry never imports the shell.
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { Annotation, EditorState, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state';
+import { Annotation, Compartment, EditorState, RangeSetBuilder, StateEffect, StateField, type Extension } from '@codemirror/state';
 import { Decoration, EditorView, keymap, lineNumbers, type DecorationSet } from '@codemirror/view';
-import { acquire, authorLabel, currentRanges, diff, groups, readVersion, type DocumentSync, type Group, type UiClient } from './ui-model.js';
+import { acquire, authorLabel, currentRanges, diff, groups, readPinned, type DocumentSync, type Group, type UiClient } from './ui-model.js';
 import { describe, excerpt } from './ui-card-model.js';
 
 export interface EditorViewProps {
@@ -24,7 +24,11 @@ export interface EditorViewProps {
   appearance?: 'document' | 'message';
   onDraftState?: (state: { documentId: string; version: number | null; ready: boolean }) => void;
   // True when this session may prepare context for the Agent (context.create).
-  askable?: boolean;
+  askable?: boolean; reviewSelection?: (anchor: { kind: 'document'; documentId: string; version: number; from: number; to: number }) => void;
+  // CodeMirror extensions the application adds for a document by its path, such as a language
+  // and its highlighting. Asked once the path is known and applied in place: the text shows at
+  // once, and the buffer and its sync are untouched. A failure leaves the text plain.
+  extensionsFor?: (path: string) => Extension[] | Promise<Extension[]>;
 }
 
 const remote = Annotation.define<boolean>();
@@ -120,7 +124,7 @@ export function DocumentEditorView(props: EditorViewProps) {
     : <LiveDocumentView {...props} />;
 }
 
-function PinnedDocumentView({ view, projectId, client, documentId, version }: EditorViewProps & { documentId: string; version: number }) {
+function PinnedDocumentView({ view, projectId, client, documentId, version, extensionsFor }: EditorViewProps & { documentId: string; version: number }) {
   injectStyles();
   const host = useRef<HTMLDivElement>(null);
   const [failure, setFailure] = useState('');
@@ -128,26 +132,30 @@ function PinnedDocumentView({ view, projectId, client, documentId, version }: Ed
   useEffect(() => {
     let disposed = false, editor: EditorView | undefined;
     setFailure('');
-    void readVersion(client, projectId, documentId, version).then(content => {
+    const added = new Compartment();
+    void readPinned(client, projectId, documentId, version).then(({ content, path }) => {
       if (disposed || !host.current) return;
-      editor = new EditorView({ parent: host.current, doc: content, extensions: [lineNumbers(), EditorView.lineWrapping, theme, EditorView.editable.of(false),
+      editor = new EditorView({ parent: host.current, doc: content, extensions: [lineNumbers(), EditorView.lineWrapping, theme, added.of([]), EditorView.editable.of(false),
         EditorView.contentAttributes.of({ 'aria-label': String(view.props.title ?? 'Document'), 'aria-readonly': 'true' })] });
+      if (extensionsFor) void Promise.resolve().then(() => extensionsFor(path)).then(more => { if (!disposed) editor?.dispatch({ effects: added.reconfigure(more) }); }, () => undefined);
     }, error => { if (!disposed) setFailure(error.message); });
     return () => { disposed = true; editor?.destroy(); };
-  }, [client, projectId, documentId, version, attempt]);
+  }, [client, projectId, documentId, version, attempt, extensionsFor]);
   return <div className="rho-doc"><p className="rho-doc-exact">Showing version {version}. This view is pinned and can’t be edited here.</p>
     {failure && <div className="rho-doc-band" role="alert"><span className="rho-doc-fill">{failure}</span><button onClick={() => setAttempt(n => n + 1)}>Try again</button></div>}
     <div className="rho-doc-editor" ref={host} />
   </div>;
 }
 
-function LiveDocumentView({ view, projectId, client, active, documentVersion, documentRevision, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, saveable = false, appearance = 'document', onDraftState, askable = false }: EditorViewProps) {
+function LiveDocumentView({ view, projectId, client, active, documentVersion, documentRevision, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, saveable = false, appearance = 'document', onDraftState, askable = false, reviewSelection, extensionsFor }: EditorViewProps) {
   injectStyles();
   const binding = view.bindings.document as { documentId: string; version?: number; kind?: string } | undefined;
   const documentId = binding?.documentId ?? '';
   const readOnly = !editable;
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<EditorView | null>(null);
+  const added = useMemo(() => new Compartment(), []);
+  const applied = useRef<Extension[]>([]);
   const [showAgent, setShowAgent] = useState(true);
   const [failure, setFailure] = useState('');
   const [composing, setComposing] = useState(false);
@@ -162,7 +170,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
 
   useEffect(() => {
     if (!host.current || !documentId) return;
-    const extensions: Extension[] = [...(appearance === 'message' ? [] : [lineNumbers()]), EditorView.lineWrapping, theme, agentMarks,
+    const setup: Extension[] = [...(appearance === 'message' ? [] : [lineNumbers()]), EditorView.lineWrapping, theme, added.of(applied.current), agentMarks,
       EditorView.contentAttributes.of({ 'aria-label': String(view.props.title ?? 'Document'), spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
       EditorView.editable.of(!readOnly),
       EditorState.transactionFilter.of(tr => {
@@ -188,7 +196,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
           sync.local(port);
         }
       })];
-    const cm = new EditorView({ parent: host.current, doc: sync.sent, extensions });
+    const cm = new EditorView({ parent: host.current, doc: sync.sent, extensions: setup });
     editor.current = cm;
     const port = {
       text: () => cm.state.doc.toString(),
@@ -205,6 +213,18 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
     else port.replace(sync.sent);
     return () => { detach(); cm.destroy(); editor.current = null; };
   }, [sync, documentId, readOnly, saveable, appearance]);
+
+  const path = sync.confirmed?.path;
+  useEffect(() => {
+    if (!path || !extensionsFor) return;
+    let live = true;
+    void Promise.resolve().then(() => extensionsFor(path)).then(more => {
+      if (!live) return;
+      applied.current = more;
+      editor.current?.dispatch({ effects: added.reconfigure(more) });
+    }, () => undefined);
+    return () => { live = false; };
+  }, [added, path, extensionsFor]);
 
   useEffect(() => { if (documentVersion !== undefined) void sync.observe(documentVersion, documentRevision).catch(() => undefined); }, [sync, documentVersion, documentRevision]);
 
@@ -228,7 +248,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
     {sync.notice && <div className="rho-doc-band" role="status"><span className="rho-doc-fill">{sync.notice}</span></div>}
     {sync.unconfirmed && <div className="rho-doc-band" role="status" data-rho-unconfirmed=""><span className="rho-doc-fill">Your last change is not confirmed yet. It stays here and is sent again until Rho answers.</span></div>}
     <div className="rho-doc-editor" ref={host} />
-    {active && headerTarget && createPortal(<>{save}{askable && appearance === 'document' && <AskAboutSelection client={client} projectId={projectId} documentId={documentId} range={range} version={sync.confirmed && !sync.busy && !sync.aside && !composing && sync.sent === sync.confirmed.content ? sync.confirmed.version : null} />}<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Highlight changes</label></>, headerTarget)}
+    {active && headerTarget && createPortal(<>{save}{reviewSelection && <button disabled={!range || !sync.confirmed || sync.busy || composing || sync.sent !== sync.confirmed.content || !!sync.aside} onClick={() => range && sync.confirmed && reviewSelection({ kind: 'document', documentId, version: sync.confirmed.version, from: range.from, to: range.to })}>Review selected text</button>}{askable && appearance === 'document' && <AskAboutSelection client={client} projectId={projectId} documentId={documentId} range={range} version={sync.confirmed && !sync.busy && !sync.aside && !composing && sync.sent === sync.confirmed.content ? sync.confirmed.version : null} />}<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Highlight changes</label></>, headerTarget)}
     {active && !headerTarget && save && <div className="rho-doc-band">{save}</div>}
     {active && (contextTarget ? createPortal(changes, contextTarget) : contextTarget === null ? null : <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border,#e4e7eb)', maxHeight: '40%', overflow: 'auto' }}>{changes}</div>)}
   </div>;
@@ -275,4 +295,5 @@ export const editorEntry = {
   View: DocumentEditorView,
 };
 
-export { DocumentCardBody, documentForms, type DocumentCardProps } from './ui-card.js';
+export { DocumentCardBody, documentForms, useDocumentBuffer, type DocumentBufferProps, type DocumentCardProps } from './ui-card.js';
+export { TextComparison } from './ui-compare.js';

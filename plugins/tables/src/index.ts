@@ -81,20 +81,30 @@ export class Tables {
     }
     return { resource: publicResource(table.resource), columns: table.columns, total: table.rows.length, filtered: rows.length, offset, nextOffset: Math.min(rows.length, offset + limit), more: offset + limit < rows.length, rows: rows.slice(offset, offset + limit), entityKey: table.entityKey, namespace: table.namespace };
   }
-  async compare(left: ResourceRef, right: ResourceRef, options: { leftKey: string; rightKey: string; leftNamespace: string; rightNamespace: string; mapping: 'equal-string'; leftField: string; rightField: string; join: 'left' | 'inner' | 'full' }) {
+  async compare(left: ResourceRef, right: ResourceRef, options: { leftKey: string; rightKey: string; leftNamespace: string; rightNamespace: string; mapping: 'equal-string'; leftField?: string; rightField?: string; fields?: Array<{ leftField: string; rightField: string }>; join: 'left' | 'inner' | 'full' }) {
     const a = await this.rows(left), b = await this.rows(right);
     requireThat(options.mapping === 'equal-string' && a.entityKey && b.entityKey && a.entityKey === options.leftKey && b.entityKey === options.rightKey && a.namespace === options.leftNamespace && b.namespace === options.rightNamespace, 'condition', 'Comparison requires explicit keys and the current input namespaces.');
-    requireThat(['left', 'inner', 'full'].includes(options.join) && a.columns.some(c => c.name === options.leftField && c.type === 'number') && b.columns.some(c => c.name === options.rightField && c.type === 'number'), 'invalid', 'Declare a supported join and numeric comparison fields.');
+    const fields = options.fields ?? [{ leftField: options.leftField!, rightField: options.rightField! }];
+    requireThat(fields.length > 0 && fields.length <= 16 && new Set(fields.map(f => JSON.stringify([f.leftField, f.rightField]))).size === fields.length, 'invalid', 'Select one to sixteen distinct numeric field pairs.');
+    requireThat(['left', 'inner', 'full'].includes(options.join) && fields.every(f => a.columns.some(c => c.name === f.leftField && c.type === 'number') && b.columns.some(c => c.name === f.rightField && c.type === 'number')), 'invalid', 'Declare a supported join and numeric comparison fields.');
     const ar = new Map(a.rows.map(r => [r[a.entityKey!], r])), br = new Map(b.rows.map(r => [r[b.entityKey!], r]));
     const keys = options.join === 'full' ? [...new Set([...ar.keys(), ...br.keys()])] : [...ar.keys()].filter(k => options.join !== 'inner' || br.has(k));
     requireThat(keys.length <= this.limits.maxRows, 'limit', 'Comparison output exceeds the row budget.', { limit: 'maxRows' });
-    const rows = keys.map(key => ({ key, x: ar.get(key)?.[options.leftField] ?? null, y: br.get(key)?.[options.rightField] ?? null }));
+    const rows = keys.map(key => {
+      if (!options.fields) return { key, x: ar.get(key)?.[options.leftField!] ?? null, y: br.get(key)?.[options.rightField!] ?? null };
+      const row: Record<string, any> = { key, left_present: ar.has(key), right_present: br.has(key), changed: ar.has(key) !== br.has(key) };
+      fields.forEach((f, i) => { const x = ar.get(key)?.[f.leftField] ?? null, y = br.get(key)?.[f.rightField] ?? null;
+        row['before_' + i] = x; row['after_' + i] = y; row['delta_' + i] = x !== null && y !== null ? y - x : null;
+        requireThat(row['delta_' + i] === null || Number.isFinite(row['delta_' + i]), 'condition', 'A numeric difference exceeds the finite numeric range.', { key, field: f.leftField });
+        row.changed ||= x !== y;
+      }); return row;
+    });
     const key = digest(canonical([left, right, options]));
     const relative = '.rho/plugins/comparisons/' + key + '.json';
     await stateDirectory(this.files.root, '.rho/plugins/comparisons');
     await atomicJson(await confined(this.files.root, relative, true), { inputs: [left, right], rows });
-    const format: TableFormat = { encoding: 'json-rows', columns: [{ name: 'key', type: 'string', nullValues: [] }, { name: 'x', type: 'number', nullValues: [] }, { name: 'y', type: 'number', nullValues: [] }], key: { column: 'key', namespace: 'comparison:' + key } };
-    return publicResource(await this.files.register(relative, { operationId: 'comparison:' + key, inputs: [left, right], transform: options, sources: [a.resource.provenance, b.resource.provenance] }, 'available', { total: rows.length, missingX: rows.filter(r => r.x === null).length, missingY: rows.filter(r => r.y === null).length }, { path: relative, kind: 'table', format }));
+    const format: TableFormat = { encoding: 'json-rows', columns: options.fields ? [{ name: 'key', type: 'string', nullValues: [] }, ...['left_present', 'right_present', 'changed'].map(name => ({ name, type: 'boolean' as const, nullValues: [] })), ...fields.flatMap((_, i) => ['before_', 'after_', 'delta_'].map(n => ({ name: n + i, type: 'number' as const, nullValues: [] })))] : [{ name: 'key', type: 'string', nullValues: [] }, { name: 'x', type: 'number', nullValues: [] }, { name: 'y', type: 'number', nullValues: [] }], key: { column: 'key', namespace: 'comparison:' + key } };
+    return publicResource(await this.files.register(relative, { operationId: 'comparison:' + key, inputs: [left, right], transform: options, sources: [a.resource.provenance, b.resource.provenance] }, 'available', { total: rows.length, missingX: rows.filter(r => (r as any).x === null).length, missingY: rows.filter(r => (r as any).y === null).length, ...(options.fields ? { changed: rows.filter(r => (r as any).changed).length, added: keys.filter(k => !ar.has(k)).length, removed: keys.filter(k => !br.has(k)).length } : {}) }, { path: relative, kind: 'table', format }));
   }
 }
 const tablesSkillContent = [
@@ -130,6 +140,6 @@ const tablesSkill = {
   ],
   verify: { command: 'npm run test:tables', description: 'Declared types keep leading zeros and literal NA, joins retain nulls, namespaces and both input versions, and unkeyed tables never fabricate keys.' }
 };
-export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.4.3', requires: ['files'], capabilities: ['tables'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.5.0', requires: ['files'], capabilities: ['tables'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...tablesSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

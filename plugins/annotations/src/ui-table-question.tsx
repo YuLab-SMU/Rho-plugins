@@ -10,7 +10,7 @@ interface Props {
   documents: { id: string; version: number }[]; threads: any[]; contexts: any[];
   onOpenResource?: (ref: Ref) => void; onRoutedQuestion?: () => void; enabled: boolean;
   // Where the host keeps this view's own controls; without one they stay above the thread.
-  headerTarget?: HTMLElement | null;
+  headerTarget?: HTMLElement | null; onReview?: (annotationId: string) => void;
   // The selection channel the host assigns to this table (shared by views of its version).
   selectionScope?: { kind: 'shared'; id: string };
 }
@@ -31,7 +31,7 @@ function CopyRequest({ contextId, prepare }: { contextId?: string; prepare: () =
   }
   return <p className="table-question-handoff"><button onClick={copy}>{copied ? 'Copied' : 'Copy request for the Agent'}</button>{problem && <span role="alert"> {problem}</span>}</p>;
 }
-export function TableQuestion({ projectId, viewId, resource, client, principalId, documents, threads, contexts, onOpenResource, onRoutedQuestion, enabled, headerTarget, selectionScope }: Props) {
+export function TableQuestion({ projectId, viewId, resource, client, principalId, documents, threads, contexts, onOpenResource, onRoutedQuestion, enabled, headerTarget, selectionScope, onReview }: Props) {
   const key = ['rho-table-question/1', projectId, principalId, viewId, resource.id, resource.version].join(':');
   const [intent, setIntent] = useState<Intent | null>(() => { try { return JSON.parse(sessionStorage.getItem(key) ?? 'null'); } catch { return null; } });
   // Open while the person is writing or retrying; a submitted question folds to one status line
@@ -98,6 +98,7 @@ export function TableQuestion({ projectId, viewId, resource, client, principalId
   const actions = <div className="table-question-actions" role="group" aria-label="Questions about this table version">
     {onRoutedQuestion ? <button onClick={onRoutedQuestion}>Ask assigned Agent about selected rows</button> : enabled && <button disabled={busy} aria-expanded={drafting ? expanded : undefined} aria-controls={drafting && expanded ? region : undefined} onClick={() => { if (drafting) setExpanded(v => !v); else void begin(); }}>{drafting ? 'Question draft' : 'Ask about selected rows'}</button>}
     {latest && <button className="table-question-toggle" aria-expanded={expanded} aria-controls={expanded ? region : undefined} aria-live="polite" onClick={() => setExpanded(v => !v)}>{relevant.length > 1 ? `${relevant.length} questions · ${latest.status}` : latest.status}</button>}
+    {latest && onReview && <button onClick={() => onReview(relevant[relevant.length - 1].annotationId)}>Review this question</button>}
     {!expanded && latest?.replies.flatMap(links)}
   </div>;
   return <section id={region} className="table-question" aria-label="Questions about this table version">

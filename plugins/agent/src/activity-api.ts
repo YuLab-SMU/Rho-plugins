@@ -34,7 +34,7 @@ export async function activityOutputs(root: string, directory: string) {
 // reached without symlinks. With an expected digest the capture is of that exact version
 // and a changed file is refused; without one it is of the current bytes.
 export async function captureActivityArtifact(root: string, projectId: string, relative: string, expectedDigest: string | undefined,
-  files: Pick<ResourceStore, 'restore'> & { validateDeclaration(declaration: Declaration): void }, csvDeclaration?: (data: Buffer, relative: string) => Declaration) {
+  files: Pick<ResourceStore, 'restore'> & { validateDeclaration(declaration: Declaration): void; captureBytes?: (data: Uint8Array, declaration: Declaration, source: Record<string, unknown>, expectedDigest?: string) => Promise<any> }, csvDeclaration?: (data: Buffer, relative: string) => Declaration) {
   publicPath(relative);
   const base = await fs.realpath(root), file = path.resolve(base, relative);
   const inside = path.relative(base, file);
@@ -66,6 +66,10 @@ export async function captureActivityArtifact(root: string, projectId: string, r
     declaration = { path: relative, kind: 'media', format: { mimeType: mime[ext] } };
   }
   files.validateDeclaration(declaration);
+  if (files.captureBytes) {
+    const captured = await files.captureBytes(bytes, declaration, { kind: 'disk', path: relative }, expectedDigest);
+    return { id: captured.id, version: captured.version, kind: captured.kind, path: relative };
+  }
   const id = digest(canonical({ declaration, version }));
   // Files owns the immutable stored bytes. Its public restore/import primitive
   // creates a resource whose source is that snapshot, so later external edits

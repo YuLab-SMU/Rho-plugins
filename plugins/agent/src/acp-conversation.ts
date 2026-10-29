@@ -3,7 +3,7 @@ import { Readable, Writable, Transform } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
 import type { AgentConversation, AgentTurn, AgentCompletion, AgentProcessLimits, AgentMcpServer, AgentSessionIdentity, AgentToolKind } from './conversation.js';
-import { visibleError } from './conversation.js';
+import { visibleError, commandOutput } from './conversation.js';
 import { SessionObserver, configOptions, type SessionObservation, type ObservationOrigin, type sessionObservationLimits } from './session-observation.js';
 import { stopAcpProcess } from './acp-process.js';
 
@@ -45,6 +45,7 @@ export class AcpConversation implements AgentConversation {
   private childEnded: Promise<void> = Promise.resolve();
   private exit: AgentCompletion['exit'] = null;
   private active: AgentTurn | null = null;
+  private toolTitles = new Map<string,string>();
   private sessionId: string | undefined;
   private identity: AgentSessionIdentity | null = null;
   private canCloseSession = false;
@@ -81,15 +82,22 @@ export class AcpConversation implements AgentConversation {
       const meta = u._meta?.claudeCode as Record<string, unknown> | undefined;
       const input = u.rawInput as Record<string, unknown> | undefined;
       const name = ('name' in u && typeof u.name === 'string' ? u.name : undefined) ?? (typeof meta?.toolName === 'string' ? meta.toolName : undefined);
-      const operation = name === 'mcp__rho__rho_call' && typeof input?.operation === 'string' ? input.operation : undefined;
+      const toolName = name ?? u.title;
+      if (toolName && this.toolTitles.size < 512) this.toolTitles.set(u.toolCallId,toolName.slice(0,1024));
+      const operation = /^(mcp__rho__|mcp\.rho\.)rho_call$/.test(toolName ?? '') && typeof input?.operation === 'string' ? input.operation : undefined;
       const title = stepText(u.title), detail = toolDetail(input);
       const toolKind = 'kind' in u && toolKinds.includes(u.kind as AgentToolKind) ? u.kind as AgentToolKind : undefined;
+      // A command's printed output and exit arrive on the terminal extension this client asks for.
+      const terminal = u._meta as { terminal_output?: { data?: unknown }; terminal_exit?: { exit_code?: unknown } } | undefined;
+      const printed = typeof terminal?.terminal_output?.data === 'string' ? commandOutput(terminal.terminal_output.data) : undefined;
+      const exitCode = Number.isSafeInteger(terminal?.terminal_exit?.exit_code) ? terminal!.terminal_exit!.exit_code as number : undefined;
       this.active.event({ type: 'step', step: { kind: 'tool', at, id: u.toolCallId,
         ...(name || u.title ? { tool: (name ?? u.title)!.slice(0, 512) } : {}), ...(operation ? { operation } : {}),
         ...(title ? { title } : {}), ...(toolKind ? { toolKind } : {}), ...(detail ? { detail } : {}),
+        ...(printed ? { output: printed } : {}), ...(exitCode !== undefined ? { exitCode } : {}),
         ...(u.status ? { outcome: u.status === 'completed' ? 'returned' : u.status === 'failed' ? 'rejected' : 'requested' } : {}) } });
     }
-    // Thought chunks, arbitrary raw tool content and vendor diagnostics are not retained.
+    // Thought chunks, other tool content and vendor diagnostics are not retained.
   }
 
   private async connect(turn: AgentTurn) {
@@ -127,7 +135,7 @@ export class AcpConversation implements AgentConversation {
         const input = params.toolCall.rawInput as Record<string, unknown> | undefined;
         const details = [input?.command, input?.file_path, input?.path].find(x => typeof x === 'string') as string | undefined;
         const request = { id: randomUUID(), toolCallId: params.toolCall.toolCallId,
-          title: (params.toolCall.title ?? 'Agent tool').slice(0, 1024),
+          title: (params.toolCall.title ?? this.toolTitles.get(params.toolCall.toolCallId) ?? 'Agent tool').slice(0, 1024),
           ...(details && details !== params.toolCall.title ? { details: details.slice(0, 2048) } : {}),
           options: params.options.slice(0, 8).map(x => ({ id: x.optionId, name: x.name.slice(0, 160), kind: x.kind })) };
         try {
@@ -141,7 +149,7 @@ export class AcpConversation implements AgentConversation {
     const timer = setTimeout(() => { this.fault = 'The Agent did not establish a session within connectTimeoutMs.'; void this.close(); }, o.limits.connectTimeoutMs);
     timer.unref();
     try {
-      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.13' }, clientCapabilities: {} });
+      const initialized = await connection.agent.request(acp.methods.agent.initialize, { protocolVersion: 1, clientInfo: { name: 'rho-agent', version: '0.4.13' }, clientCapabilities: { _meta: { terminal_output: true } } });
       if (initialized.protocolVersion !== 1) throw new Error('The selected Agent does not support ACP v1.');
       this.canCloseSession = initialized.agentCapabilities?.sessionCapabilities?.close != null;
       this.canDeleteSession = initialized.agentCapabilities?.sessionCapabilities?.delete != null;
@@ -211,7 +219,7 @@ export class AcpConversation implements AgentConversation {
   async run(turn: AgentTurn): Promise<AgentCompletion> {
     if (this.active) throw new Error('The Agent is already answering a message.');
     if (this.closing) throw new Error('This Agent connection is closed.');
-    this.active = turn; this.phase = 'setup'; this.outputBytes = 0; this.fault = null;
+    this.active = turn; this.toolTitles.clear(); this.phase = 'setup'; this.outputBytes = 0; this.fault = null;
     let sent = false; const started = Date.now();
     const stop = () => {
       if (this.phase === 'prompt' && this.connection && this.sessionId) {

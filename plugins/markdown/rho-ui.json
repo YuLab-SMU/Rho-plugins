@@ -1,0 +1,14 @@
+{
+  "format": "rho.ui-extension/1",
+  "plugin": "documents",
+  "component": "markdown.reader",
+  "version": "0.1.0",
+  "displayName": "Markdown",
+  "description": "Reads a Markdown document as formatted text, with tables, images from the project, math and code, from the same buffer as the editor. Source shows the editor.",
+  "entry": "./ui",
+  "development": "./src/ui.tsx",
+  "export": "MarkdownView",
+  "propsSchema": { "type": "object", "properties": { "title": { "type": "string" } } },
+  "bindings": { "document": "document" },
+  "requiredOperations": ["document.read"]
+}

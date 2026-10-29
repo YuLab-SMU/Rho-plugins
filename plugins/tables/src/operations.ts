@@ -1,5 +1,5 @@
 // Owner business contracts. Application project/authentication fields are separate.
-export const operationContracts = {
+const legacyContracts = {
   "data.page": {
     "inputSchema": {
       "type": "object",
@@ -427,3 +427,9 @@ export const operationContracts = {
     "effect": "metadata"
   }
 } as const;
+
+const comparisonOptions: any = structuredClone(legacyContracts['data.compare'].inputSchema.properties.options);
+comparisonOptions.properties.fields = { type: 'array', minItems: 1, maxItems: 16, items: { type: 'object', additionalProperties: false, properties: { leftField: { type: 'string', minLength: 1 }, rightField: { type: 'string', minLength: 1 } }, required: ['leftField', 'rightField'] } };
+comparisonOptions.required = comparisonOptions.required.filter((f: string) => !['leftField', 'rightField'].includes(f));
+comparisonOptions.oneOf = [{ required: ['leftField', 'rightField'], not: { required: ['fields'] } }, { required: ['fields'], not: { anyOf: [{ required: ['leftField'] }, { required: ['rightField'] }] } }];
+export const operationContracts = { ...legacyContracts, 'data.compare': { ...legacyContracts['data.compare'], inputSchema: { ...legacyContracts['data.compare'].inputSchema, properties: { ...legacyContracts['data.compare'].inputSchema.properties, options: comparisonOptions } } } };

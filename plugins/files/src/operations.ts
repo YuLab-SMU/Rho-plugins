@@ -1,5 +1,5 @@
 // Owner business contracts. Application project/authentication fields are separate.
-export const operationContracts = {
+const legacyContracts = {
   "resource.list": {
     "inputSchema": {
       "type": "object",
@@ -685,3 +685,11 @@ export const operationContracts = {
     "effect": "metadata"
   }
 } as const;
+
+import { objectSchema as obj, text, refSchema } from '@rho-workspace/plugin-contracts';
+export const operationContracts = { ...legacyContracts,
+  'resource.capture': {
+    inputSchema: { ...obj({ path: text, document: obj({ documentId: text, version: { type: 'integer', minimum: 1 } }), expectedDigest: { type: 'string', pattern: '^[a-f0-9]{64}$' }, declaration: legacyContracts['resource.register'].inputSchema.properties.declaration }, []), oneOf: [{ required: ['path'], not: { required: ['document'] } }, { required: ['document'], not: { required: ['path'] } }] },
+    outputSchema: legacyContracts['resource.register'].outputSchema, requires: [] as string[], effect: 'metadata' as const
+  }
+};

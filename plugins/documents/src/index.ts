@@ -424,7 +424,7 @@ const documentSkill = {
 };
 export const plugin = {
   entryVersion: '1.0',
-  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.5', requires: [], capabilities: ['documents'], presentation,
+  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.7', requires: [], capabilities: ['documents'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...documentSkill, presentation: skillPresentation }],
   // Offered to the Claude Code sessions an application starts: the skill above as a native

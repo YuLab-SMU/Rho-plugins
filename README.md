@@ -25,7 +25,8 @@ capabilities as nine independent npm plugins; browser entries remain separate wo
 
 ## Implemented capabilities
 
-The nine `@rho-workspace/plugin-<id>` packages are version **0.4.0**. Each
+The nine `@rho-workspace/plugin-<id>` packages have independent versions, pinned in
+each package manifest and the selected application composition. Each
 ships its own implementation and descriptor; the generic Contracts package is
 shared infrastructure, not a tenth capability. The source root is private and
 cannot be packed as an aggregate runtime package.
@@ -41,6 +42,10 @@ cannot be packed as an aggregate runtime package.
 | `charts` | Validated scatter bindings, stable entity mapping and explicit sampling | [Charts](plugins/charts/README.md) |
 | `agent` | Frozen context, bindings/receipts, durable caller intents and project-scoped stdio MCP | [Agent](plugins/agent/README.md) |
 | `annotations` | Version-anchored feedback and explicit replies over Documents drafts and source-owner-validated anchors | [Annotations](plugins/annotations/README.md) |
+
+`@rho-workspace/plugin-markdown` is a browser view only, not a capability: a UI
+extension over Documents that reads a Markdown document as formatted text
+([Markdown](plugins/markdown/README.md)).
 
 Every owner ships `entryVersion:1.0`, versioned operation input/output contracts,
 dependency and side-effect declarations, and a digest-checked Skill in its compiled

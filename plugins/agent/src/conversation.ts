@@ -6,9 +6,29 @@ export interface ConversationStep {
   kind: 'text' | 'tool' | 'error'; at: string; text?: string; cut?: boolean;
   id?: string; tool?: string; operation?: string;
   // What the Agent said it was doing and the one native input that identifies it
-  // (a command, file path, pattern or query). Bounded, never raw tool output.
+  // (a command, file path, pattern or query). Bounded.
   title?: string; toolKind?: AgentToolKind; detail?: string;
   outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
+  // A command's exit code when the Agent reported one, and the last lines it printed
+  // (commandOutputLimits); lines and bytes count the whole output. Other tools' output
+  // is not kept.
+  exitCode?: number; output?: CommandOutput;
+}
+export interface CommandOutput { text: string; lines: number; bytes: number; cut: boolean }
+// The protected resource is the conversation record. Past either limit only the last
+// lines are kept and `cut` says so.
+export const commandOutputLimits = { maxBytes: 2048, maxLines: 20 };
+// Terminal colour and cursor codes are dropped and a line rewritten with carriage returns
+// keeps what a terminal would show last; the text keeps its own Unicode.
+export function commandOutput(printed: string, limits = commandOutputLimits): CommandOutput {
+  const clean = printed.replace(/\x1b\[[0-9;?]*[ -\/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
+    .split('\n').map(line => line.replace(/\r$/, '').split('\r').at(-1)!).join('\n').replace(/\s+$/, '');
+  const all = clean ? clean.split(/\r?\n/) : [];
+  let kept = all.slice(-limits.maxLines);
+  while (kept.length > 1 && Buffer.byteLength(kept.join('\n')) > limits.maxBytes) kept = kept.slice(1);
+  let text = kept.join('\n');
+  if (Buffer.byteLength(text) > limits.maxBytes) text = Buffer.from(text).subarray(-limits.maxBytes).toString('utf8').replace(/^\uFFFD+/, '');
+  return { text, lines: all.length, bytes: Buffer.byteLength(clean), cut: text !== clean };
 }
 export interface ConversationResult {
   isError: boolean; kind: string | null; reason: string | null; steps: number | null;

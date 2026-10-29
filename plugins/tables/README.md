@@ -1,6 +1,6 @@
 # Typed tables and comparison plugin
 
-`@rho-workspace/plugin-tables` 0.4.0 is an independently packed npm plugin.
+`@rho-workspace/plugin-tables` 0.5.0 is an independently packed npm plugin.
 
 Public entries: `Tables`, `tableLimits`, `declarationValidator`.
 
@@ -47,3 +47,15 @@ is readable but cannot publish entity selections.
 
 [Rho’s U2 acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-UI-ACCEPTANCE.md)
 records the actual assembled browser checks.
+
+
+## Multiple numeric comparisons
+
+`data.compare` accepts one to sixteen explicit `fields` pairs with the existing
+key/namespace/mapping/join conditions. Rows include `left_present`, `right_present`,
+`changed` and each pair's `before_N`, `after_N`, `delta_N`. Missing rows and nulls
+remain distinct from zero; duplicate keys or invalid numeric mapping are refused.
+A non-finite difference is refused instead of being serialized as null. Existing
+`leftField/rightField` calls retain `key/x/y`. The optional `TableComparison` UI
+confirms the field mapping, uses full join, pages 100 rows and shows missing rows.
+This comparison does not infer scientific comparability.

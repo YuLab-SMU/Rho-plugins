@@ -1,6 +1,6 @@
 # Documents and code plugin
 
-`@rho-workspace/plugin-documents` 0.4.0 is an independently packed npm plugin.
+`@rho-workspace/plugin-documents` 0.4.7 is an independently packed npm plugin.
 
 Public entries: `Documents`, `documentLimits`; `./contract` exports Node schemas.
 
@@ -106,6 +106,16 @@ and are excluded from every plugin artifact. Browser behavior is supplied separa
 contribution declaration. React/React DOM and CodeMirror State/View are exact,
 optional peers. The headless root/contract entries never import the UI.
 
+The owner shows text, not languages. An application adds a language and its
+highlighting through `extensionsFor(path)`, which returns CodeMirror extensions for a
+document's path, at once or as a promise. It is asked with the buffer's own path and
+applied in place: the text shows first, the buffer and its sync are untouched, and a
+failure leaves the text plain. Exact-version views take the same function.
+
+Another view of a document reads the same buffer with `useDocumentBuffer`, the hook
+the cards use: every view of one document shares one adapter, so what one view
+types or an Agent edits reaches the others once the owner confirms it.
+
 A shared browser adapter serializes identified edits, retries the original
 request after a lost reply and keeps unconfirmed text separate on conflicts.
 Composition waits for IME commit. The authenticated tab identity determines
@@ -134,3 +144,10 @@ conditional save behavior. Canonical source-qualified references distinguish equ
 filenames and normalize overlapping aliases. Unavailable source access cannot
 create a replacement blank buffer. Restoring an archive does not authorize new
 source folders; the injected current resolver must accept its reference.
+
+
+Documents 0.4.7 adds a confirmed-text selection callback for Review and an optional
+`TextComparison` over two retained resource refs. It uses the existing content
+excerpt, reads at most 1 MiB per version and previews at most 64 KiB without cutting
+a Unicode sequence. Buffer snapshots continue to identify their version/dirty
+state separately from disk captures. No comparison rewrites a buffer or its undo.

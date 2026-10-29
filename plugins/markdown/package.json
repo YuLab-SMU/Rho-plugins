@@ -1,0 +1,42 @@
+{
+  "name": "@rho-workspace/plugin-markdown",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Rho Markdown reading view over the Documents buffer",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "exports": {
+    "./ui": "./dist/ui.js",
+    "./render": "./dist/render.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "rho-ui.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "rho": {
+    "ui": "./rho-ui.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@vscode/markdown-it-katex": "1.1.2",
+    "katex": "0.16.47",
+    "markdown-it": "14.3.2",
+    "markdown-it-task-lists": "2.1.1"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "14.1.2"
+  },
+  "peerDependencies": {
+    "@rho-workspace/plugin-documents": "0.4.7",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

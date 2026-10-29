@@ -244,3 +244,5 @@ export const tableEntry = {
 };
 
 export { TableCardBody, tableForms, type TableCardProps } from './ui-card.js';
+
+export { TableComparison } from './ui-compare.js';

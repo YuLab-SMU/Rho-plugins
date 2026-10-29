@@ -20,6 +20,7 @@ export const presentation: PluginPresentation = {
   readOnly: false, runsCode: false,
 };
 export const operationPresentation = {
+  'resource.capture': { order: 15, displayName: 'Capture a version', description: 'Retains an immutable observation independently of later changes to the original file.', readOnly: false, runsCode: false },
   'resource.list': { order: 10, displayName: 'List', description: "Lists the project files and versions registered with Rho.", readOnly: true, runsCode: false },
   'resource.read': { order: 20, displayName: 'Read', description: "Reads a bounded part of a registered file.", readOnly: true, runsCode: false },
   'resource.register': { order: 30, displayName: 'Register', description: "Registers a project file with its version and provenance.", readOnly: false, runsCode: false },

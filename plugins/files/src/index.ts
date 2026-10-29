@@ -26,6 +26,34 @@ export class Files {
   }
   private async registryFile() { this.root = await fs.realpath(this.root); return path.join(await stateDirectory(this.root, '.rho/plugins'), 'resources.json'); }
   async list() { return readJson<Resource[]>(await this.registryFile(), []); }
+  // An observation is independent of the original path. Registration deliberately
+  // retains its live-file check; capture imports verified bytes under a new identity.
+  async capture(relative: string, options: { expectedDigest?: string; declaration?: Declaration; maxBytes?: number; describe?: (data: Buffer, path: string) => Declaration } = {}) {
+    requireThat(!path.isAbsolute(relative) && !relative.split(/[\\/]/).some(p => ['..', '.rho', '.git'].includes(p)), 'scope', 'Capture an ordinary project file outside internal state.');
+    const source = await this.sourceFile(relative);
+    requireThat(await fs.realpath(source.file) === source.file, 'scope', 'A capture cannot follow a symbolic link.');
+    const maximum = Math.min(options.maxBytes ?? 8 * 1024 * 1024, this.limits.maxFileBytes);
+    const checked = await verifyFile(source.file, maximum, options.expectedDigest);
+    const { data } = await readRange(source.file, maximum, checked.digest, 0, checked.bytes);
+    const declaration = options.declaration ?? options.describe?.(data, source.relative) ?? { path: source.relative, kind: 'file', format: { mimeType: /\.(R|r|py|md|txt|json|csv|tsv|qmd|Rmd|sh|sql)$/.test(relative) ? 'text/plain' : 'application/octet-stream' } };
+    requireThat(declaration.path === source.relative || declaration.path === relative, 'invalid', 'The declaration must name the captured file.');
+    return this.captureBytes(data, { ...declaration, path: source.relative }, { kind: 'disk', path: source.relative }, checked.digest);
+  }
+  async captureBytes(data: Uint8Array, declaration: Declaration, source: Record<string, unknown>, expectedDigest?: string) {
+    this.validateDeclaration(declaration);
+    const version = digest(data);
+    requireThat(!expectedDigest || expectedDigest === version, 'stale', 'Captured bytes differ from the expected version.');
+    requireThat(data.length <= Math.min(this.limits.maxFileBytes, 8 * 1024 * 1024), 'limit', 'Capture exceeds the 8 MiB snapshot budget.');
+    const id = digest(canonical({ capture: 1, declaration, version, source }));
+    const old = (await this.list()).find(r => r.id === id);
+    if (old) return publicResource(await this.resolve({ id, version }));
+    const observedAt = now();
+    const imported = await this.restore({ id, version, projectId: this.projectId, owner: 'rho-plugins.' + declaration.kind, kind: declaration.kind,
+      path: declaration.path, bytes: data.length, storage: '', format: declaration.format, availability: 'available',
+      provenance: { source: 'captured-observation', originalPath: declaration.path, observation: source, producerConfirmed: false }, coverage: { observedAt } }, data);
+    requireThat(imported.state === 'available', 'conflict', 'A captured resource conflicts with retained bytes.');
+    return publicResource(await this.resolve({ id, version }));
+  }
   private async storedBytes() {
     let bytes = 0, files = 0;
     const walk = async (dir: string) => {
@@ -156,6 +184,7 @@ const filesSkillContent = [
   '1. resource.register declares existing bytes with their kind and format, and requires',
   '   expectedDigest of the current content. The returned {id, version} names those exact',
   '   bytes; when the file changes, both change and old pages become stale on purpose.',
+  'Use resource.capture for immutable historical evidence: a project path or an exact Documents buffer version. A capture records observed bytes, not their producer or scientific validity.',
   '2. resource.read is a bounded byte read with offset; resource.list reports retained',
   '   resources with availability. Reads never start a runtime and never execute R.',
   '3. artifact.check verifies the artifacts one run declared, against the completion',
@@ -189,7 +218,7 @@ const filesSkill = {
 };
 export const plugin = {
   entryVersion: '1.0',
-  id: 'files', package: '@rho-workspace/plugin-files', version: '0.4.1', requires: [], capabilities: ['files'], presentation,
+  id: 'files', package: '@rho-workspace/plugin-files', version: '0.5.0', requires: [], capabilities: ['files'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...filesSkill, presentation: skillPresentation }]
 };

@@ -180,7 +180,7 @@ export class AgentContext {
     for (const name of names) {
       requireThat((await fs.stat(path.join(directory, name))).size <= this.limits.maxContextBytes, 'limit', 'Context observation exceeds byte budget.');
       const context = await readJson<any>(path.join(directory, name));
-      if (context.principal === principal || context.fetchedBy === principal) states.push({ contextId: name.slice(0, -5), preparation: context.preparation ?? 'prepared', delivery: context.delivery, ...(context.run?.operationId ? { run: context.run.operationId } : {}), ...(context.fetchedBy ? { fetchedBy: context.fetchedBy, fetchedAt: context.fetchedAt } : {}), responses: await this.responses(context) });
+      if (context.principal === principal || context.fetchedBy === principal) states.push({ contextId: name.slice(0, -5), at:context.at, annotations:(context.annotations??[]).map((a:any)=>({annotationId:a.annotationId,version:a.version})), preparation: context.preparation ?? 'prepared', delivery: context.delivery, ...(context.run?.operationId ? { run: context.run.operationId } : {}), ...(context.fetchedBy ? { fetchedBy: context.fetchedBy, fetchedAt: context.fetchedAt } : {}), responses: await this.responses(context) });
     }
     return states;
   }
@@ -189,7 +189,7 @@ export class AgentContext {
     for (const frozen of context.annotations ?? []) {
       try {
         const thread = await this.sources.annotations?.read(frozen.annotationId);
-        const messages = thread?.messages.filter((m: any) => m.replyTo && frozen.messages.some((f: any) => f.id === m.replyTo)) ?? [];
+        const messages = thread?.messages.filter((m: any) => m.replyTo && !frozen.messages.some((f:any)=>f.id===m.id) && frozen.messages.some((f: any) => f.id === m.replyTo)) ?? [];
         responses.push({ annotationId: frozen.annotationId, state: messages.length ? 'explicit-linked-response' : 'no-linked-response', messageIds: messages.map((m: any) => m.id) });
       } catch { responses.push({ annotationId: frozen.annotationId, state: 'unavailable' }); }
     }
@@ -291,7 +291,7 @@ const presentationSkill = {
   ],
   verify: { command: 'npm run test:presenter', description: 'Presentation enhances display within its witness and role, and refuses business feedback or document access.' }
 };
-export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.16', requires: [], capabilities: ['agent-context'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.18', requires: [], capabilities: ['agent-context'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   components: [{ id: 'rho.agent-note', version: '0.2.0', owner: 'rho-plugins.agent', bindings: {}, propsSchema: layeredSchemas.AgentNoteProps, ui: './ui', presentation: { displayName: 'Agent note', description: 'A plain presentation explanation with authenticated author and binding basis.', readOnly: true, runsCode: false } }],
   skills: [{ ...agentSkill, presentation: skillPresentation }, { ...feedbackSkill, presentation: { displayName: 'Business feedback', description: 'Reads original feedback, preserves current human edits and links an explicit reply.' } }, { ...presentationSkill, presentation: { displayName: 'Presentation', description: 'Enhances the assigned visible layout without business feedback or document access.' } }],

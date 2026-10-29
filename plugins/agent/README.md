@@ -8,7 +8,7 @@ cannot answer new native permission prompts; ACP supplies interactive choices.
 External activity retention stays independent of managed execution and does not
 confer Core acceptance, deduplication or scientific validity.
 
-`@rho-workspace/plugin-agent` 0.4.11 adds visible tool titles, ACP tool categories
+`@rho-workspace/plugin-agent` 0.4.18 adds visible tool titles, ACP tool categories
 and one identifying input (command, path, pattern or query) to conversation steps,
 plus Claude/Codex ACP conversations and an external-client relay, native-log
 collection, original feedback, MCP and presentation entries.
@@ -42,8 +42,11 @@ ACP identity before `run()` dispatches the prompt. The native transcript ID is n
 inferred from that identity. `event()` receives visible text and original tool IDs;
 each tool step also carries the Agent's bounded human title, its ACP tool category
 (`read`, `edit`, `execute`, `search`, …) and one identifying native input (command,
-file path, pattern or query) when the Agent reports one. Load-history replay, hidden
-thoughts and raw tool output are excluded. `run()`
+file path, pattern or query) when the Agent reports one. A command also carries its
+exit code and the last lines it printed (`commandOutput`, within `commandOutputLimits`:
+20 lines and 2 KiB, terminal codes removed), which the Agent sends because the client
+asks for ACP's `terminal_output` extension; an exit code the Agent does not report is
+not invented. Load-history replay, hidden thoughts and other tool output are excluded. `run()`
 reports completion, failure, confirmed cancellation or an unknown transport outcome.
 Calling `close()` releases the owned connection; it does not prove native work or
 arbitrary background descendants finished. A cancelled original prompt confirms ACP
@@ -329,3 +332,11 @@ Rho controls assignment generation, conditional layout changes, original receipt
 and actual visibility. Native tools remain an external harness responsibility;
 capability scopes are not an OS sandbox. Full live-model and installed acceptance
 is separate from component/SDK/browser source checks.
+
+
+Agent 0.4.18 delegates legacy activity capture to the selected Files capture port.
+Frozen context state reports which annotation version was sent and whether it was
+fetched; an explicit response excludes replies already present in that context.
+ACP retains Codex's native MCP spelling while identifying its operation, and names
+an otherwise unnamed permission from the original tool update. These observations
+do not expand native permission or grant access to arbitrary session history.

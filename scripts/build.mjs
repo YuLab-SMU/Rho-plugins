@@ -1,6 +1,6 @@
 import { rm } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
-const folders = ['packages/contracts', ...['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations'].map(id => 'plugins/' + id)];
+const folders = ['packages/contracts', ...['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'markdown'].map(id => 'plugins/' + id)];
 for (const folder of folders) {
   await rm(new URL('../' + folder + '/dist', import.meta.url), { recursive: true, force: true });
   const result = spawnSync('npm', ['run', 'build', '--workspace', folder], { stdio: 'inherit' });

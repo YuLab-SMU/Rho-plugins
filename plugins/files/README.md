@@ -1,6 +1,6 @@
 # Files and artifacts plugin
 
-`@rho-workspace/plugin-files` 0.4.0 is an independently packed npm plugin.
+`@rho-workspace/plugin-files` 0.5.0 is an independently packed npm plugin.
 
 Public entries: `Files`, `fileLimits`, `collectArtifacts`, `verifyArtifacts`.
 
@@ -41,3 +41,21 @@ one reference. The fifth Files constructor argument accepts this port; without i
 the existing single-root behavior remains. `sourceFile` exposes the same resolver
 to selected consumers such as saved-script planning. Source bytes stay in place;
 immutable snapshots and metadata remain in the owner state under `root`.
+
+
+## Independent captured versions
+
+`Files.capture(path, {declaration?, expectedDigest?, maxBytes?})` copies a bounded
+regular project file into immutable owner storage and returns its resource.
+`captureBytes` supplies the same implementation to selected owners, including
+Documents buffer snapshots and the compatible Agent capture entry. Identity
+includes the declaration, content digest and explicit observation source. A
+repeated capture reuses it. Overwrite, deletion or movement of the original does
+not change retained bytes. Registration keeps its existing meaning.
+
+The default snapshot ceiling is 8 MiB. Existing resource-count/512 MiB byte budgets
+remain; refusal preserves earlier versions. No partial file is stored. Captures
+retain original path, time, digest and source, with `producerConfirmed: false`.
+They assert observed bytes, not execution inputs/outputs. Typed declarations are
+retained; ordinary CSV does not acquire invented row keys. The application owns
+capture timing and per-turn concurrency/byte budgets.

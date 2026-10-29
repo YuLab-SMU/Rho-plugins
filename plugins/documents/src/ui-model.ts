@@ -14,14 +14,18 @@ export interface Group { groupId: string; author: string; kind: HistoryEntry['ki
 
 // Exact bindings never subscribe to, or borrow text from, the live adapter.
 export async function readVersion(client: UiClient, projectId: string, documentId: string, version: number): Promise<string> {
+  return (await readPinned(client, projectId, documentId, version)).content;
+}
+// One version's text with the document's path.
+export async function readPinned(client: UiClient, projectId: string, documentId: string, version: number): Promise<{ content: string; path: string }> {
   const input = { projectId, documentId };
   const current: Buffer = await client.call('document.read', input);
-  if (current.version === version) return current.content;
+  if (current.version === version) return { content: current.content, path: current.path };
   const entry = current.history?.find(e => e.version === version || e.version === version + 1);
   if (entry) {
     const change = await client.call('document.change.read', { ...input, targetChangeId: entry.changeId });
-    if (change.after.version === version) return change.after.content;
-    if (change.before.version === version) return change.before.content;
+    if (change.after.version === version) return { content: change.after.content, path: current.path };
+    if (change.before.version === version) return { content: change.before.content, path: current.path };
   }
   throw new Error(`Version ${version} is no longer available. This view keeps its original reference.`);
 }

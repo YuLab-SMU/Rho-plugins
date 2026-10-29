@@ -86,3 +86,5 @@ export function FeedbackComposer({ view, projectId, client, active, principalId,
   </section>;
 }
 export const feedbackEntry = { component: 'rho.feedback', componentVersion: '0.2.0', owner: 'rho-plugins.annotations', package: '@rho-workspace/plugin-annotations', propsSchema: feedbackComposerPropsSchema, bindings: { draft: 'document' as const }, requiredOperations: ['feedback.submit', 'feedback.status', 'interaction.selection.read', 'annotation.read', 'document.read', 'document.edit', 'document.undoOwn', 'document.revert', 'document.history', 'document.change.read'], selection: ['table-entities' as const] };
+
+export { ReviewPanel } from './ui-review.js';

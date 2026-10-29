@@ -6,6 +6,7 @@ const send = value => process.stdout.write(JSON.stringify({ jsonrpc: '2.0', ...v
 const update = (sessionId, value) => send({ method: 'session/update', params: { sessionId, update: value } });
 let active, permission;
 // Session settings in ACP form, only when a test asks for them.
+let r_terminal = false;
 let settings = process.env.ACP_CONFIG ? [
   { id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: 'default', options: [{ group: 'gateway', name: 'Routing group', options: [{ value: 'default', name: 'Default (recommended)' }, { value: 'auto/deepseek-v4.1-flash', name: 'DeepSeek V4.1 Flash · routing group', description: 'via gateway' }] }, { group: 'hpc', name: 'WestlakeHPC', options: [{ value: 'westlakehpc/glm-5.3-flash', name: 'GLM-5.3-Flash · WestlakeHPC' }] }] },
   { id: 'effort', name: 'Effort', category: 'thought_level', type: 'select', currentValue: 'high', options: [{ value: 'low', name: 'Low' }, { value: 'high', name: 'High' }, { value: 'max', name: 'Max' }] },
@@ -17,6 +18,7 @@ createInterface({ input: process.stdin }).on('line', line => {
   const reply = result => send({ id: r.id, result });
   if (!r.method) { if (permission) { log({ kind: 'choice', result: r.result }); permission(); permission = null; } return; }
   log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text, ...(r.method === 'session/new' ? { claudeMetadata: !!p?._meta?.claudeCode, plugins: p?._meta?.claudeCode?.options?.plugins } : {}) });
+  if (r.method === 'initialize') r_terminal = p?.clientCapabilities?._meta?.terminal_output === true;
   if (r.method === 'initialize') return reply({ protocolVersion: 1, agentInfo: { name: 'fault-fixture', version: '1' }, agentCapabilities: { loadSession: !process.env.ACP_NO_LOAD, ...(process.env.ACP_CAN_CLOSE ? { sessionCapabilities: { close: {}, delete: {} } } : {}) } });
   if (r.method === 'session/close' || r.method === 'session/delete') return reply({});
   if (r.method === 'session/new') return reply({ sessionId: 'original-session', ...(settings ? { configOptions: settings } : {}) });
@@ -49,7 +51,23 @@ createInterface({ input: process.stdin }).on('line', line => {
     update(p.sessionId, { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'retained ' }, messageId: 'one' });
     if (text === 'disconnect') { log({ kind: 'effect' }); process.exit(7); }
     if (text === 'oversize') { process.stdout.write('x'.repeat(8192)); return; }
+    if (text === 'command' && r_terminal) {
+      // Claude's adapter with the terminal extension: output, then exit and status.
+      const run = (id, command, data, exit, status) => {
+        update(p.sessionId, { sessionUpdate: 'tool_call', toolCallId: id, title: command, kind: 'execute', status: 'pending', rawInput: { command }, _meta: { terminal_info: { terminal_id: id }, claudeCode: { toolName: 'Bash' } } });
+        update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId: id, _meta: { terminal_output: { terminal_id: id, data } } });
+        update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId: id, status, content: [{ type: 'terminal', terminalId: id }], _meta: { claudeCode: { toolName: 'Bash' }, terminal_exit: { terminal_id: id, exit_code: exit, signal: null } } });
+      };
+      run('fit', 'rtk python3 analysis.py', Array.from({ length: 30 }, (_, i) => '\u001b[1mrow ' + i + '\u001b[0m 臭氧').join('\n') + '\n', 0, 'completed');
+      run('bad', 'Rscript model.R', 'Error in lm(y ~ x): object not found\nExecution halted\n', 1, 'failed');
+      run('lost', 'sleep 9', '', null, 'failed');
+    }
     if (text === 'wait') { update(p.sessionId, { sessionUpdate: 'tool_call', toolCallId: 'slow', title: 'Waiting', status: 'in_progress' }); return; }
+    if (text === 'rho-permission') {
+      update(p.sessionId,{sessionUpdate:'tool_call',toolCallId:'tool',title:'mcp.rho.rho_call',status:'pending',rawInput:{operation:'context.read'}});
+      permission=()=>{update(p.sessionId,{sessionUpdate:'tool_call_update',toolCallId:'tool',status:'completed'});active=null;reply({stopReason:'end_turn'});};
+      send({id:'permission-rho',method:'session/request_permission',params:{sessionId:p.sessionId,toolCall:{toolCallId:'tool',status:'pending'},options:[{optionId:'allow',name:'Allow once',kind:'allow_once'},{optionId:'deny',name:'Reject',kind:'reject_once'}]}});return;
+    }
     if (text === 'permission') {
       permission = () => { update(p.sessionId, { sessionUpdate: 'tool_call_update', toolCallId: 'tool', status: 'completed' }); active = null; reply({ stopReason: 'end_turn' }); };
       send({ id: 'permission-1', method: 'session/request_permission', params: { sessionId: p.sessionId, toolCall: { toolCallId: 'tool', title: 'Write a test file', status: 'pending' }, options: [{ optionId: 'allow', name: 'Allow once', kind: 'allow_once' }, { optionId: 'deny', name: 'Reject', kind: 'reject_once' }] } }); return;

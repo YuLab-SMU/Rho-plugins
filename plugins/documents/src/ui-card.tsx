@@ -94,8 +94,10 @@ const time = (at: string) => new Date(at).toLocaleTimeString([], { hour: '2-digi
 const fileName = (path: string) => path.split(/[\\/]/).pop()!.replace(/\.(md|markdown|txt)$/i, '');
 const isAgent = (author: string) => author.startsWith('agent:');
 
-// The shared buffer, read when no view has read it yet and kept current.
-function useBuffer({ client, projectId, documentId, principalId, documentVersion, maxUnconfirmedBytes = 1024 * 1024 }: DocumentCardProps) {
+// The shared buffer, read when no view has read it yet and kept current. Any view of a
+// document can read it this way: every view of one document shares one adapter.
+export interface DocumentBufferProps { client: UiClient; projectId: string; documentId?: string; documentVersion?: number; principalId?: string; maxUnconfirmedBytes?: number }
+export function useDocumentBuffer({ client, projectId, documentId, principalId, documentVersion, maxUnconfirmedBytes = 1024 * 1024 }: DocumentBufferProps) {
   const held = useMemo(() => documentId ? acquire(client, projectId, documentId, principalId, maxUnconfirmedBytes) : null, [client, projectId, documentId, principalId, maxUnconfirmedBytes]);
   useEffect(() => () => held?.release(), [held]);
   useSyncExternalStore(listener => held ? held.sync.subscribe(listener) : () => undefined, () => held?.sync.stateVersion ?? 0);
@@ -286,7 +288,7 @@ function Inline({ buffer, params, me }: { buffer: Buffer; params: Record<string,
 
 export function DocumentCardBody(props: DocumentCardProps) {
   injectStyles();
-  const { sync, buffer, failure, retry } = useBuffer(props);
+  const { sync, buffer, failure, retry } = useDocumentBuffer(props);
   const me = sync?.me ?? props.principalId, params = props.params;
   if (!props.documentId) return props.form === 'inline' ? <span>No document</span> : <p className="rho-dc-note">This item has no document.</p>;
   if (!buffer || !sync) {

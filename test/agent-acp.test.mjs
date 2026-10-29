@@ -98,6 +98,23 @@ test('a Claude session loads the plugin directories it is given, without their M
     assert.deepEqual((await f.calls()).find(x => x.kind === 'session/new').plugins, [{ type: 'local', path: '/tmp/rho-plugin-a', skipMcpDiscovery: true }]);
   } finally { await f.close(); }
 });
+test('a command step keeps its exit code and the last lines it printed, without terminal codes', async () => {
+  const f = await setup();
+  try {
+    const driver = f.create(), t = turn('command');
+    assert.equal((await driver.run(t.request)).state, 'completed');
+    const step = id => Object.assign({}, ...t.events.filter(e => e.step?.id === id).map(e => e.step));
+    const fit = step('fit'), bad = step('bad'), lost = step('lost');
+    assert.equal(fit.detail, 'rtk python3 analysis.py'); assert.equal(fit.outcome, 'returned'); assert.equal(fit.exitCode, 0);
+    assert.deepEqual({ lines: fit.output.lines, cut: fit.output.cut }, { lines: 30, cut: true });
+    assert.equal(fit.output.text.split('\n').length, 20); assert.equal(fit.output.text.split('\n').at(-1), 'row 29 臭氧');
+    assert.ok(!fit.output.text.includes('\u001b'));
+    assert.equal(bad.outcome, 'rejected'); assert.equal(bad.exitCode, 1);
+    assert.equal(bad.output.text, 'Error in lm(y ~ x): object not found\nExecution halted'); assert.equal(bad.output.cut, false);
+    assert.equal(lost.exitCode, undefined, 'an unreported exit code is not invented'); assert.equal(lost.output.text, '');
+  } finally { await f.close(); }
+});
+
 test('ACP does not send a prompt before durable session acceptance and refuses unsupported loading', async () => {
   const f = await setup();
   try {
@@ -194,4 +211,14 @@ test('inspect opens a session only to read its settings, removes it and ends the
     assert.equal(driver.connected, false);
     await assert.rejects(f.create('original-session').inspect(), /Inspect a new session/);
   } finally { await f.close(); }
+});
+
+test('Codex MCP spelling retains its operation and names a permission from the original tool update',async()=>{
+ const f=await setup();
+ try{
+ let choice;const t=turn('rho-permission',{async permission(p){choice=p;return 'allow';}}),driver=f.create();
+ assert.equal((await driver.run(t.request)).state,'completed');
+ assert.equal(choice.title,'mcp.rho.rho_call');
+ assert.ok(t.events.some(e=>e.step?.operation==='context.read'&&e.step?.tool==='mcp.rho.rho_call'));
+ }finally{await f.close();}
 });

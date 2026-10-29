@@ -553,13 +553,22 @@ export const anchorSchema = { oneOf: [
   obj({ kind: { const: 'document' }, documentId: text, version, from: integer, to: integer }),
   obj({ kind: { const: 'table' }, resource: ref, entities: { type: 'array', minItems: 1, maxItems: 1024, uniqueItems: true, items: text } })
 ] };
+const wholeResourceAnchor = obj({ kind: { const: 'resource' }, resource: ref });
+anchorSchema.oneOf.push(wholeResourceAnchor as any);
+annotationSchemas.thread.properties.anchor.oneOf.push(wholeResourceAnchor as any);
+annotationSchemas.thread.properties.source.oneOf.push(obj({ kind: { const: 'resource' }, resource: ref, metadata: { type: 'object' } }) as any);
+const decision = obj({ id: text, author: text, at: { type: 'string' }, version, targetMessageId: text, resources: replyResources,
+  status: { enum: ['accepted', 'needs-changes', 'withdrawn'] }, reason: { type: 'string' }, supersedes: text,
+  draft: { type: 'object' } }, ['id', 'author', 'at', 'version', 'targetMessageId', 'resources', 'status', 'reason']);
+(annotationSchemas.thread.properties as any).decisions = { type: 'array', maxItems: 256, items: decision };
 export const inputs = {
   'annotation.create': obj({ annotationId: changeId, expectedVersion: { const: 0 }, changeId, anchor: anchorSchema, draft: draftSchema }),
   'annotation.reply': obj({ annotationId: changeId, expectedVersion: version, changeId, replyTo: text, draft: draftSchema, resources: replyResources }, ['annotationId', 'expectedVersion', 'changeId', 'replyTo', 'draft']),
+  'annotation.decide': obj({ annotationId: changeId, expectedVersion: version, changeId, targetMessageId: text, resources: { ...replyResources, minItems: 1 }, status: { enum: ['accepted', 'needs-changes', 'withdrawn'] }, draft: draftSchema, supersedes: text }, ['annotationId', 'expectedVersion', 'changeId', 'targetMessageId', 'resources', 'status']),
   'annotation.read': obj({ annotationId: changeId }),
   'annotation.list': obj({})
 };
-export const outputs = { 'annotation.create': annotationSchemas.thread, 'annotation.reply': annotationSchemas.thread, 'annotation.read': annotationSchemas.thread, 'annotation.list': { type: 'array', items: annotationSchemas.thread } };
+export const outputs = { 'annotation.decide': annotationSchemas.thread, 'annotation.create': annotationSchemas.thread, 'annotation.reply': annotationSchemas.thread, 'annotation.read': annotationSchemas.thread, 'annotation.list': { type: 'array', items: annotationSchemas.thread } };
 
 export const feedbackComposerPropsSchema = {
   "type": "object",

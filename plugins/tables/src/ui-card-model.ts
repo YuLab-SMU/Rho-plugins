@@ -151,6 +151,7 @@ export function hiddenNote(form: string, show: string, facts: { total: number; s
 export function comparisonCounts(resource: Page['resource']) {
   const c = resource.coverage ?? {};
   const n = (v: unknown) => typeof v === 'number' && Number.isSafeInteger(v) && v >= 0 ? v : null;
+  if (resource.provenance?.transform && Array.isArray((resource.provenance.transform as any).fields)) return null;
   const total = n(c.total), missingX = n(c.missingX), missingY = n(c.missingY);
   if (total === null || missingX === null || missingY === null) return null;
   const inputs = Array.isArray(resource.provenance?.inputs) ? (resource.provenance!.inputs as unknown[]).map(readRef) : [];

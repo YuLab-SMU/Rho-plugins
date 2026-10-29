@@ -1,299 +1,43 @@
-# Current status
+# Current component status
 
-Native tools are now normal; CLI restrictions are removed, Core is optional, and activity/facts remain. 104 owner checks pass ([record](https://github.com/YuLab-SMU/Rho/blob/main/docs/NATIVE-TOOLS-EPISODE.md)).
+Updated: 2026-10-29.
 
-Updated: 2026-10-29 (later). Documents 0.4.5 declares `claudeCode`: its skill as a native skill and a `PreToolUse` hook that denies a native Edit/Write of a file with unsaved text, naming the buffer and, when determined, the ready `document.edit` input. Agent 0.4.16
-writes a content-named Claude Code plugin directory and loads it into Claude ACP sessions.
-Annotations 0.4.6 widens its peer. 97 owner checks pass; Rho's real episode recorded it.
+Files 0.5.0, Annotations 0.5.0 and Tables 0.5.0 supply immutable captures,
+version-bound human decisions and explicit multi-field comparison. Documents
+0.4.7 adds confirmed selection review and captured text comparison. Agent 0.4.18
+delegates the compatible capture entry to Files and exposes frozen-context delivery
+facts. Markdown 0.1.0 and the earlier code/highlight/command-output work are retained.
+The owner suite passes 110/110; application composition and installation are checked
+by Rho, separately from component checks.
 
-Updated: 2026-10-29. Documents 0.4.4 merges a disk change into unsaved text by line
-(both kept, the disk's first at one place; own undo removes only the person's edit);
-overlaps are kept apart and the save conflicts. A refused editor save reopens, then
-saves again after a merge. Annotations 0.4.5 widens its peer. 94 owner checks pass;
-Rho's real Claude Code episode (native Edit beside an unsaved line) saves both lines.
+| Owner | Implemented boundary | Material limit |
+| --- | --- | --- |
+| Files | Independent digest-checked snapshots with path/time/source; original bytes survive overwrite/delete; legacy registration unchanged | 8 MiB snapshot default, existing 512 MiB/1024-resource store; no inferred production claim |
+| Annotations | Whole-resource, document-range and keyed-row questions; explicit replies; append-only accepted/needs-changes/withdrawal decisions and retry receipts | Only embedding-authenticated humans decide; reasons required for needs-changes; later versions inherit nothing |
+| Tables | One to sixteen numeric field pairs, explicit keys/namespaces/mapping, full/left/inner join, before/after/delta and row presence | Missing row/null/zero differ; invalid mapping/duplicates/non-finite delta refused; no inferred scientific comparability |
+| Documents | Single shared buffer, own undo, disk conditions/merge, native-edit hook, snapshots; confirmed range review and immutable text comparison | Disk/buffer capture stays distinct; 1 MiB comparison read and 64 KiB preview |
+| Agent | Claude/Codex ACP, native tools normally, optional Core, bounded activity/commands, frozen contexts and explicit response facts | Unknown outcomes preserved; no arbitrary session-history access or human decision authority |
+| Markdown | Optional reader over Documents with source editor, relative links/media and math | Same buffer; not an additional document owner |
 
-Updated: 2026-10-28. Agent 0.4.14 draws `ActivityFeed` as cards in its own prefixed stylesheet
-on the embedding's colours; 0.4.15 shows a path inside an optional `root` relative, details
-keep the original. Rho's real Claude Code/dsh runs 7–8 passed; 92 owner checks pass.
+The Rho [review episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/REVIEW-EVIDENCE-EPISODE.md)
+records real airquality, Python/R and browser observations. A context read differs
+from a new explicit reply; responses already frozen into a context do not count as
+answers to that new context. A Codex permission without a title uses its original
+tool update's name; native tool spelling and original permission scope remain.
 
-Updated: 2026-10-27. Agent 0.4.13 keeps the settings an ACP session reports
-(model, effort, mode…; at most 12 of up to 256 values each) in its observation, applies
-an embedding's choices after the session opens and before any prompt, changes one between
-messages, and `inspect()` reads them from a session it then deletes without a prompt.
-92 owner checks pass; Rho's [record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model) keeps a real model switch.
+Native tools and ordinary files remain normal; Core is optional. The existing
+execution/resource/domain/model boundaries are unchanged. Selected service ports
+do not install other owners. Fixed datasets, months and analysis methods remain
+in application scenarios, not generic contracts. Archives retain new decision
+fields and exact resource provenance. Old archives without them remain readable.
 
-Updated: 2026-10-27 (later). Documents 0.4.3: `open` adopts a changed file into a clean
-buffer as one `edit` by `disk` (smallest span; the editor labels it "File on disk").
-Agent 0.4.12 captures only the named regular file. Annotations 0.4.4 widens its peer.
-Evidence: Rho's [canvas record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md).
+Earlier work includes source-folder confinement; Documents merge/undo and the
+Claude edit hook; finite table paging/selection; feedback original-identity recovery;
+Agent ACP settings, idle observation and external-client relay; named-file capture;
+optional owner UI entries and pure schema/discovery imports. Their original
+observations remain in Git and the individual READMEs/examples.
 
-Updated: 2026-10-27. Agent 0.4.11 adds each tool step's bounded title, ACP category and
-identifying input to the ACP v1 identity, permission and recovery accepted at 0.4.10;
-external clients can select the stdio relay; advertised session close releases native
-writers. Rho's installed acceptance at 0.4.10 passed eight Westlake HPC turns per Agent
-and external Codex across restart ([record](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-MULTI-AGENT-EPISODE.md), with its limits).
-
-Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code JSONL and dsh
-read-only native persistence feed Core's public activity CLI. Immutable selection, original call
-IDs, prefix verification and retained cursors allow late attachment and observer restart; summaries
-keep tool return, native exit and unknown outcome apart; output inspection gives current hashes only.
-Four WestlakeHPC runs covered both clients (backfill 14/28 events, live attachment 2/6, restart kept
-the invocation, rescans added none); 74 owner tests passed ([acceptance](../examples/agent-observation/ACCEPTANCE.md)).
-Rho browser composition, installation and Linux observation acceptance remain separate.
-
-Updated: 2026-10-24. Annotations 0.4.3 adds an optional table-question UI using the single
-Documents buffer, exact source/row anchors, original submission identities and explicit Agent
-replies. Replies may name up to 16 exact output refs, resolved through Files; these author links
-do not establish domain correctness. UI intent retention is capped at 16 KiB; exceeding it keeps
-the draft and refuses a new submission. A submitted question folds to one status control; a host
-may place its actions in the view's own header and keep only the open thread below. Assigned task
-feedback keeps its delivery entry. Agent 0.4.4 adds document-open identity, resource id/version and
-output-stream metadata to its bounded activity log, without tool inputs, code or row/output
-contents. Owner checks pass 67/67, including retry/archive links and bounded metadata after
-restart. Rho owns the composed browser/real-model acceptance; S6 remains human unverified.
-
-Updated: 2026-10-23. Agent defaults to four tools (discovery, contract resolution,
-invocation, retained-result reading); large results have scoped, bounded, released
-references without replay. Files streams hashes/snapshots through a bounded cache;
-Media negotiates page size, caps display bytes and cancels inactive reads; Documents
-adds metadata-only summaries, bounded reads and conditional browser saves that keep
-retry identity. Owner checks passed 65/65; Rho records composed trials separately.
-
-Updated: 2026-10-22. Documents and Tables now draw their own bodies in an
-application's item frame, following the Paper page
-[04 · 插件形态](https://app.paper.design/file/01M5HG6R8RBC33N84S245J0YXT/p-8-0).
-Both `./ui` entries export a card body and form declarations (reference, card,
-summary, compare); compare is reached by naming a change or a recorded comparison,
-not by zooming. The Agent names `show`; without it Tables shows a count when an
-earlier table is given, else rows, and Documents shows a passage for an anchor, a
-change for a named group, else the outline. People may switch `show` on the card.
-Size caps are form parameters with maxima, and each body reports what it left out,
-counted from the whole resource; null cells read "empty". Source checks passed 53/53
-with seven DOM-free card-model tests; Rho recorded the composed browser check.
-
-Updated: 2026-10-22. Files 0.4.1 provides an optional finite source-folder resolver;
-Documents 0.4.2 and R 0.4.1 use it for reads, conditional saves, restoration and saved
-scripts. Unknown folders, traversal, internal state and symlinks refuse; equal names
-stay distinct and overlapping aliases share a buffer. Source checks passed 46/46.
-Annotations accepted Documents 0.4.1 and 0.4.2 as optional peers, behavior unchanged.
-
-Updated: 2026-10-21. Application phase 5 now accepts the selected external offline
-grades candidate with Agent 0.4.3 and the existing Documents/Files/Tables/Annotations
-owners. Actual Claude Code 2.1.306 / Westlake HPC DeepSeek completed two original
-business sessions and two restricted presentation sessions: 77 tool calls,
-1,098,713 input tokens including cache and 29,705 output tokens. The application
-records 32 installed checks, real browser/worker/save-ACK faults and frozen
-AC01–AC21 coverage. Earlier interrupted-trial calls/usage lower bounds are retained;
-no provider invoice or exactly-once native execution claim is made. Core remains
-unchanged; same-project multi-task, full product acceptance and registry publication remain
-unselected. Local evidence belongs to Rho's
-`work/phase5-installed-dual-agent-20261021/results.html`.
-
-## Phase 4 optional presentation and layered MCP source candidate
-
-Agent 0.4.3 adds explicit three-tool MCP profiles, bounded complete-body cache,
-closed schema checks and original managed-intent reuse. The optional read-only
-`rho.agent-note` displays at most 600 Unicode characters; Rho writes its author
-and binding basis through the assigned guarded path. Generic rho_call feedback
-fetches retain exact native return attribution. Headless compatibility and optional
-React isolation remain; the catalog now lists the actual note view. Source owner
-checks pass 45/45, with Rho 63/63 and real two-project SDK/browser evidence recorded
-by the application. No model ran in those source/SDK checks; the separate phase-5
-model and installed evidence is summarized above. See [layered MCP](../plugins/agent/README.md#layered-mcp-and-optional-presentation).
-
-## Phase 3 original feedback delivery source candidate
-
-Agent 0.4.2 adds exact original submissions, frozen targeted contexts, one durable
-bounded delivery file, whole feedback reads/status and optional Claude hook/worker
-entries. ACK loss permits only original lookup; persisted hook attempts never
-re-emit after ambiguous crashes. Native MCP returns carry exact fetch attribution.
-Annotations 0.4.1 adds the contextual question entry and exact retained thread
-contract. It reuses Documents 0.4.1 buffer-readiness notification and Tables 0.4.2
-confirmed-selection action; no duplicate editor or domain workflow is introduced.
-Private schema refinement retains ACK/hook-boundary facts without changing frozen
-public profiles. Component regressions pass 44/44; Rho 57/57 and actual two-project
-browser checks have separate application evidence. This phase used zero model
-tokens. Real Claude consumption, presentation enhancement and installed acceptance
-remain pending. See [Agent feedback](../plugins/agent/README.md#original-feedback-delivery).
-
-## Phase 2 table display evidence source candidate
-
-Tables 0.4.1 adds an optional DOM-observation callback and pure coverage schema.
-It reports exact visible keys/columns, typed-value digests, query and actual
-viewport/hit-test coverage after data paint. Virtual buffers, sticky-header-covered
-rows and native hidden tabs do not claim visible cells. Headless readers remain
-unchanged; no Agent model or Core runtime is required. Owner checks pass 43/43;
-Rho records actual split/refresh/restart/hidden/occlusion checks separately. Reliable
-feedback, presentation enhancement and the full installed combination remain work.
-
-## Phase 1 native observation source candidate
-
-Agent 0.4.1 adds pure/native/Claude stream-observer entries, registered attachment
-and bounded original-source observations. Separate adapter authority and the
-application project writer protect ingestion; no model loop, queue or execution
-journal is introduced. Existing Files/Tables supply artifact validation unchanged.
-The [Agent guide](../plugins/agent/README.md#native-observation-entry) records limits
-and scope. Owner source checks pass 43/43. Application source acceptance ran two
-real Claude Code 2.1.306 / Westlake HPC DeepSeek projects: an explicit native
-resume repaired one manifest path without rerunning either Python computation.
-Application/usage evidence and remaining phases belong to Rho; no independent
-installation or publication of the candidate is claimed.
-
-## U2 optional editor and table entries
-
-Documents and Tables now ship separate `./ui` entries with exact optional peers;
-headless imports load no React or DOM. The existing confirmed design uses
-CodeMirror serial identified input, authenticated tab author labels, owner undo,
-individual Agent-change revert, recovery copies and separate exact-version reads.
-AG Grid Community requests 200-row blocks, caches five blocks, supports one sort
-and typed filter, and preserves explicit keyed selections through cache changes.
-
-`npm test` passes 40/40. Rho’s 40/40 source tests pass; its
-[U2 acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-UI-ACCEPTANCE.md)
-records composed browser/install results and remaining gates. U3/U4 and manual
-macOS candidate-window input are separate from the Chrome composition check.
-
-## U2 Documents prerequisites
-
-Documents now retains per-change author/delta history, exact before/after reads,
-authenticated own-group undo and targeted single-edit revert. Later overlapping
-edits are refused; unrelated text is preserved. Legacy global undo remains
-compatible. History is bounded by entries/deltas and the shared undo text budget;
-format-3 restore validates its versions, ranges and digests. Stable receipts,
-pending-save resume/abandon and live-document binding prerequisites remain.
-The 31 owner tests and Rho's 40 tests pass, including real stdio MCP/HTTP author
-checks and zero native attempts in the new flow. That backend prerequisite batch did not build UI or extend browser grants. The [Documents guide](../plugins/documents/README.md)
-and [Rho handoff](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-BACKEND-HANDOFF.md)
-record API limits and frontend integration still required.
-
-## Catalog presentation
-
-All nine descriptors now provide icons, body copy, ordering, Skill descriptions,
-action/view descriptions and developer/license/link/dependency information for
-Rho's U1 catalog. R and Requirements expose bounded executable-file observations
-without running Rscript or starting a Host. Missing Rscript leaves exported object
-reads available. These fields grant no access and add no functional renderer.
-See [catalog presentation](PLUGIN-PRESENTATION.md).
-
-`npm test` passes 17/17, including real non-executing executable observations;
-all nine isolated owner installation/import checks pass. Application composition,
-browser acceptance and installation evidence remain with Rho.
-
-## Headless collaboration extension
-
-Nine owner packages now include the minimal `annotations` capability. All ship
-versioned operation declarations and digest-checked Skills in the actual compiled
-entry; Rho checks business-schema parity. The shared MCP adapter intersects the
-live catalog with grants and optional plugin filters before listing/calling tools.
-Annotations freezes Documents UTF-16 excerpts or Tables stable-key entities and
-submitted Documents drafts; replies explicitly link messages. Agent contexts
-separately record preparation, fetch and explicit reply observations. No UI or
-new execution journal is introduced. See [Collaboration](COLLABORATION.md).
-
-Fourteen owner tests and all nine isolated tarball installation/import checks
-pass, rechecked on 2026-10-17. They cover annotations, versioned entries and Skill
-digests as well as the existing owner boundaries. The two native example
-regressions also pass. Source Rho integration and actual Claude Code 2.1.302
-collaboration passed without Host starts
-or native dispatches. The [README](../README.md#implemented-capabilities) now lists
-all nine owners and their shipped entry/feedback scope separately from planned UI.
-Installed application evidence remains the application's responsibility: its
-[collaboration acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/COLLABORATION-ACCEPTANCE.md)
-records fixed Full and Collaboration-minimal installations. The earlier
-eight-plugin installation below is historical.
-
-## Historical eight-plugin foundation and consumers
-
-[Eight independent headless plugins 0.4](PLUGIN-PACKAGES.md) supply one generic `r.execute` action,
-explicit R requirements and preparation, shared documents, declared file/table/
-media/object resources, bounded readers and keyed comparisons, typed composition
-descriptors and project-scoped stdio MCP. The npm packages ship compiled
-capabilities; no project recipe, native R script or scientific checker is bundled.
-
-The [plugin model](PLUGIN-MODEL.md) defines ownership. Documents, files, R, requirements, tables, media, charts and Agent each own a
-package, descriptor and implementation. A thin contracts package has no catalog,
-capability state, format registry, native plan, document budget, CSV parser or MCP
-dependency. Format/requirement/script schemas live in pure owner contract entries;
-import and export guards keep those boundaries explicit. Rho selects and wires
-services; plugins do not import one another. Only Tables installs csv-parse and
-only Agent installs the MCP SDK. Root is a private source workspace. See
-[package boundaries and selection](PLUGIN-PACKAGES.md). Five registered view descriptors report UI
-unavailable. Those descriptors validate props/bindings without implementing
-renderers. There is no marketplace or dynamic loader.
-
-The [public interface reference](PUBLIC-INTERFACES.md) enumerates the eight Node
-APIs, dependency ports, schema subpaths and missing capabilities. Browser consumers
-use Rho's versioned HTTP/SSE contract; no browser SDK or renderer is supplied.
-
-- Twelve focused capability tests pass: document/undo budgets, immutable MCP intents,
-  typed strings/nulls and entity namespaces, joins/provenance, resource freshness,
-  script/argument snapshots, requirement probes, byte completion and containment.
-  R owns `maxScriptBytes`; saved-script execution does not borrow document limits.
-  Only the R execution action requires Requirements; exported objects remain
-  readable with Files/R alone, without Documents, Requirements, R or a Host.
-- All eight plugin tarballs passed isolated installation/import with only their
-  contracts dependency and required external dependencies. No sibling plugin,
-  aggregate package, native R script or example is installed.
-- Two separate example tests pass: native singleton histogram behavior and exact
-  script identity under a spaced Chinese path.
-- The [ordinary R project](../examples/ordinary-r-project/README.md) uses base R:
-  four sample rows, real linear-model coefficients, PNG/PDF and an exported model
-  snapshot. Identifiers `001` and literal `NA` remain strings.
-- The [paired analysis](../examples/real-r-analysis/README.md) is an explicit
-  scientific consumer. Rho's actual installed 0.4 trial completed five DESeq2 fits,
-  16,139-row typed results, independent arithmetic/native checks, apeglm shrinkage
-  and a comparison recording both input versions.
-- Both projects use the same action, requirements, declaration, reader and
-  composition contracts. Rho's full 0.4 installation passes both consumers and
-  recovery. Two reduced installations physically include only Contracts/Documents/
-  Files or Contracts/Files/R. Unicode documents or exported objects work without
-  R or a Host; missing action dependencies remain unavailable before dispatch.
-  Removal/reselection retains
-  bytes, drafts/undo, selection intent, view references and original requests.
-- Actual Claude Code 2.1.301 through MCP SDK 1.29.0 fetched v2 context and changed
-  the same unsaved Chinese/emoji buffer, without starting a Host.
-
-The eight-owner application results and installation evidence are in
-[Rho's plugin boundary review](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-BOUNDARY-ACCEPTANCE.md).
-Earlier evidence and retained failures remain in
-[Rho's extraction acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/EXTRACTION-ACCEPTANCE.md).
-The earlier [scientific record](../examples/real-r-analysis/ACCEPTANCE.md) remains
-a separate 200-simulation result: five saved models, 121/121 native observations,
-12/12 original/retrieved arithmetic checks and rejected altered counterexamples.
-The new bounded integration uses one simulation and does not replace that record.
-
-[Agent evaluation](../plugins/agent-eval/README.md) remains a separate development
-tool. Its recorded acceptance includes 43 regressions, eight actual CLI baseline
-cases, six optional library-fixture cases and one actual-model execution trial.
-Retained full-model evidence remains 15/16, including its failure. No evaluator is
-required by any capability package.
-
-## Compatibility and remaining work
-
-Rho owns v2 HTTP/client/fixtures and the retained v1 observation bridge. Old requests
-keep original parameters, versions and Core identity; observation and restoration
-do not rerun recipes. The Plugins collector retains legacy resource/check facts
-without selecting old source or requiring the old scientific package set.
-Incompatible new work uses v2, rather than redefining the accepted v1 actions.
-
-The first product direction remains npm + local service + a single-window browser
-WebUI. React/TypeScript, Vite, Dockview, CodeMirror 6, AG Grid Community and ECharts
-are selected UI choices; their views and browser assembly are not implemented.
-Electron and cross-window movement follow later. No UI work is part of this
-extraction. See [Roadmap](ROADMAP.md#first-integrated-flow).
-
-R execution is batch Rscript. Objects are explicit exported snapshots, with
-provenance and bounded JSON previews; there is no live variable inspection or
-R-memory recovery after Host replacement. A Core Host is not an R interpreter.
-Document/resource reads start no Host or R process. Media returns original bytes and metadata,
-without image decoding, PDF rendering or browser interaction.
-
-Execution success, byte integrity, domain checks and model judgments remain
-separate facts. Generic integrity checks do not validate scientific methods.
-Native tools retain the Host's OS authority; this is not an execution sandbox.
-Candidate optimization, blind-set management and hillclimbing remain outside the
-implemented evaluator.
-
-Source publication, accepted application composition, npm installation and signed
-distribution have separate evidence. Local ignored trial artifacts are retained
-at their selected paths, rather than published as a permanent remote archive.
+No component result proves the assembled application's macOS installation,
+Windows/Linux support, scientific correctness or human usability. Independent
+researcher use and physical IME remain unobserved. Rho owns the selected assembly,
+Graph, capture timing and evidence export. Core execution behavior was not changed.
