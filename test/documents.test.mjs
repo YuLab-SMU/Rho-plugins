@@ -30,6 +30,38 @@ test('shared Unicode buffer, stale concurrency, undo groups, disk conflict and r
   await assert.rejects(human.open('linked/analysis.R', 'human'), { kind: 'scope' });
 });
 
+test('unsaved text takes a disk change to other lines and stays unsaved; overlapping changes are kept apart', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'rho-document-merge-'));
+  const file = path.join(root, 'analysis.R'), base = 'air <- read.csv("a.csv")\nfit <- lm(Ozone ~ Temp, data = air)\nprint(coef(fit))\n';
+  await writeFile(file, base);
+  const d = new Documents(root);
+  const first = await d.open('analysis.R', 'human');
+  // The person adds a line in Rho and does not save; the Agent's own editor appends another on disk.
+  const typed = await d.edit(first.id, first.version, [{ from: base.length, to: base.length, insert: '# Person: drop rows.\n' }], 'h', 'human', { changeId: 'person-1', expectedRevision: first.revision });
+  await writeFile(file, base + 'print(summary(fit))\n');
+  const merged = await d.open('analysis.R', 'human');
+  assert.equal(merged.content, base + 'print(summary(fit))\n# Person: drop rows.\n', 'both lines, the disk\'s first');
+  assert.equal(merged.dirty, true, 'the person\'s line is still unsaved');
+  assert.equal(merged.history.at(-1).author, 'disk');
+  // The person's own undo removes only their line.
+  const own = await d.undoOwn(first.id, merged.version, 'human', { changeId: 'undo-1', expectedRevision: merged.revision });
+  assert.equal(own.content, base + 'print(summary(fit))\n');
+  const again = await d.edit(first.id, own.version, [{ from: 0, to: 0, insert: '# mine\n' }], 'h2', 'human', { changeId: 'person-2', expectedRevision: own.revision });
+  // A disk change to another line merges; the save then writes both.
+  await writeFile(file, base.replace('print(coef(fit))', 'print(coef(fit), digits = 3)') + 'print(summary(fit))\n');
+  const second = await d.open('analysis.R', 'human');
+  assert.equal(second.content, '# mine\n' + base.replace('print(coef(fit))', 'print(coef(fit), digits = 3)') + 'print(summary(fit))\n');
+  const saved = await d.save(first.id, second.version, second.diskDigest, 'human');
+  assert.equal(await readFile(file, 'utf8'), second.content);
+  assert.equal(saved.dirty, false);
+  // An overlapping change is not merged: the buffer is kept and the save reports the divergence.
+  const line = await d.edit(first.id, saved.version, [{ from: 0, to: 6, insert: '# ours' }], 'h3', 'human', { changeId: 'person-3', expectedRevision: saved.revision });
+  await writeFile(file, second.content.replace('# mine', '# theirs'));
+  const kept = await d.open('analysis.R', 'human');
+  assert.equal(kept.content, line.content);
+  await assert.rejects(d.save(first.id, kept.version, kept.diskDigest, 'human'), { kind: 'conflict' });
+});
+
 test('buffer and undo limits preserve the last acknowledged state', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'rho-document-limit-'));
   const d = new Documents(root, { maxBufferBytes: 12, maxTotalBytes: 12, maxUndoBytes: 20, maxDocuments: 1 });

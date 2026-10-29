@@ -5,6 +5,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { atomicBytes, atomicJson, canonical, confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 import { apply, compose, inverse, snapshot as historySnapshot, statuses, summarize, transport, validateHistory, type Delta, type EditRecord } from './history.js';
+import { mergeLimits, mergeText } from './merge.js';
+export { mergeLimits, mergeText } from './merge.js';
 export type { Delta, EditRecord } from './history.js';
 
 const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
@@ -59,6 +61,16 @@ export class Documents {
     requireThat(/^[a-f0-9]{64}$/.test(id), 'invalid', 'Invalid document identity.');
     return path.join(await this.directory(), id + '.json');
   }
+  // The text a buffer last shared with its file, kept beside its record while the buffer has
+  // unsaved text: the base for merging a later disk change. It is one earlier buffer, so
+  // maxBufferBytes bounds it; it is removed when the buffer and its file agree again.
+  private async basePath(id: string) { return path.join(await this.directory(), id + '.base'); }
+  private async keepBase(doc: DocumentState) { if (!doc.dirty) await atomicBytes(await this.basePath(doc.id), doc.content); }
+  private async dropBase(id: string) { await fs.rm(await this.basePath(id), { force: true }); }
+  private async base(doc: DocumentState) {
+    try { const text = await fs.readFile(await this.basePath(doc.id), 'utf8'); return digest(text) === doc.diskDigest ? text : null; }
+    catch (e: any) { if (e.code === 'ENOENT') return null; throw e; }
+  }
   async list(): Promise<DocumentState[]> {
     const d = await this.directory();
     const names = (await fs.readdir(d)).filter(n => /^[a-f0-9]{64}\.json$/.test(n));
@@ -110,14 +122,16 @@ export class Documents {
     await this.persist(doc, all);
     return doc;
   }
-  // A buffer nobody has unsaved text in follows its file. When the file changed on disk
-  // (an Agent's own editor, a terminal, Git), opening it again adopts the disk text as one
-  // edit authored by the disk: every view shows what is there now, the history keeps the
-  // text before, and the person's own undo is untouched. Unsaved text or a save in flight
-  // is never replaced; the save's disk check reports that divergence instead. A file that
-  // is missing, too large for a buffer or not UTF-8 leaves the buffer as it is.
+  // A buffer follows its file. When the file changed on disk (an Agent's own editor, a
+  // terminal, Git), opening it again adopts the disk text as one edit authored by the disk:
+  // every view shows what is there now, the history keeps the text before, and the person's
+  // own undo is untouched. A buffer with unsaved text takes the disk change only when it
+  // merges with that text line by line (mergeText); the unsaved text stays unsaved. An
+  // overlapping change, a save in flight or a missing base leaves the buffer as it is, and the
+  // save's disk check reports the divergence. A file that is missing, too large for a buffer
+  // or not UTF-8 leaves the buffer as it is.
   private async followDisk(doc: DocumentState, file: string): Promise<DocumentState> {
-    if (doc.dirty || doc.pendingSave) return doc;
+    if (doc.pendingSave) return doc;
     let bytes: Buffer;
     try {
       if ((await fs.stat(file)).size > this.limits.maxBufferBytes) return doc;
@@ -125,8 +139,15 @@ export class Documents {
     } catch (e: any) { if (e.code === 'ENOENT') return doc; throw e; }
     const actual = digest(bytes);
     if (actual === doc.diskDigest) return doc;
-    let content: string;
-    try { content = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return doc; }
+    let disk: string;
+    try { disk = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { return doc; }
+    let content = disk;
+    if (doc.dirty) {
+      const base = await this.base(doc);
+      const merged = base === null ? null : mergeText(base, doc.content, disk, mergeLimits);
+      if (merged === null) return doc;
+      content = merged;
+    }
     const before = doc.content;
     if (content !== before) {
       // The smallest single span that turns the buffer into the disk text, on UTF-16 boundaries.
@@ -143,7 +164,8 @@ export class Documents {
       this.acknowledge(doc, 'edit', requestDigest, diskAuthor, now());
       this.recordEdit(doc, before, edits, 'edit', requestDigest, changeId, changeId, changeId);
     }
-    doc.diskDigest = actual; doc.dirty = false;
+    doc.diskDigest = actual; doc.dirty = content !== disk;
+    if (doc.dirty) await atomicBytes(await this.basePath(doc.id), disk); else await this.dropBase(doc.id);
     await this.persist(doc);
     return doc;
   }
@@ -208,6 +230,7 @@ export class Documents {
     const prior = doc.undo.at(-1);
     const lastEntry = doc.history.at(-1);
     const joins = prior && prior.group === group && prior.author === author && lastEntry?.kind === 'edit' && lastEntry.undoGroup === group && lastEntry.author === author;
+    await this.keepBase(doc);
     if (!joins) doc.undo.push({ content: doc.content, group, author, changeIds: [changeId] });
     else prior.changeIds = [...(prior.changeIds ?? []), changeId].slice(-this.limits.maxHistoryEntries);
     for (const e of sorted.reverse()) doc.content = doc.content.slice(0, e.from) + e.insert + doc.content.slice(e.to);
@@ -222,6 +245,7 @@ export class Documents {
     if (receipt) return { ...doc, receipt };
     const previous = doc.undo.pop();
     requireThat(previous, 'condition', 'There is no acknowledged undo group.');
+    await this.keepBase(doc);
     const before = doc.content;
     doc.content = previous.content; doc.version++; doc.dirty = true;
     const result = this.acknowledge(doc, 'undo', requestDigest, author, now(), change);
@@ -267,6 +291,7 @@ export class Documents {
     const netLater = later.length ? [{ ...later.at(-1)!, edits: compose(after, later) }] : [];
     const reverse = transport(inverse(forward), netLater);
     const current = doc.content;
+    await this.keepBase(doc);
     doc.content = apply(current, reverse);
     doc.undo.push({ content: current, group: kind + ':' + change.changeId, author, changeIds: [change.changeId] });
     doc.version++; doc.dirty = true;
@@ -297,7 +322,7 @@ export class Documents {
     delete doc.pendingSave;
     doc.diskDigest = digest(doc.content); doc.dirty = false;
     const result = this.acknowledge(doc, 'save', requestDigest, author, now(), change);
-    await this.persist(doc); return result;
+    await this.persist(doc); await this.dropBase(doc.id); return result;
   }
   async abandonSave(id: string, expectedVersion: number, pendingRequestDigest: string, author: string, change: DocumentChange): Promise<DocumentResult> {
     requireThat(change, 'invalid', 'Abandoning a pending save requires changeId and expectedRevision.');
@@ -398,7 +423,7 @@ const documentSkill = {
 };
 export const plugin = {
   entryVersion: '1.0',
-  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.3', requires: [], capabilities: ['documents'], presentation,
+  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.4', requires: [], capabilities: ['documents'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...documentSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]

@@ -1,5 +1,11 @@
 # Current status
 
+Updated: 2026-10-29. Documents 0.4.4 merges a disk change into unsaved text by line
+(both kept, the disk's first at one place; own undo removes only the person's edit);
+overlaps are kept apart and the save conflicts. A refused editor save reopens, then
+saves again after a merge. Annotations 0.4.5 widens its peer. 94 owner checks pass;
+Rho's real Claude Code episode (native Edit beside an unsaved line) saves both lines.
+
 Updated: 2026-10-28. Agent 0.4.14 draws `ActivityFeed` as cards in its own prefixed stylesheet
 on the embedding's colours; 0.4.15 shows a path inside an optional `root` relative, details
 keep the original. Rho's real Claude Code/dsh runs 7–8 passed; 92 owner checks pass.
@@ -10,16 +16,10 @@ an embedding's choices after the session opens and before any prompt, changes on
 messages, and `inspect()` reads them from a session it then deletes without a prompt.
 92 owner checks pass; Rho's [record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md#choosing-the-agent-and-its-model) keeps a real model switch.
 
-Updated: 2026-10-27 (later). Documents 0.4.3: a buffer with no unsaved text follows
-its file. `open` adopts changed disk text as one `edit` by the author `disk`, as the
-smallest changed span; history keeps the text before, own undo is untouched, unsaved
-text or a pending save is never replaced, and missing, non-UTF-8 or over-budget files
-leave the buffer. The editor labels it "File on disk" and highlights it. Agent 0.4.12:
-`agent.activity.capture` observes only the named regular file (inside the project, no
-symlinks, at most 8 MiB) instead of scanning its folder, with `expectedDigest`
-optional. Annotations 0.4.4 only widens its optional Documents peer to 0.4.3. Rho's
-Agent canvas needed both owner changes; all 90 owner checks pass, and Rho's [canvas
-record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md) keeps the composed browser and real-Agent evidence.
+Updated: 2026-10-27 (later). Documents 0.4.3: `open` adopts a changed file into a clean
+buffer as one `edit` by `disk` (smallest span; the editor labels it "File on disk").
+Agent 0.4.12 captures only the named regular file. Annotations 0.4.4 widens its peer.
+Evidence: Rho's [canvas record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md).
 
 Updated: 2026-10-27. Agent 0.4.11 adds each tool step's bounded title, ACP category
 and identifying input (command, path, pattern or query) to the shared ACP v1

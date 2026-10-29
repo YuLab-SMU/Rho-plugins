@@ -285,17 +285,32 @@ export class DocumentSync {
     return this.command(async () => {
       await this.whenIdle();
       if (!this.confirmed || this.aside || [...this.ports].some(p => p.composing()) || this.confirmed.diskDigest === undefined) return false;
-      const base = this.confirmed;
+      let base = this.confirmed, merged = false;
       this.inflight = true; this.changed();
       try {
-        // A missing acknowledgement retries these exact conditions and identity.
-        // Typing during the save remains pending against this acknowledged buffer.
-        const saved: Buffer = await this.deliver('document.save', { projectId: this.projectId, documentId: this.documentId,
-          expectedVersion: base.version, expectedRevision: base.revision, expectedDiskDigest: base.diskDigest, changeId: identity() });
-        this.accept(saved); this.notice = ''; return true;
+        for (;;) {
+          try {
+            // A missing acknowledgement retries these exact conditions and identity.
+            // Typing during the save remains pending against this acknowledged buffer.
+            const saved: Buffer = await this.deliver('document.save', { projectId: this.projectId, documentId: this.documentId,
+              expectedVersion: base.version, expectedRevision: base.revision, expectedDiskDigest: base.diskDigest, changeId: identity() });
+            this.accept(saved); this.notice = merged ? 'Saved, together with the change made to the file on disk.' : ''; return true;
+          } catch (error) {
+            // The file changed on disk: its owner takes the change into this buffer when it
+            // touches other lines, and the save then writes both, once. Typing meanwhile stops it.
+            if (kindOf(error) !== 'conflict' || merged || this.pending) throw error;
+            await this.client.call('document.open', { projectId: this.projectId, path: base.path });
+            const current: Buffer = await this.client.call('document.read', { projectId: this.projectId, documentId: this.documentId });
+            if (current.diskDigest === base.diskDigest || this.pending) throw error;
+            this.accept(current); this.sent = current.content; this.draft = current.content;
+            for (const port of this.ports) port.replace(current.content);
+            base = current; merged = true; this.changed();
+            if (!current.dirty) { this.notice = 'The file on disk already had your text.'; return true; }
+          }
+        }
       } catch (error) {
         if (kindOf(error) === 'stale') this.seenRevision = Math.max(this.seenRevision, base.revision + 1);
-        this.notice = kindOf(error) === 'conflict' ? 'The file changed on disk. Your buffer is kept; review the disk change before saving.'
+        this.notice = kindOf(error) === 'conflict' ? 'The file changed on disk where you also edited. Your text is kept and was not saved.'
           : kindOf(error) === 'stale' ? 'The shared document changed before saving. Read its current version and save again.' : 'The document could not be saved. Your buffer is kept.';
         return false;
       } finally {

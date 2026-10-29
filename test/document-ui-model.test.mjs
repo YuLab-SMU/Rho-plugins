@@ -14,6 +14,7 @@ function client(docs, author, faults = {}) {
     const change = b.changeId === undefined ? undefined : { changeId: b.changeId, expectedRevision: b.expectedRevision };
     const run = () => ({
       'document.read': () => docs.read(b.documentId),
+      'document.open': () => docs.open(b.path, author),
       'document.save': () => docs.save(b.documentId, b.expectedVersion, b.expectedDiskDigest, author, change),
       'document.edit': () => docs.edit(b.documentId, b.expectedVersion, b.edits, b.undoGroup, author, change),
       'document.undoOwn': () => docs.undoOwn(b.documentId, b.expectedVersion, author, change),
@@ -58,6 +59,29 @@ test('browser input is sent once per identity, lost replies resend the same requ
   assert.equal(sync.confirmed.version, 2);
   // While the reply is missing the change is said to be unconfirmed; the owner's answer clears it.
   assert.ok(unconfirmed.includes(true)); assert.equal(sync.unconfirmed, false);
+});
+
+test('a save after the file changed on disk on other lines writes both; on the same lines it keeps the text', async () => {
+  const root = await mkdtemp(path.join(tmpdir(), 'rho-ui-doc-'));
+  const file = path.join(root, 'a.R');
+  await writeFile(file, 'fit <- lm(y ~ x)\nprint(coef(fit))\n');
+  const docs = new Documents(root), opened = await docs.open('a.R', 'browser:me');
+  const sync = new DocumentSync(client(docs, 'browser:me'), 'p', opened.id, 'browser:me'), view = port();
+  sync.attach(view); await sync.load();
+  view.type('# mine\nfit <- lm(y ~ x)\nprint(coef(fit))\n'); sync.local(view); sync.flush(); await settle(sync);
+  // Another program appends a line while the person's line is unsaved.
+  await writeFile(file, 'fit <- lm(y ~ x)\nprint(coef(fit))\nprint(summary(fit))\n');
+  assert.equal(await sync.save(), true);
+  assert.equal(await readFile(file, 'utf8'), '# mine\nfit <- lm(y ~ x)\nprint(coef(fit))\nprint(summary(fit))\n');
+  assert.equal(view.text(), '# mine\nfit <- lm(y ~ x)\nprint(coef(fit))\nprint(summary(fit))\n', 'the editor shows what was saved');
+  assert.match(sync.notice, /together with the change made to the file on disk/);
+  // The same line changed on both sides: nothing is saved and the person's text stays.
+  view.type('# ours\nfit <- lm(y ~ x)\nprint(coef(fit))\nprint(summary(fit))\n'); sync.local(view); sync.flush(); await settle(sync);
+  await writeFile(file, '# theirs\nfit <- lm(y ~ x)\nprint(coef(fit))\nprint(summary(fit))\n');
+  assert.equal(await sync.save(), false);
+  assert.equal(view.text().startsWith('# ours'), true);
+  assert.equal((await readFile(file, 'utf8')).startsWith('# theirs'), true);
+  assert.match(sync.notice, /changed on disk where you also edited/);
 });
 
 test('a stale edit is kept aside and the acknowledged buffer is shown; undo touches only own edits', async () => {
