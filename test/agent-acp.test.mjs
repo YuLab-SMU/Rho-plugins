@@ -91,6 +91,13 @@ test('ACP confirms cancellation from the original prompt response and keeps an u
     } finally { await f.close(); }
   }
 });
+test('a Claude session loads the plugin directories it is given, without their MCP discovery', async () => {
+  const f = await setup();
+  try {
+    assert.equal((await f.create(undefined, { plugins: ['/tmp/rho-plugin-a'] }).run(turn('hello').request)).state, 'completed');
+    assert.deepEqual((await f.calls()).find(x => x.kind === 'session/new').plugins, [{ type: 'local', path: '/tmp/rho-plugin-a', skipMcpDiscovery: true }]);
+  } finally { await f.close(); }
+});
 test('ACP does not send a prompt before durable session acceptance and refuses unsupported loading', async () => {
   const f = await setup();
   try {

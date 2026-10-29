@@ -16,7 +16,7 @@ createInterface({ input: process.stdin }).on('line', line => {
   const r = JSON.parse(line), p = r.params;
   const reply = result => send({ id: r.id, result });
   if (!r.method) { if (permission) { log({ kind: 'choice', result: r.result }); permission(); permission = null; } return; }
-  log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text, ...(r.method === 'session/new' ? { claudeMetadata: !!p?._meta?.claudeCode } : {}) });
+  log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text, ...(r.method === 'session/new' ? { claudeMetadata: !!p?._meta?.claudeCode, plugins: p?._meta?.claudeCode?.options?.plugins } : {}) });
   if (r.method === 'initialize') return reply({ protocolVersion: 1, agentInfo: { name: 'fault-fixture', version: '1' }, agentCapabilities: { loadSession: !process.env.ACP_NO_LOAD, ...(process.env.ACP_CAN_CLOSE ? { sessionCapabilities: { close: {}, delete: {} } } : {}) } });
   if (r.method === 'session/close' || r.method === 'session/delete') return reply({});
   if (r.method === 'session/new') return reply({ sessionId: 'original-session', ...(settings ? { configOptions: settings } : {}) });

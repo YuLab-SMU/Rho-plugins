@@ -53,3 +53,13 @@ export function mergeText(base: string, ours: string, theirs: string, limits = m
   out.push(...original.slice(at));
   return out.join('');
 }
+
+// The smallest single span that turns `before` into `after`, on UTF-16 boundaries.
+export function span(before: string, after: string) {
+  let from = 0, tail = 0;
+  while (from < before.length && from < after.length && before[from] === after[from]) from++;
+  while (tail < before.length - from && tail < after.length - from && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  if (from > 0 && /[\uD800-\uDBFF]/.test(before[from - 1]!)) from--;
+  if (tail > 0 && /[\uDC00-\uDFFF]/.test(before[before.length - tail]!)) tail--;
+  return { from, to: before.length - tail, insert: after.slice(from, after.length - tail), removed: before.slice(from, before.length - tail) };
+}

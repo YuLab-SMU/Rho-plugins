@@ -58,6 +58,7 @@ export function visibleError(error: unknown, env: NodeJS.ProcessEnv = process.en
   return text.replace(/https?:\/\/[^\s"'<>]+/g, '[private URL]').slice(0, 2048);
 }
 export { ClaudeAcpConversation, type ClaudeAcpOptions } from './claude-acp.js';
+export { writeClaudePlugin, claudePluginLimits, type ClaudePlugin, type ClaudePluginSkill, type ClaudePluginHook } from './claude-plugin.js';
 export { CodexAcpConversation, type CodexAcpOptions } from './codex-acp.js';
 export { ClaudeCliConversation } from './claude-cli.js';
 export type { SessionObservation, SessionTool, ConfigOption, ConfigValue } from './session-observation.js';

@@ -5,8 +5,8 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { atomicBytes, atomicJson, canonical, confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 import { apply, compose, inverse, snapshot as historySnapshot, statuses, summarize, transport, validateHistory, type Delta, type EditRecord } from './history.js';
-import { mergeLimits, mergeText } from './merge.js';
-export { mergeLimits, mergeText } from './merge.js';
+import { mergeLimits, mergeText, span } from './merge.js';
+export { mergeLimits, mergeText, span } from './merge.js';
 export type { Delta, EditRecord } from './history.js';
 
 const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
@@ -100,6 +100,13 @@ export class Documents {
     requireThat((await fs.stat(file)).size <= this.limits.maxRecordBytes, 'limit', 'Document state exceeds the selected record byte budget. Retained content is unchanged.', { limit: 'maxRecordBytes', maximum: this.limits.maxRecordBytes });
     return this.normalize(await readJson<DocumentState>(file));
   }
+  // The buffer of a path when one exists, without creating it or following its file: for a
+  // caller that only asks whether a file has unsaved text in Rho.
+  async find(relative: string): Promise<DocumentState | null> {
+    if (relative.split('/').some(p => ['.rho', '.git'].includes(p))) return null;
+    const { relative: normalized } = await this.source(relative);
+    try { return await this.read(digest(normalized)); } catch (e: any) { if (e.code === 'ENOENT') return null; throw e; }
+  }
   async open(relative: string, author: string) {
     requireThat(!relative.split('/').some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal state is not an editable document.');
     const { file, relative: normalized } = await this.source(relative);
@@ -150,13 +157,7 @@ export class Documents {
     }
     const before = doc.content;
     if (content !== before) {
-      // The smallest single span that turns the buffer into the disk text, on UTF-16 boundaries.
-      let from = 0, tail = 0;
-      while (from < before.length && from < content.length && before[from] === content[from]) from++;
-      while (tail < before.length - from && tail < content.length - from && before[before.length - 1 - tail] === content[content.length - 1 - tail]) tail++;
-      if (from > 0 && /[\uD800-\uDBFF]/.test(before[from - 1]!)) from--;
-      if (tail > 0 && /[\uDC00-\uDFFF]/.test(before[before.length - tail]!)) tail--;
-      const edits = [{ from, to: before.length - tail, insert: content.slice(from, content.length - tail), removed: before.slice(from, before.length - tail) }];
+      const edits = [span(before, content)];
       const changeId = 'disk:' + actual.slice(0, 40) + ':' + (doc.version + 1);
       const requestDigest = digest(canonical({ id: doc.id, kind: 'disk', expectedVersion: doc.version, diskDigest: actual }));
       doc.undo.push({ content: before, group: changeId, author: diskAuthor, changeIds: [changeId] });
@@ -423,8 +424,15 @@ const documentSkill = {
 };
 export const plugin = {
   entryVersion: '1.0',
-  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.4', requires: [], capabilities: ['documents'], presentation,
+  id: 'documents', package: '@rho-workspace/plugin-documents', version: '0.4.5', requires: [], capabilities: ['documents'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ ...documentSkill, presentation: skillPresentation }],
+  // Offered to the Claude Code sessions an application starts: the skill above as a native
+  // skill, and a hook that sends a native edit of a file with unsaved text in Rho to the buffer.
+  claudeCode: {
+    skills: [{ skill: 'documents.workspace', name: 'documents',
+      description: 'Change a project file that is open in Rho through its shared buffer (document.read, document.edit, document.save), so a person\'s unsaved text, undo and saves stay intact.' }],
+    hooks: [{ id: 'documents.unsaved-text', event: 'PreToolUse' as const, matcher: 'Edit|Write|MultiEdit', entry: './claude-hook', timeoutSeconds: 10 }]
+  },
   components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]
 };

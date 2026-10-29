@@ -1,5 +1,11 @@
 # Current status
 
+Updated: 2026-10-29 (later). Documents 0.4.5 declares `claudeCode`: its skill as a native
+skill and a `PreToolUse` hook that denies a native Edit/Write of a file with unsaved text,
+naming the buffer and, when determined, the ready `document.edit` input. Agent 0.4.16
+writes a content-named Claude Code plugin directory and loads it into Claude ACP sessions.
+Annotations 0.4.6 widens its peer. 97 owner checks pass; Rho's real episode recorded it.
+
 Updated: 2026-10-29. Documents 0.4.4 merges a disk change into unsaved text by line
 (both kept, the disk's first at one place; own undo removes only the person's edit);
 overlaps are kept apart and the save conflicts. A refused editor save reopens, then
@@ -21,17 +27,11 @@ buffer as one `edit` by `disk` (smallest span; the editor labels it "File on dis
 Agent 0.4.12 captures only the named regular file. Annotations 0.4.4 widens its peer.
 Evidence: Rho's [canvas record](https://github.com/YuLab-SMU/Rho/blob/main/docs/AGENT-CANVAS-EPISODE.md).
 
-Updated: 2026-10-27. Agent 0.4.11 adds each tool step's bounded title, ACP category
-and identifying input (command, path, pattern or query) to the shared ACP v1
-identity, permission and recovery accepted at 0.4.10. External clients can select
-the stdio relay for bounded observations while retaining input and runtime.
-Advertised session close releases native writers; process-group escalation survives
-wrapper exit. Standard diff paths supply file references without retaining contents.
-All 89 owner checks pass. Rho's installed acceptance at 0.4.10 passed eight Westlake
-HPC turns for each Agent plus external Codex load, live observation across Rho
-restart and same-session reconnect; [the record](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-MULTI-AGENT-EPISODE.md)
-keeps native-job cancellation limits, failed attempts and installation evidence.
-Core and the native collector are unchanged; uninstrumented clients still need the transcript fallback.
+Updated: 2026-10-27. Agent 0.4.11 adds each tool step's bounded title, ACP category and
+identifying input to the ACP v1 identity, permission and recovery accepted at 0.4.10;
+external clients can select the stdio relay; advertised session close releases native
+writers. Rho's installed acceptance at 0.4.10 passed eight Westlake HPC turns per Agent
+and external Codex across restart ([record](https://github.com/YuLab-SMU/Rho/blob/main/docs/ACP-MULTI-AGENT-EPISODE.md), with its limits).
 
 Updated: 2026-10-25. Agent 0.4.5 adds `rho-agent-observe`: selected Claude Code JSONL and dsh
 read-only native persistence feed Core's public activity CLI. Immutable selection, original call

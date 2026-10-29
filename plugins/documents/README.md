@@ -42,6 +42,19 @@ past that the region is compared whole, which can turn a merge into a conflict b
 never into a wrong merge. The editor's save, refused because the file changed,
 opens the document again so the owner merges, and saves once more if it did.
 
+`find(path)` returns the buffer of a path when one exists, without creating it or
+following its file. The entry declares `claudeCode` for Claude Code sessions an
+application starts: `documents.workspace` as the native skill `documents`, and
+`./claude-hook`, a `PreToolUse` command for `Edit|Write|MultiEdit`. It reads stdin
+(at most 64 KiB), finds the nearest folder holding Documents records and, only when
+the edited file's buffer has unsaved text, denies the native write. The reason names
+the buffer; when the native change is determined (the replaced text found once, or
+`replace_all`) and merges by line with that text against the unchanged disk, it also
+carries the ready `document.edit` input (at most 16 KiB). Any other file, missing
+records or unreadable input pass unchanged with no output. It needs no connection,
+writes nothing and never creates `.rho`. Files under selected source folders are not
+checked.
+
 Rho accepts `{kind:"live-document",documentId}` for a registered document view;
 exact `{documentId,version}` bindings retain their meaning. See the
 [U2 handoff](https://github.com/YuLab-SMU/Rho/blob/main/docs/U2-BACKEND-HANDOFF.md).

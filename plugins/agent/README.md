@@ -45,6 +45,16 @@ When the Agent advertises `sessionCapabilities.close`, normal shutdown first sen
 termination. Unsupported/failed/timed-out close still ends the owned transport;
 it never deletes or replaces the native session.
 
+`ClaudeAcpOptions.plugins` lists local Claude Code plugin directories the session
+loads (`plugins` in `_meta.claudeCode.options`, without their MCP discovery).
+`writeClaudePlugin(parent, plugin)` writes one from declared skills and hooks: a
+manifest, `skills/<name>/SKILL.md` and `hooks/hooks.json` with shell-quoted absolute
+commands, at most `claudePluginLimits` (32 skills, 16 hooks, 64 KiB per skill;
+more is refused before writing). The directory is named by its content digest and
+never rewritten, so running sessions keep the skills they started with; nothing
+private is written. Claude Code may list a skill without its description when its
+skill listing exceeds its character budget.
+
 `permission()` receives bounded native titles, command/path details and offered
 choices. Only an offered option can be returned. Native policy remains in the selected Agent;
 the four Rho MCP tools already covered by the application's grant are allowed

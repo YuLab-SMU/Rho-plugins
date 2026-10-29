@@ -45,6 +45,9 @@ cannot be packed as an aggregate runtime package.
 Every owner ships `entryVersion:1.0`, versioned operation input/output contracts,
 dependency and side-effect declarations, and a digest-checked Skill in its compiled
 npm entry. Skills install no global Agent configuration and grant no authority.
+An owner may also declare `claudeCode` skills and hooks for the Claude Code sessions
+an application starts; the Agent entry writes them into one plugin directory named by
+its content (Documents: a native skill and a `PreToolUse` hook).
 The shared MCP adapter filters both tool discovery and calls against the live
 project catalog, grants and optional plugin filters. HTTP and MCP use the same
 functional owners.
