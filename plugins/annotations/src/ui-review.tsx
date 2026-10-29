@@ -194,7 +194,10 @@ function ProjectReview({
               ? body
               : { ...body, conversationId: input.target }
           );
-          onSent?.(sent.conversation.conversationId);
+          const conversationId=sent.conversation.conversationId;
+          setTarget(conversationId);
+          sessionStorage.setItem('rho.review.target:'+projectId+':'+principalId,conversationId);
+          onSent?.(conversationId);
         }
       }
       remember(null);
@@ -508,7 +511,7 @@ function ProjectReview({
             <label>
               Send to{' '}
               <select
-                aria-label="Review target Agent"
+                aria-label="Review target Agent" disabled={busy || !!pending}
                 value={target}
                 onChange={(e) => {
                   setTarget(e.target.value);

@@ -33,3 +33,7 @@ provides navigation, conversation selection and export; no application-private
 state is imported. Drafts use Documents' single buffer. Original mutation intent
 survives a lost response and can be retried explicitly. The application separately
 checks browser composition and real Agent behavior.
+
+Annotations 0.5.1 keeps a newly created review conversation as the next send target,
+including after acknowledgement loss and original-identity retry. The target
+selector is held while a send is pending. Later feedback reuses that conversation.
