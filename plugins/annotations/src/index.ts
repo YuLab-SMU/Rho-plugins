@@ -165,7 +165,7 @@ const content = [
   '4. Keep the original changeId after a lost acknowledgement and query the receipt boundary;',
   '   never resubmit the same feedback under a new identity.'
 ].join('\n');
-export const plugin = { entryVersion: '1.0', id: 'annotations', package: '@rho-workspace/plugin-annotations', version: '0.5.1', requires: ['documents'], capabilities: ['annotations'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'annotations', package: '@rho-workspace/plugin-annotations', version: '0.5.2', requires: ['documents'], capabilities: ['annotations'], presentation,
   components: [{ id: 'rho.feedback', version: '0.2.0', owner: 'rho-plugins.annotations', bindings: { draft: 'document' }, propsSchema: feedbackComposerPropsSchema, ui: './ui', presentation: { displayName: 'Feedback', description: 'Asks about selected objects and follows original delivery and linked replies.', readOnly: false, runsCode: false } }],
   operations: Object.entries(inputs).map(([method, inputSchema]) => ({ method, presentation: method === 'annotation.decide' ? { displayName: 'Record decision', description: 'Records the person’s decision about exact result versions.', readOnly: false, runsCode: false } : operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, inputSchema, outputSchema: outputs[method as keyof typeof outputs], requires: ['documents'], effect: method === 'annotation.create' || method === 'annotation.reply' || method === 'annotation.decide' ? 'metadata' as const : 'read' as const })),
   skills: [{

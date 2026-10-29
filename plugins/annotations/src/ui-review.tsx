@@ -22,6 +22,7 @@ interface Props {
   renderText?: (text: string) => any;
   onExport?: (annotationId: string) => void;
 }
+export const reviewLimits = { results: 12 };
 export function ReviewPanel(props: Props) {
   return (
     <ProjectReview key={props.projectId + ':' + props.principalId} {...props} />
@@ -140,6 +141,16 @@ function ProjectReview({
     setDraftState({ version: null, ready: false });
     return d;
   }
+  // The newest kept version of each file leads, at most this many; every exact version stays
+  // in the list below them.
+  const latest = (() => {
+    const byName = new Map<string, { resource: any; earlier: number }>();
+    for (const r of resources) {
+      const key = name(r), seen = byName.get(key);
+      byName.set(key, { resource: r, earlier: seen ? seen.earlier + 1 : 0 });
+    }
+    return [...byName.values()].reverse().slice(0, reviewLimits.results);
+  })();
   async function newQuestion(ref: Ref) {
     setError('');
     try {
@@ -325,45 +336,74 @@ function ProjectReview({
           </button>
         </p>
       )}
-      <div className="review-choose">
-        <label>
-          Review{' '}
-          <select
-            aria-label="Review thread"
-            value={chosen}
-            onChange={(e) => {
-              setChosen(e.target.value);
-              setDraft(null);
-              setCompose(false);
-            }}
-          >
-            <option value="">Choose a question</option>
-            {threads.map((t) => (
-              <option key={t.annotationId} value={t.annotationId}>
-                {t.messages[0]?.draft.text.slice(0, 100)}
-              </option>
+      {threads.length > 0 && (
+        <section className="review-threads" aria-label="Your questions">
+          <h2>Your questions</h2>
+          <ul>
+            {[...threads].reverse().map((t) => (
+              <li key={t.annotationId}>
+                <button
+                  className="review-thread"
+                  aria-pressed={chosen === t.annotationId}
+                  onClick={() => {
+                    setChosen(t.annotationId);
+                    setDraft(null);
+                    setCompose(false);
+                  }}
+                >
+                  <span>{t.messages[0]?.draft.text.slice(0, 160)}</span>
+                  <small>
+                    {t.anchor?.resource ? name(t.anchor.resource) : ''}
+                    {t.decisions?.length
+                      ? ' · ' + t.decisions.length + (t.decisions.length === 1 ? ' decision' : ' decisions')
+                      : ''}
+                  </small>
+                </button>
+              </li>
             ))}
-          </select>
-        </label>
-        <label>
-          Ask about a result{' '}
-          <select
-            aria-label="Ask about a result"
-            value=""
-            onChange={(e) => {
-              const r = resources.find((r) => r.id === e.target.value);
-              if (r) void newQuestion(r);
-            }}
-          >
-            <option value="">Choose an exact result version</option>
-            {resources.slice(-128).map((r) => (
-              <option key={r.id} value={r.id}>
-                {name(r)} · {r.version.slice(0, 8)}
-              </option>
+          </ul>
+        </section>
+      )}
+      <section className="review-results" aria-label="Kept results">
+        <h2>Ask about a result</h2>
+        {latest.length ? (
+          <ul>
+            {latest.map(({ resource: r, earlier }) => (
+              <li key={r.id + r.version}>
+                <button className="review-result" onClick={() => void newQuestion(r)}>
+                  <strong title={name(r)}>{name(r).split('/').at(-1)}</strong>
+                  <small>
+                    {r.kind}
+                    {earlier ? ' · ' + earlier + (earlier === 1 ? ' earlier version' : ' earlier versions') : ''}
+                  </small>
+                </button>
+              </li>
             ))}
-          </select>
-        </label>
-      </div>
+          </ul>
+        ) : (
+          <p>No results are kept in this project yet.</p>
+        )}
+        {resources.length > 0 && (
+          <label className="review-version">
+            Another exact version{' '}
+            <select
+              aria-label="Ask about a result"
+              value=""
+              onChange={(e) => {
+                const r = resources.find((r) => r.id === e.target.value);
+                if (r) void newQuestion(r);
+              }}
+            >
+              <option value="">Choose a version</option>
+              {resources.slice(-128).map((r) => (
+                <option key={r.id} value={r.id}>
+                  {name(r)} · {r.version.slice(0, 8)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </section>
       {compose && (
         <section>
           <h2>Your question</h2>
@@ -564,8 +604,8 @@ function ProjectReview({
           </details>
         </>
       )}
-      {!thread && !compose && (
-        <p>Choose an existing question or a result to begin a review.</p>
+      {!thread && !compose && threads.length > 0 && (
+        <p>Choose one of your questions, or a result to ask about.</p>
       )}
     </section>
   );

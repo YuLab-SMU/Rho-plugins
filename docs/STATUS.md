@@ -2,7 +2,7 @@
 
 Updated: 2026-10-29.
 
-Files 0.5.0, Annotations 0.5.1 and Tables 0.5.0 supply immutable captures,
+Files 0.5.0, Annotations 0.5.2 and Tables 0.5.0 supply immutable captures,
 version-bound human decisions and explicit multi-field comparison. Documents
 0.4.7 adds confirmed selection review and captured text comparison. Agent 0.4.18
 delegates the compatible capture entry to Files and exposes frozen-context delivery

@@ -37,3 +37,7 @@ checks browser composition and real Agent behavior.
 Annotations 0.5.1 keeps a newly created review conversation as the next send target,
 including after acknowledgement loss and original-identity retry. The target
 selector is held while a send is pending. Later feedback reuses that conversation.
+
+Annotations 0.5.2 lists the person's questions and the kept results as choices on the
+Review page, newest version of each result first with a count of its earlier ones;
+any other exact version stays selectable. Decisions and records are unchanged.
