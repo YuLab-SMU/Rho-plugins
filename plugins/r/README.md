@@ -6,6 +6,12 @@ Public entries: `planExecution`, `Objects`, `declarationValidator`, `actions`, `
 
 Plan an explicitly selected saved/buffer script; freeze code, args and declared outputs. Read bounded exported JSON object snapshots.
 
+Agents normally use their native tools. Select this managed entry when execution
+continuity or a retained application operation is needed. It executes user-written
+R, with `.libPaths` prepended; R can invoke other native programs with its existing
+OS authority. The catalog does not restrict scientific methods. Observing a
+native action does not give it Core acceptance or deduplication guarantees.
+
 Selected services: Files for object reads and resource resolution. Only the
 `r.execute` action requires Requirements; buffer scripts additionally need a
 document snapshot source. Objects remain readable with both providers absent.

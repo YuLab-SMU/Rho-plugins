@@ -1,6 +1,6 @@
 # Component architecture
 
-Rho-core is the execution foundation, Rho is the application container and
+Rho-core supplies optional managed execution and activity retention, Rho is the application container and
 Rho-plugins owns the actual functional components. Components serve headless
 callers and application users while retaining the same native behavior and facts.
 [Status](STATUS.md) distinguishes delivered consumers from this selected design.
@@ -30,7 +30,10 @@ the application at explicit component versions and supplies theme, layout and
 routing. The selected editor, table and plot UI components are not implemented yet.
 
 R, Python, Rust, TypeScript and maintained CLIs are valid implementation choices.
-Headless consumers can use Core's public resident CLI without a UI dependency.
+Agents normally use their native tools and existing permissions. Headless
+consumers select Core's public resident CLI only when a concrete operation needs
+its continuity or retained facts; observation does not make an external action
+managed. Core remains usable without a UI dependency.
 Rho can assemble component views and interactions. Core owns execution guarantees;
 it does not host React views or the Agent's model loop.
 

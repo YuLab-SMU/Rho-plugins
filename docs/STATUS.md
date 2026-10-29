@@ -1,8 +1,8 @@
 # Current status
 
-Updated: 2026-10-29 (later). Documents 0.4.5 declares `claudeCode`: its skill as a native
-skill and a `PreToolUse` hook that denies a native Edit/Write of a file with unsaved text,
-naming the buffer and, when determined, the ready `document.edit` input. Agent 0.4.16
+Native tools are now normal; CLI restrictions are removed, Core is optional, and activity/facts remain. 104 owner checks pass ([record](https://github.com/YuLab-SMU/Rho/blob/main/docs/NATIVE-TOOLS-EPISODE.md)).
+
+Updated: 2026-10-29 (later). Documents 0.4.5 declares `claudeCode`: its skill as a native skill and a `PreToolUse` hook that denies a native Edit/Write of a file with unsaved text, naming the buffer and, when determined, the ready `document.edit` input. Agent 0.4.16
 writes a content-named Claude Code plugin directory and loads it into Claude ACP sessions.
 Annotations 0.4.6 widens its peer. 97 owner checks pass; Rho's real episode recorded it.
 

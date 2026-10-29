@@ -77,7 +77,10 @@ export class Objects {
 // content is what an Agent needs to succeed first time; the extra fields are what a
 // check can hold to account.
 const rSkillContent = [
-  'Run R in this project. Use capability.list to discover object.read, action.submit and',
+  'Use native tools normally. Choose this managed R entry only when execution continuity',
+  'or a retained application operation is needed. It runs user-written R scripts, which',
+  'may invoke other native programs under existing permissions. Core is optional.',
+  'For a managed run, use capability.list to discover object.read, action.submit and',
   'artifact.check in this session; reads address exported snapshots and execution is one',
   'explicit submit that keeps its original operation identity.',
   '',

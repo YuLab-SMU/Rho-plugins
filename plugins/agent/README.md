@@ -1,5 +1,13 @@
 # Agent bridge and context plugin
 
+Agents normally use their native tools and existing permission settings. Rho MCP
+capabilities supplement those tools; managed execution is selected only for a
+concrete need. The compatibility Claude CLI driver no longer disables built-in
+tools, hides configured MCP servers or forces `dontAsk`. Its noninteractive entry
+cannot answer new native permission prompts; ACP supplies interactive choices.
+External activity retention stays independent of managed execution and does not
+confer Core acceptance, deduplication or scientific validity.
+
 `@rho-workspace/plugin-agent` 0.4.11 adds visible tool titles, ACP tool categories
 and one identifying input (command, path, pattern or query) to conversation steps,
 plus Claude/Codex ACP conversations and an external-client relay, native-log
