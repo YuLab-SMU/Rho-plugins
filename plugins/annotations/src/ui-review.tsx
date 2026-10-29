@@ -22,7 +22,12 @@ interface Props {
   renderText?: (text: string) => any;
   onExport?: (annotationId: string) => void;
 }
-export function ReviewPanel({
+export function ReviewPanel(props: Props) {
+  return (
+    <ProjectReview key={props.projectId + ':' + props.principalId} {...props} />
+  );
+}
+function ProjectReview({
   client,
   projectId,
   principalId,
