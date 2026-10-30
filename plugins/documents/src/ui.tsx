@@ -29,6 +29,9 @@ export interface EditorViewProps {
   // and its highlighting. Asked once the path is known and applied in place: the text shows at
   // once, and the buffer and its sync are untouched. A failure leaves the text plain.
   extensionsFor?: (path: string) => Extension[] | Promise<Extension[]>;
+  // The live editor once it exists, and null when it goes, for a view that adds its own
+  // commands (a formatting toolbar). Its changes are local input like typing.
+  onEditor?: (editor: EditorView | null) => void;
 }
 
 const remote = Annotation.define<boolean>();
@@ -147,7 +150,7 @@ function PinnedDocumentView({ view, projectId, client, documentId, version, exte
   </div>;
 }
 
-function LiveDocumentView({ view, projectId, client, active, documentVersion, documentRevision, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, saveable = false, appearance = 'document', onDraftState, askable = false, reviewSelection, extensionsFor }: EditorViewProps) {
+function LiveDocumentView({ view, projectId, client, active, documentVersion, documentRevision, principalId, contextTarget, headerTarget, maxUnconfirmedBytes = 1024 * 1024, editable = true, saveable = false, appearance = 'document', onDraftState, askable = false, reviewSelection, extensionsFor, onEditor }: EditorViewProps) {
   injectStyles();
   const binding = view.bindings.document as { documentId: string; version?: number; kind?: string } | undefined;
   const documentId = binding?.documentId ?? '';
@@ -164,6 +167,8 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
   const sync = held.sync;
   const draftStateCallback = useRef(onDraftState);
   draftStateCallback.current = onDraftState;
+  const editorCallback = useRef(onEditor);
+  editorCallback.current = onEditor;
   useEffect(() => () => held.release(), [held]);
   const tick = useSyncExternalStore(listener => sync.subscribe(listener), () => sync.stateVersion);
   useEffect(() => { onDraftState?.({ documentId, version: sync.confirmed?.version ?? null, ready: !!sync.confirmed && !sync.busy && !sync.aside && !composing }); }, [sync, tick, documentId, composing, onDraftState]);
@@ -197,7 +202,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
         }
       })];
     const cm = new EditorView({ parent: host.current, doc: sync.sent, extensions: setup });
-    editor.current = cm;
+    editor.current = cm; editorCallback.current?.(cm);
     const port = {
       text: () => cm.state.doc.toString(),
       composing: () => cm.composing,
@@ -211,7 +216,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
     const detach = sync.attach(port);
     if (!sync.confirmed) sync.load().catch(error => setFailure(error?.message ?? 'This document could not be read.'));
     else port.replace(sync.sent);
-    return () => { detach(); cm.destroy(); editor.current = null; };
+    return () => { detach(); cm.destroy(); editor.current = null; editorCallback.current?.(null); };
   }, [sync, documentId, readOnly, saveable, appearance]);
 
   const path = sync.confirmed?.path;

@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-documents",
-  "version": "0.4.7",
+  "version": "0.4.8",
   "type": "module",
   "description": "Rho documents plugin",
   "license": "AGPL-3.0-only",

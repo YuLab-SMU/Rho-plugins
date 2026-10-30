@@ -1,7 +1,9 @@
 // Markdown read as formatted text: CommonMark with tables, strikethrough, task lists and
 // TeX math, rendered without any HTML of the document's own (HTML in the text is shown
-// as text). Links and images name project files relative to the document; the view
-// resolves them, the renderer only marks them.
+// as text, except a line that is only an HTML comment, which is not shown, as in other
+// Markdown readers). Links and images name project files relative to the document; the
+// view resolves them, the renderer only marks them. Each to-do names its source line, so
+// the view can tick it in the text.
 import MarkdownIt, { type PluginWithOptions } from 'markdown-it';
 import type Token from 'markdown-it/lib/token.mjs';
 import mathPlugin from '@vscode/markdown-it-katex';
@@ -26,6 +28,29 @@ export function projectPath(documentPath: string, target: string): string | null
     if (part === '..') { if (!parts.length) return null; parts.pop(); } else parts.push(part);
   }
   return parts.length ? parts.join('/') : null;
+}
+
+// A paragraph line that is only an HTML comment, such as a marker an Agent keeps under its
+// heading. With HTML disabled it would show as text.
+const comment = /^<!--[\s\S]*?-->$/;
+function dropComments(tokens: Token[]): Token[] {
+  const out: Token[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    if (token.type === 'inline' && token.children) {
+      const kept: Token[] = [];
+      for (const child of token.children) {
+        if (child.type === 'text' && comment.test(child.content.trim())) continue;
+        if (child.type === 'softbreak' && (!kept.length || kept.at(-1)!.type === 'softbreak')) continue;
+        kept.push(child);
+      }
+      while (kept.at(-1)?.type === 'softbreak') kept.pop();
+      if (!kept.length && token.children.length && tokens[i - 1]?.type === 'paragraph_open' && tokens[i + 1]?.type === 'paragraph_close') { out.pop(); i++; continue; }
+      token.children = kept;
+    }
+    out.push(token);
+  }
+  return out;
 }
 
 const fenceLanguage = (info: string) => info.trim().replace(/^\{\s*/, '').split(/[\s,{}]/)[0]?.toLowerCase() ?? '';
@@ -64,7 +89,7 @@ function parser() {
   // Its types name another copy of markdown-it's.
   const math = ((mathPlugin as any).default ?? mathPlugin) as PluginWithOptions<{ throwOnError: boolean; enableFencedBlocks: boolean }>;
   md.use(math, { throwOnError: false, enableFencedBlocks: true });
-  md.use(taskLists, { enabled: false, label: true });
+  md.use(taskLists, { enabled: true, label: true });
   const { escapeHtml } = md.utils;
   md.renderer.rules.fence = (tokens, i) => {
     const token = tokens[i]!, language = fenceLanguage(token.info);
@@ -76,7 +101,7 @@ function parser() {
 
 // The document's text as HTML for its view. documentPath places relative links and images.
 export function renderMarkdown(text: string, documentPath: string, limits = markdownLimits): Rendered {
-  const parse = parser(), env = {}, tokens = parse.parse(text, env);
+  const parse = parser(), env = {}, tokens = dropComments(parse.parse(text, env));
   const slug = slugger(), headings: Heading[] = [], images: string[] = [], links: string[] = [];
   const { escapeHtml } = parse.utils;
   for (let i = 0; i < tokens.length; i++) {
@@ -86,6 +111,7 @@ export function renderMarkdown(text: string, documentPath: string, limits = mark
       const heading = { level: Number(token.tag.slice(1)), text, slug: slug(text) };
       headings.push(heading); token.attrSet('data-rho-heading', heading.slug);
     }
+    if (token.type === 'list_item_open' && /\btask-list-item\b/.test(token.attrGet('class') ?? '') && token.map) token.attrSet('data-rho-task-line', String(token.map[0]));
     if (token.children) token.children = keepPunctuation(token.children, escapeHtml);
     for (const child of token.children ?? []) {
       if (child.type === 'link_open') {

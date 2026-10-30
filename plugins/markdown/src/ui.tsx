@@ -1,11 +1,14 @@
 // A Markdown document read as formatted text, from the same buffer every view of the
 // document shares: an Agent's edit or the person's typing shows here as it is confirmed.
-// Source switches the view to the Documents editor on that buffer. The renderer and its
-// math fonts load the first time a Markdown view shows.
+// A to-do ticks in place, as an edit of its line. Edit (Source where the session may only
+// read) switches the view to the Documents editor on that buffer, with controls that write
+// the Markdown for bold, italic, headings, lists and to-dos. The renderer and its math fonts
+// load the first time a Markdown view shows.
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { DocumentEditorView, useDocumentBuffer } from '@rho-workspace/plugin-documents/ui';
 import type { Rendered } from './render.js';
+import { formatChange, toggleTask, type FormatCommand } from './format.js';
 
 export interface UiClient { call(method: string, input: any): Promise<any> }
 // Services the application offers any view. Each is optional: without it a project link
@@ -17,6 +20,12 @@ export interface ShellServices {
   highlight?(code: string, language: string): Promise<DocumentFragment | null>;
 }
 type Operation = { method: string; state: string; authorized: boolean };
+// The part of the Documents editor the formatting controls use.
+interface EditorLike {
+  state: { doc: { toString(): string }; selection: { main: { from: number; to: number } } };
+  dispatch(spec: { changes: { from: number; to: number; insert: string }; selection: { anchor: number; head: number } }): void;
+  focus(): void;
+}
 export interface MarkdownViewProps {
   view: { id: string; props: Record<string, unknown>; bindings: Record<string, unknown> };
   projectId: string;
@@ -41,7 +50,7 @@ const styles = `
 .rho-md-page h1{font-size:1.75em}.rho-md-page h2{font-size:1.35em;padding-bottom:.25em;border-bottom:1px solid var(--divider,#eceef1)}.rho-md-page h3{font-size:1.12em}.rho-md-page h4{font-size:1em}
 .rho-md-page p,.rho-md-page ul,.rho-md-page ol,.rho-md-page blockquote,.rho-md-page table,.rho-md-page pre,.rho-md-page figure{margin:0 0 1em}
 .rho-md-page ul,.rho-md-page ol{padding-left:1.5em}.rho-md-page li+li{margin-top:.25em}
-.rho-md-page .task-list-item{list-style:none;margin-left:-1.4em}.rho-md-page .task-list-item input{margin:0 .5em 0 0;vertical-align:-1px}
+.rho-md-page .task-list-item{list-style:none;margin-left:-1.4em;padding-left:1.4em;text-indent:-1.4em}.rho-md-page .task-list-item :is(ul,ol,pre,blockquote,table){text-indent:0}.rho-md-page .task-list-item label{display:inline;gap:0;font-weight:inherit}.rho-md-page .task-list-item input{display:inline-block;width:.9em;margin:0 .5em 0 0;padding:0;vertical-align:-1px;text-indent:0}
 .rho-md-page a{color:var(--accent,#0b6bcb);text-decoration:underline;text-underline-offset:2px;text-decoration-thickness:1px}
 .rho-md-page a[data-rho-outside]{color:inherit;text-decoration:none;cursor:default}
 .rho-md-page blockquote{padding:.1em 1em;border-left:3px solid var(--border,#d9dde3);color:var(--text-muted,#5f6873)}
@@ -62,8 +71,15 @@ const styles = `
 .rho-md-modes button{border:0;background:transparent;font:500 12.5px/1 var(--font-ui,system-ui,sans-serif);color:var(--text-muted,#5f6873);padding:6px 11px;cursor:pointer}
 .rho-md-modes button[aria-pressed=true]{background:var(--surface-muted,#f4f5f7);color:var(--text,#1f2328)}
 .rho-md-modes button+button{border-left:1px solid var(--border,#d9dde3)}
-.rho-md-bar{display:flex;justify-content:flex-end;padding:8px 12px;border-bottom:1px solid var(--divider,#eceef1)}
-.rho-md-source{height:100%;display:flex;flex-direction:column;min-height:0}.rho-md-source>*{flex:1 1 auto;min-height:0}
+.rho-md-bar{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:8px 12px;border-bottom:1px solid var(--divider,#eceef1)}
+.rho-md-source{height:100%;display:flex;flex-direction:column;min-height:0}.rho-md-source>*{flex:1 1 auto;min-height:0}.rho-md-source>.rho-md-bar,.rho-md-source>.rho-md-note{flex:none}
+.rho-md-page .task-list-item input:not(:disabled){cursor:pointer}
+.rho-md-tools{display:flex;flex-wrap:wrap;gap:2px;margin-right:auto}
+.rho-md-tools button{min-width:30px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--text-muted,#5f6873);font:600 12.5px/1 var(--font-ui,system-ui,sans-serif);cursor:pointer;padding:0 7px}
+.rho-md-tools button:hover{background:var(--surface-muted,#f4f5f7);color:var(--text,#1f2328)}
+.rho-md-tools button:disabled{opacity:.4;cursor:default}
+.rho-md-tools .rho-md-tool-i{font-style:italic;font-family:Georgia,serif}
+.rho-md-tools .rho-md-tool-sep{width:1px;margin:6px 4px;background:var(--divider,#eceef1)}
 @media (max-width:600px){.rho-md-page{padding:20px 16px 40px;font-size:15px}}
 `;
 let injected = false;
@@ -119,7 +135,7 @@ export function MarkdownView(props: MarkdownViewProps) {
   const binding = props.view.bindings.document as { documentId?: string } | undefined;
   const doc = snapshot.documents?.find(d => d.id === binding?.documentId);
   const maxUnconfirmedBytes = Math.max(1, Math.min(1024 * 1024, (snapshot.limits?.documents as { maxBufferBytes?: number } | undefined)?.maxBufferBytes ?? 1024 * 1024));
-  const { buffer, failure, retry } = useDocumentBuffer({ client: props.client, projectId: props.projectId, documentId: binding?.documentId, documentVersion: doc?.version, principalId: props.principalId, maxUnconfirmedBytes });
+  const { sync, buffer, failure, retry } = useDocumentBuffer({ client: props.client, projectId: props.projectId, documentId: binding?.documentId, documentVersion: doc?.version, principalId: props.principalId, maxUnconfirmedBytes });
   const [mode, setMode] = useState<'read' | 'source'>('read');
   const [renderer, setRenderer] = useState<Renderer | null>(null), [loadFailure, setLoadFailure] = useState('');
   useEffect(() => { let live = true; loadRenderer().then(r => { if (live) setRenderer(r); }, () => { if (live) setLoadFailure('The Markdown reader could not be loaded. Source shows the text.'); }); return () => { live = false; }; }, []);
@@ -128,8 +144,28 @@ export function MarkdownView(props: MarkdownViewProps) {
   const [page, setPage] = useState<HTMLElement | null>(null);
   useEnhance(mode === 'read' ? page : null, rendered, shell);
   const showSource = mode === 'source' || large || !!loadFailure;
+  const editable = ['document.edit', 'document.undoOwn', 'document.revert', 'document.change.read'].every(m => allowed(ops, m));
+  // A to-do the session may not edit stays shown, not tickable.
+  useEffect(() => { page?.querySelectorAll<HTMLInputElement>('input.task-list-item-checkbox').forEach(box => { box.disabled = !editable; }); }, [page, rendered, editable]);
+  const editor = useRef<EditorLike | null>(null);
+  function format(command: FormatCommand) {
+    const cm = editor.current;
+    if (!cm) return;
+    const { from, to } = cm.state.selection.main, change = formatChange(cm.state.doc.toString(), from, to, command);
+    cm.dispatch({ changes: { from: change.from, to: change.to, insert: change.insert }, selection: { anchor: change.anchor, head: change.head } });
+    cm.focus();
+  }
 
   function click(event: MouseEvent<HTMLElement>) {
+    const box = (event.target as HTMLElement).closest<HTMLInputElement>('input.task-list-item-checkbox');
+    if (box) {
+      // The text decides what shows: the box follows the buffer once the edit is confirmed.
+      event.preventDefault();
+      const line = Number(box.closest<HTMLElement>('[data-rho-task-line]')?.dataset.rhoTaskLine);
+      const next = buffer && editable && Number.isInteger(line) ? toggleTask(buffer.content, line) : null;
+      if (next !== null && sync) sync.local({ text: () => next, composing: () => false, replace: () => undefined });
+      return;
+    }
     const link = (event.target as HTMLElement).closest('a');
     if (!link) return;
     const path = link.dataset.rhoPath, anchor = link.dataset.rhoAnchor;
@@ -144,17 +180,21 @@ export function MarkdownView(props: MarkdownViewProps) {
 
   const modes = <div className="rho-md-modes" role="group" aria-label="Show as">
     <button aria-pressed={!showSource} disabled={large || !!loadFailure} onClick={() => setMode('read')}>Read</button>
-    <button aria-pressed={showSource} onClick={() => setMode('source')}>Source</button>
+    <button aria-pressed={showSource} onClick={() => setMode('source')}>{editable ? 'Edit' : 'Source'}</button>
+  </div>;
+  const tools: Array<[FormatCommand, string, string] | null> = [['bold', 'B', 'Bold'], ['italic', 'I', 'Italic'], null, ['h1', 'H1', 'Heading 1'], ['h2', 'H2', 'Heading 2'], null, ['bullet', '•', 'Bulleted list'], ['number', '1.', 'Numbered list'], ['task', '☐', 'To-do']];
+  const toolbar = editable && <div className="rho-md-tools" role="toolbar" aria-label="Format">
+    {tools.map((tool, i) => tool ? <button key={tool[0]} className={'rho-md-tool-' + tool[1].toLowerCase()} title={tool[2]} aria-label={tool[2]} onMouseDown={event => event.preventDefault()} onClick={() => format(tool[0])}>{tool[1]}</button> : <span key={'sep' + i} className="rho-md-tool-sep" aria-hidden="true" />)}
   </div>;
   const header = props.headerTarget ? createPortal(modes, props.headerTarget) : null;
   if (!binding?.documentId) return <p className="rho-md-note">This view has no document bound.</p>;
   if (showSource) return <div className="rho-md-source">
-    {header ?? <div className="rho-md-bar">{modes}</div>}
+    {header}{(toolbar || !header) && <div className="rho-md-bar">{toolbar}{!header && modes}</div>}
     {large && <p className="rho-md-note">This document is larger than {Math.round((renderer?.markdownLimits.maxRenderBytes ?? 0) / 1024)} KB, so it shows as its source.</p>}
     <DocumentEditorView view={props.view} projectId={props.projectId} client={props.client} active={props.active} documentVersion={doc?.version} documentRevision={doc?.revision}
       principalId={props.principalId} contextTarget={props.contextTarget} headerTarget={props.headerTarget} maxUnconfirmedBytes={maxUnconfirmedBytes}
-      editable={['document.edit', 'document.undoOwn', 'document.revert', 'document.change.read'].every(m => allowed(ops, m))} saveable={allowed(ops, 'document.save')}
-      askable={allowed(ops, 'context.create')} extensionsFor={shell?.languageExtensions} />
+      editable={editable} saveable={allowed(ops, 'document.save')}
+      askable={allowed(ops, 'context.create')} extensionsFor={shell?.languageExtensions} onEditor={cm => { editor.current = cm as EditorLike | null; }} />
   </div>;
   return <div className="rho-md" aria-label={buffer ? buffer.path : 'Markdown document'}>
     {header ?? <div className="rho-md-bar">{modes}</div>}

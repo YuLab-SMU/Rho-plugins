@@ -8,7 +8,7 @@ export class ClaudeCliConversation implements AgentConversation {
   private child: ChildProcess | null = null;
   private ended: Promise<void> = Promise.resolve();
   private stopTimer: ReturnType<typeof setTimeout> | undefined;
-  constructor(private options: { cwd: string; binary: string; sessionId: string; confirmed: boolean; projectName: string; mcpServers: AgentMcpServer[]; limits: AgentProcessLimits }) {}
+  constructor(private options: { cwd: string; binary: string; sessionId: string; confirmed: boolean; projectName: string; mcpServers: AgentMcpServer[]; limits: AgentProcessLimits; instructions?: string }) {}
   get connected() { return false; }
   get pid() { return this.child?.pid ?? null; }
   async run(turn: AgentTurn): Promise<AgentCompletion> {
@@ -20,7 +20,7 @@ export class ClaudeCliConversation implements AgentConversation {
     const args = ['-p', '--output-format', 'stream-json', '--verbose', ...(o.confirmed ? ['--resume', o.sessionId] : ['--session-id', o.sessionId]),
       '--mcp-config', mcp, '--allowedTools', ...['rho_index', 'rho_resolve', 'rho_call', 'rho_read'].map(name => 'mcp__rho__' + name),
       '--max-turns', String(o.limits.maxAgentTurns),
-      '--append-system-prompt', `You were started from Rho by the person working in the Rho project "${o.projectName}". They read your replies in Rho's Agent panel, next to the project's files, documents, tables, figures and runs. Use your native tools normally, with their existing permissions. Choose Core managed execution only when a task needs its execution continuity or retained operation record. For shared workspace state, rho_index finds operations, rho_resolve gives their contracts, rho_call calls one and rho_read reads a large result. Preserve shared unsaved documents through their document operations. Keep results in this project and say what you changed or ran. External activity observations do not establish managed execution or scientific validity.`];
+      '--append-system-prompt', `You were started from Rho by the person working in the Rho project "${o.projectName}". They read your replies in Rho's Agent panel, next to the project's files, documents, tables, figures and runs. Use your native tools normally, with their existing permissions. Choose Core managed execution only when a task needs its execution continuity or retained operation record. For shared workspace state, rho_index finds operations, rho_resolve gives their contracts, rho_call calls one and rho_read reads a large result. Preserve shared unsaved documents through their document operations. Keep results in this project and say what you changed or ran. External activity observations do not establish managed execution or scientific validity.` + (o.instructions ? '\n\n' + o.instructions : '')];
     const child = spawn(o.binary, args, { cwd: o.cwd, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: process.env });
     this.child = child;
     const ended = new Promise<{ code: number | null; signal: string | null; error?: Error }>(resolve => {

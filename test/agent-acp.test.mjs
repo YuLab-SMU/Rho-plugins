@@ -91,6 +91,18 @@ test('ACP confirms cancellation from the original prompt response and keeps an u
     } finally { await f.close(); }
   }
 });
+test('the embedding application\'s instructions are appended to the Agent\'s system prompt when the session is created and loaded', async () => {
+  const f = await setup();
+  try {
+    const instructions = 'This session was started in Rho as session c-1.';
+    assert.equal((await f.create(undefined, { instructions }).run(turn('hello').request)).state, 'completed');
+    assert.equal((await f.create('original-session', { instructions }).run(turn('again').request)).state, 'completed');
+    assert.equal((await f.create(undefined).run(turn('plain').request)).state, 'completed');
+    const sessions = (await f.calls()).filter(x => x.kind === 'session/new' || x.kind === 'session/load');
+    const appended = { mode: 'append', content: [{ type: 'text', text: instructions }] };
+    assert.deepEqual(sessions.map(x => [x.kind, x.systemPrompt ?? null]), [['session/new', appended], ['session/load', appended], ['session/new', null]]);
+  } finally { await f.close(); }
+});
 test('a Claude session loads the plugin directories it is given, without their MCP discovery', async () => {
   const f = await setup();
   try {

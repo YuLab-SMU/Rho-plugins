@@ -38,6 +38,10 @@ export interface AcpConversationOptions {
   // Trusted embedding configuration, never supplied by a model or a prompt.
   command: { file: string; args: string[] }; env?: NodeJS.ProcessEnv;
   model?: string; sessionMeta?: acp.NewSessionRequest['_meta'];
+  // What the embedding application tells the Agent about this session, appended to the
+  // Agent's own system prompt (ACP systemPrompt, append mode) when the session is created
+  // and when it is loaded again. Trusted embedding configuration, like the command.
+  instructions?: string;
   // The person's choices among the settings the Agent offers (model, effort, mode…), by
   // ACP setting id. Applied once the session exists and before any message is sent; a
   // setting or value the Agent does not offer fails the message instead of being dropped.
@@ -161,7 +165,8 @@ export class AcpConversation implements AgentConversation {
       if (initialized.protocolVersion !== 1) throw new Error('The selected Agent does not support ACP v1.');
       this.canCloseSession = initialized.agentCapabilities?.sessionCapabilities?.close != null;
       this.canDeleteSession = initialized.agentCapabilities?.sessionCapabilities?.delete != null;
-      const params: acp.NewSessionRequest = { cwd: o.cwd, mcpServers: o.mcpServers, ...(o.sessionMeta ? { _meta: o.sessionMeta } : {}) };
+      const params = { cwd: o.cwd, mcpServers: o.mcpServers, ...(o.sessionMeta ? { _meta: o.sessionMeta } : {}),
+        ...(o.instructions ? { systemPrompt: { mode: 'append', content: [{ type: 'text', text: o.instructions }] } } : {}) } as acp.NewSessionRequest;
       let model: string | undefined;
       this.observationOrigin = this.sessionId ? 'history' : 'initial';
       if (this.sessionId) {

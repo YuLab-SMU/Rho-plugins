@@ -111,6 +111,9 @@ highlighting through `extensionsFor(path)`, which returns CodeMirror extensions 
 document's path, at once or as a promise. It is asked with the buffer's own path and
 applied in place: the text shows first, the buffer and its sync are untouched, and a
 failure leaves the text plain. Exact-version views take the same function.
+`onEditor` receives the live editor once it exists (and null when it goes), for a view
+that adds its own commands, such as a formatting toolbar; their changes are local input
+like typing.
 
 Another view of a document reads the same buffer with `useDocumentBuffer`, the hook
 the cards use: every view of one document shares one adapter, so what one view

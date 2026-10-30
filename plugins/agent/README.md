@@ -57,6 +57,12 @@ When the Agent advertises `sessionCapabilities.close`, normal shutdown first sen
 termination. Unsupported/failed/timed-out close still ends the owned transport;
 it never deletes or replaces the native session.
 
+`instructions` is text the embedding application tells the Agent about the session.
+It is appended to the Agent's own system prompt (ACP `systemPrompt` in append mode)
+when the session is created and when it is loaded again, for Claude Code and Codex
+alike, and to Claude CLI's appended system prompt. It is trusted embedding
+configuration, like the command, never taken from a model or a prompt.
+
 `ClaudeAcpOptions.plugins` lists local Claude Code plugin directories the session
 loads (`plugins` in `_meta.claudeCode.options`, without their MCP discovery).
 `writeClaudePlugin(parent, plugin)` writes one from declared skills and hooks: a
