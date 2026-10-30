@@ -8,6 +8,9 @@ export interface ConversationStep {
   // What the Agent said it was doing and the one native input that identifies it
   // (a command, file path, pattern or query). Bounded.
   title?: string; toolKind?: AgentToolKind; detail?: string;
+  // For a command, the Agent's own few words on what it is for (Claude Code's Bash
+  // description), when it gave them. Bounded like a title.
+  purpose?: string;
   outcome?: 'requested' | 'returned' | 'rejected' | 'unknown';
   // A command's exit code when the Agent reported one, and the last lines it printed
   // (commandOutputLimits); lines and bytes count the whole output. Other tools' output

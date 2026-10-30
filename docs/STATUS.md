@@ -5,10 +5,11 @@ Updated: 2026-10-30.
 Files 0.5.0, Annotations 0.5.2 and Tables 0.5.0 supply immutable captures,
 version-bound human decisions and explicit multi-field comparison. Documents
 0.4.8 adds confirmed selection review and captured text comparison, and hands an
-embedding view its editor (`onEditor`). Agent 0.4.22
+embedding view its editor (`onEditor`). Agent 0.4.23
 delegates the compatible capture entry to Files and exposes frozen-context delivery
 facts. It keeps a command's whole text (8 KiB) instead of its first line, so a
-here-document an Agent ran can be read and run again. The embedding application's
+here-document an Agent ran can be read and run again, and the Agent's own words on
+what the command is for (`purpose`). The embedding application's
 session instructions are appended to the Agent's own system prompt when a session is
 created and loaded (ACP `systemPrompt`, append). `describeFile` asks the person's own
 Claude Code, with no tools and no kept session, for one sentence on what a file holds

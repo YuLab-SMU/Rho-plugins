@@ -10,7 +10,9 @@ confer Core acceptance, deduplication or scientific validity.
 
 `@rho-workspace/plugin-agent` 0.4.19 adds visible tool titles, ACP tool categories
 and one identifying input (path, pattern or query, or the whole command up to
-8192 characters) to conversation steps,
+8192 characters) to conversation steps; since 0.4.23 a command also keeps the Agent's
+own few words on what it is for (`purpose`, Claude Code's Bash description, one line
+of at most 200 characters),
 plus Claude/Codex ACP conversations and an external-client relay, native-log
 collection, original feedback, MCP and presentation entries.
 

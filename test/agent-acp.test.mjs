@@ -52,6 +52,8 @@ test('session projection observes idle updates, separates replay, replaces plans
     assert.match(read.detail, /project-notes\.md$/);
     const run = t.events.find(e => e.step?.id === 'run-analysis').step;
     assert.equal(run.toolKind, 'execute'); assert.equal(run.detail, 'Rscript analysis.R --input data.csv');
+    // The Agent's own words on what the command is for, one bounded line; a read has none.
+    assert.equal(run.purpose, 'Fit the model'); assert.equal(read.purpose, undefined);
     const turnEvents = structuredClone(t.events);
     // The next message's durable acknowledgement may overlap a late update from
     // the previous turn. Reusing a connection is not a history replay phase.

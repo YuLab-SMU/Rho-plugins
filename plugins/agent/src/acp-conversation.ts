@@ -98,6 +98,7 @@ export class AcpConversation implements AgentConversation {
       if (toolName && this.toolTitles.size < 512) this.toolTitles.set(u.toolCallId,toolName.slice(0,1024));
       const operation = /^(mcp__rho__|mcp\.rho\.)rho_call$/.test(toolName ?? '') && typeof input?.operation === 'string' ? input.operation : undefined;
       const title = stepText(u.title), detail = toolDetail(input);
+      const purpose = typeof input?.command === 'string' ? stepText(input.description, 200) : undefined;
       const toolKind = 'kind' in u && toolKinds.includes(u.kind as AgentToolKind) ? u.kind as AgentToolKind : undefined;
       // A command's printed output and exit arrive on the terminal extension this client asks for.
       const terminal = u._meta as { terminal_output?: { data?: unknown }; terminal_exit?: { exit_code?: unknown } } | undefined;
@@ -105,7 +106,7 @@ export class AcpConversation implements AgentConversation {
       const exitCode = Number.isSafeInteger(terminal?.terminal_exit?.exit_code) ? terminal!.terminal_exit!.exit_code as number : undefined;
       this.active.event({ type: 'step', step: { kind: 'tool', at, id: u.toolCallId,
         ...(name || u.title ? { tool: (name ?? u.title)!.slice(0, 512) } : {}), ...(operation ? { operation } : {}),
-        ...(title ? { title } : {}), ...(toolKind ? { toolKind } : {}), ...(detail ? { detail } : {}),
+        ...(title ? { title } : {}), ...(toolKind ? { toolKind } : {}), ...(detail ? { detail } : {}), ...(purpose ? { purpose } : {}),
         ...(printed ? { output: printed } : {}), ...(exitCode !== undefined ? { exitCode } : {}),
         ...(u.status ? { outcome: u.status === 'completed' ? 'returned' : u.status === 'failed' ? 'rejected' : 'requested' } : {}) } });
     }
