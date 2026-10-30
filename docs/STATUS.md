@@ -17,10 +17,13 @@ from facts and its first lines, the image itself, or the code that made it
 (`describeLimits`); `./models` reads models.dev for image input and prices and
 estimates a call's cost when Claude Code does not know it (`modelCatalogLimits`). Console 0.1.0 runs a person's
 shell commands in the project folder and retains each one's identity, ending and
-bounded output. Markdown 0.2.0 ticks to-dos in place, edits with a formatting toolbar
+bounded output. Notebook 0.1.0 (`plugins/kernel`) keeps a live R and a live Python
+session per project that an Agent and the person share: cells keep their identity,
+order, output as it is printed, plots and the session's variables; interrupt names a
+cell and stop names a session; sessions end with their host and are recorded so. Markdown 0.2.0 ticks to-dos in place, edits with a formatting toolbar
 and hides comment-only lines; its view contract stays 0.1.0. The earlier
 code/highlight/command-output work is retained.
-The owner suite passes 125/125; application composition and installation are checked
+The owner suite passes 132/132; application composition and installation are checked
 by Rho, separately from component checks.
 
 | Owner | Implemented boundary | Material limit |
@@ -32,6 +35,7 @@ by Rho, separately from component checks.
 | Agent | Claude/Codex ACP, native tools normally, optional Core, bounded activity/commands, frozen contexts, explicit response facts and tool-less one-sentence file descriptions | Unknown outcomes preserved; no arbitrary session-history access or human decision authority; a description is generated and unchecked |
 | Markdown | Optional reader over Documents with to-dos ticked in place, an editor with formatting controls, relative links/media and math | Same buffer; not an additional document owner; a to-do whose line moved is left alone |
 | Console | Person-run commands in the project folder: change identity, process-group stop, exit/signal, head-and-tail output, continuing/unknown after restart | 200 records, 4 running, 1 MiB kept output (64 KiB tail); the host decides who may run; never reruns a known identity |
+| Notebook | Live R and Python sessions shared by an Agent and the person: per-caller cell identity, one queue per session, streamed output in order, R and matplotlib plots, variables, interrupt by cell, stop by session, rho-closed/unknown/not-run after restart | 16 waiting cells, 256 KiB output and 8 plots (4 MiB each) per cell, 500 cells, 200 variables; a cell's own memory and time unbounded; the host decides who may stop |
 
 The Rho [review episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/REVIEW-EVIDENCE-EPISODE.md)
 records real airquality, Python/R and browser observations. A context read differs

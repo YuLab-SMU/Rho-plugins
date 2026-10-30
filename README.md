@@ -43,6 +43,7 @@ cannot be packed as an aggregate runtime package.
 | `agent` | Frozen context, bindings/receipts, durable caller intents and project-scoped stdio MCP | [Agent](plugins/agent/README.md) |
 | `annotations` | Version-anchored feedback and explicit replies over Documents drafts and source-owner-validated anchors | [Annotations](plugins/annotations/README.md) |
 | `console` | Commands a person runs in the project folder, with kept output, stop and restart-honest endings | [Console](plugins/console/README.md) |
+| `kernel` | Live R and Python sessions an Agent and the person share: cells, output, plots, variables, interrupt and restart-honest endings | [Notebook](plugins/kernel/README.md) |
 
 `@rho-workspace/plugin-markdown` is a browser view only, not a capability: a UI
 extension over Documents that reads a Markdown document as formatted text

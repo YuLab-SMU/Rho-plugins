@@ -1,0 +1,28 @@
+{
+  "name": "@rho-workspace/plugin-kernel",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Rho live session plugin: an R and a Python session the Agent and the person run code in, kept with each cell's output, plots and the session's variables",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./operations": "./dist/operations.js",
+    "./contract": "./dist/contract.js"
+  },
+  "files": [
+    "dist",
+    "runners",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@rho-workspace/plugin-contracts": "0.4.0"
+  }
+}
