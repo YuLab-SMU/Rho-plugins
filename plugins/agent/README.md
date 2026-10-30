@@ -65,14 +65,31 @@ configuration, like the command, never taken from a model or a prompt.
 
 `./describe` exports `describeFile`, one sentence on what a file holds, written by
 the person's own Claude Code (`claude -p`) with every tool turned off (`--tools ""`),
-no MCP servers and no kept session, under a fixed system prompt. It is given only the
-file's path, facts the embedding application read from the file, its first lines and
-the person's request, and an explicit `model` when the caller names one. The caller
-chooses the working folder; an empty one keeps project instructions out.
-`describeLimits` bounds the input (8 KiB), the output (64 KiB), the sentence (320
-characters) and the time (60 s, then the process group is stopped). A failure, an
-empty answer or a call past its time is reported to the caller and never retried
-here. The sentence is generated: it checks nothing and grants nothing.
+no MCP servers and no kept session, under a fixed system prompt for each `strategy`.
+It is given the file's path, facts the embedding application read from the file, the
+person's request, an explicit `model` when the caller names one, and one of: the
+file's first lines (`text`), the image itself (`image`, PNG, JPEG, GIF or WebP sent
+as a stream-json image block), or what made the file, such as the code that wrote a
+figure (`context`), which is told it has not seen the figure. The caller chooses the
+strategy and the working folder; an empty folder keeps project instructions out.
+`describeLimits` bounds the text input (8 KiB), the image (3.5 MiB), the output
+(256 KiB of stream records), the sentence (320 characters) and the time (60 s, then
+the process group is stopped). A failure, a refused image, an empty answer or a call
+past its time is reported to the caller and never retried here. The result carries
+the model Claude Code used, the tokens it reports and its cost figure with its basis
+(`list`, or `unknown` when Claude Code guessed). The sentence is generated: it checks
+nothing and grants nothing.
+
+`./models` reads what [models.dev](https://models.dev) lists about a model.
+`loadModelCatalog(file)` keeps a compact copy of `api.json` in a file the caller
+names, reads it again once a day and keeps the last copy when a download fails, not
+asking again for ten minutes; `modelCatalogLimits` bounds the download (16 MiB,
+20 s). `findModel(catalog, model)` matches a session's model, such as
+`gateway/deepseek-v4.1-flash[1m]`, by the provider it names, else its maker's own
+listing, else every listing (median price, majority on image input).
+`callCost(call, facts)` gives one call's cost: Claude Code's figure when it knows the
+list price, else an estimate from the reported tokens and the listed price, else
+unknown with Claude Code's guess named. A provider's bill may differ from either.
 
 `ClaudeAcpOptions.plugins` lists local Claude Code plugin directories the session
 loads (`plugins` in `_meta.claudeCode.options`, without their MCP discovery).
