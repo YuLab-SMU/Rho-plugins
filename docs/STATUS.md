@@ -5,17 +5,19 @@ Updated: 2026-10-30.
 Files 0.5.0, Annotations 0.5.2 and Tables 0.5.0 supply immutable captures,
 version-bound human decisions and explicit multi-field comparison. Documents
 0.4.8 adds confirmed selection review and captured text comparison, and hands an
-embedding view its editor (`onEditor`). Agent 0.4.20
+embedding view its editor (`onEditor`). Agent 0.4.21
 delegates the compatible capture entry to Files and exposes frozen-context delivery
 facts. It keeps a command's whole text (8 KiB) instead of its first line, so a
 here-document an Agent ran can be read and run again. The embedding application's
 session instructions are appended to the Agent's own system prompt when a session is
-created and loaded (ACP `systemPrompt`, append). Console 0.1.0 runs a person's
+created and loaded (ACP `systemPrompt`, append). `describeFile` asks the person's own
+Claude Code, with no tools and no kept session, for one sentence on what a file holds
+from facts and first lines it is given (`describeLimits`). Console 0.1.0 runs a person's
 shell commands in the project folder and retains each one's identity, ending and
 bounded output. Markdown 0.2.0 ticks to-dos in place, edits with a formatting toolbar
 and hides comment-only lines; its view contract stays 0.1.0. The earlier
 code/highlight/command-output work is retained.
-The owner suite passes 120/120; application composition and installation are checked
+The owner suite passes 122/122; application composition and installation are checked
 by Rho, separately from component checks.
 
 | Owner | Implemented boundary | Material limit |
@@ -24,7 +26,7 @@ by Rho, separately from component checks.
 | Annotations | Whole-resource, document-range and keyed-row questions; explicit replies; append-only accepted/needs-changes/withdrawal decisions and retry receipts | Only embedding-authenticated humans decide; reasons required for needs-changes; later versions inherit nothing |
 | Tables | One to sixteen numeric field pairs, explicit keys/namespaces/mapping, full/left/inner join, before/after/delta and row presence | Missing row/null/zero differ; invalid mapping/duplicates/non-finite delta refused; no inferred scientific comparability |
 | Documents | Single shared buffer, own undo, disk conditions/merge, native-edit hook, snapshots; confirmed range review and immutable text comparison | Disk/buffer capture stays distinct; 1 MiB comparison read and 64 KiB preview |
-| Agent | Claude/Codex ACP, native tools normally, optional Core, bounded activity/commands, frozen contexts and explicit response facts | Unknown outcomes preserved; no arbitrary session-history access or human decision authority |
+| Agent | Claude/Codex ACP, native tools normally, optional Core, bounded activity/commands, frozen contexts, explicit response facts and tool-less one-sentence file descriptions | Unknown outcomes preserved; no arbitrary session-history access or human decision authority; a description is generated and unchecked |
 | Markdown | Optional reader over Documents with to-dos ticked in place, an editor with formatting controls, relative links/media and math | Same buffer; not an additional document owner; a to-do whose line moved is left alone |
 | Console | Person-run commands in the project folder: change identity, process-group stop, exit/signal, head-and-tail output, continuing/unknown after restart | 200 records, 4 running, 1 MiB kept output (64 KiB tail); the host decides who may run; never reruns a known identity |
 

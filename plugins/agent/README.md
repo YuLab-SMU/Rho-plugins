@@ -63,6 +63,17 @@ when the session is created and when it is loaded again, for Claude Code and Cod
 alike, and to Claude CLI's appended system prompt. It is trusted embedding
 configuration, like the command, never taken from a model or a prompt.
 
+`./describe` exports `describeFile`, one sentence on what a file holds, written by
+the person's own Claude Code (`claude -p`) with every tool turned off (`--tools ""`),
+no MCP servers and no kept session, under a fixed system prompt. It is given only the
+file's path, facts the embedding application read from the file, its first lines and
+the person's request, and an explicit `model` when the caller names one. The caller
+chooses the working folder; an empty one keeps project instructions out.
+`describeLimits` bounds the input (8 KiB), the output (64 KiB), the sentence (320
+characters) and the time (60 s, then the process group is stopped). A failure, an
+empty answer or a call past its time is reported to the caller and never retried
+here. The sentence is generated: it checks nothing and grants nothing.
+
 `ClaudeAcpOptions.plugins` lists local Claude Code plugin directories the session
 loads (`plugins` in `_meta.claudeCode.options`, without their MCP discovery).
 `writeClaudePlugin(parent, plugin)` writes one from declared skills and hooks: a

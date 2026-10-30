@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-agent",
-  "version": "0.4.20",
+  "version": "0.4.21",
   "type": "module",
   "description": "Rho agent plugin",
   "license": "AGPL-3.0-only",
@@ -29,7 +29,8 @@
     "./layered": "./dist/layered.js",
     "./external-acp": "./dist/external-acp.js",
     "./acp-command": "./dist/acp-command.js",
-    "./acp-cli": "./dist/acp-cli.js"
+    "./acp-cli": "./dist/acp-cli.js",
+    "./describe": "./dist/describe.js"
   },
   "files": [
     "dist",
