@@ -112,6 +112,8 @@ test('a command step keeps its exit code and the last lines it printed, without 
     assert.equal(bad.outcome, 'rejected'); assert.equal(bad.exitCode, 1);
     assert.equal(bad.output.text, 'Error in lm(y ~ x): object not found\nExecution halted'); assert.equal(bad.output.cut, false);
     assert.equal(lost.exitCode, undefined, 'an unreported exit code is not invented'); assert.equal(lost.output.text, '');
+    // A command is kept whole, so a person can read and run exactly what ran.
+    assert.equal(step('script').detail, "cd data && python3 - <<'PY'\nimport csv\nprint(len(list(csv.reader(open('a.csv')))))\nPY");
   } finally { await f.close(); }
 });
 

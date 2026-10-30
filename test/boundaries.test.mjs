@@ -7,7 +7,7 @@ import ts from 'typescript';
 import * as contracts from '@rho-workspace/plugin-contracts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const owners = ['packages/contracts', ...['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations'].map(id => 'plugins/' + id)];
+const owners = ['packages/contracts', ...['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'console'].map(id => 'plugins/' + id)];
 
 test('package imports stay within their owner and declared dependencies; contracts has no capability entry', async () => {
   for (const owner of owners) {

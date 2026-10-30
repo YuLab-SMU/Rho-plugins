@@ -39,6 +39,7 @@
     "plugins/charts",
     "plugins/agent",
     "plugins/annotations",
-    "plugins/markdown"
+    "plugins/markdown",
+    "plugins/console"
   ]
 }

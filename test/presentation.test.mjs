@@ -44,6 +44,11 @@ const copy = {
     '“List the comments in this project that have no reply yet.”',
     '“Leave a note on line 42 of fit.R explaining the change.”',
   ]],
+  console: ['Console', 'Working with your Agent', 'Every command run in the project, and yours', [
+    '“Run the analysis script again and show me what it printed.”',
+    '“Which command wrote results/summary.csv?”',
+    '“Why did the last command fail?”',
+  ]],
   agent: ['Agent', 'Working with your Agent', 'Connect Claude Code and hand it exact context', [
     '“Use the rows I shared from results.csv as context.”',
     '“Which views have you opened in this project?”',
@@ -61,18 +66,19 @@ const names = {
   'media.describe': 'Describe an image or PDF and check regions',
   'annotation.decide': 'Record decision', 'annotation.create': 'Create', 'annotation.list': 'List', 'annotation.read': 'Read', 'annotation.reply': 'Reply',
   'context.create': 'Share and read context', 'context.read': 'Share and read context',
+  'console.run': 'Run a command', 'console.list': 'List commands', 'console.output': 'Read output', 'console.stop': 'Stop a command',
   'binding.list': 'Open and close views', 'binding.open': 'Open and close views', 'binding.close': 'Open and close views', 'binding.activity': 'Activity', 'binding.activity.append': 'Activity',
 };
 const views = { 'rho.editor': 'Editor', 'rho.object': 'Object', 'rho.table': 'Table', 'rho.scatter': 'Scatter', 'rho.media': 'Media', 'rho.feedback': 'Feedback', 'rho.agent-note': 'Agent note' };
 
-test('all nine headless descriptors ship the Paper U1-06d copy and independent effect markers', async () => {
+test('all ten headless descriptors ship the Paper U1-06d copy and independent effect markers', async () => {
   const seen = [], seenViews = [];
   for (const [id, expected] of Object.entries(copy)) {
     const { plugin } = await import('@rho-workspace/plugin-' + id);
     const p = plugin.presentation;
     assert.deepEqual([p.displayName, p.category, p.tagline, p.examplePrompts], expected, id);
     assert.equal(p.examplePrompts.length, 3);
-    assert.equal(p.runsCode, id === 'r' || id === 'requirements', id);
+    assert.equal(p.runsCode, ['r', 'requirements', 'console'].includes(id), id);
     assert.equal(p.readOnly, id === 'charts' || id === 'media', id);
     assert.ok(p.description && p.icon && p.developer && p.license, id);
     assert.ok(Number.isFinite(p.categoryOrder) && Number.isFinite(p.order), id);
@@ -82,7 +88,7 @@ test('all nine headless descriptors ship the Paper U1-06d copy and independent e
     for (const operation of plugin.operations) {
       seen.push(operation.method);
       assert.equal(operation.presentation.displayName, names[operation.method], operation.method);
-      assert.equal(operation.presentation.runsCode, ['action.submit', 'requirements.prepare'].includes(operation.method));
+      assert.equal(operation.presentation.runsCode, ['action.submit', 'requirements.prepare', 'console.run'].includes(operation.method));
       assert.equal(operation.presentation.readOnly, operation.effect === 'read', operation.method);
       assert.equal(operation.presentation.readOnly && operation.presentation.runsCode, false);
     }
@@ -96,7 +102,7 @@ test('all nine headless descriptors ship the Paper U1-06d copy and independent e
       assert.equal(action.id, 'r.execute');
       assert.deepEqual(action.presentation, plugin.operations.find(o => o.method === 'action.submit').presentation);
     }
-    assert.equal(p.viewNote, id === 'annotations' ? 'Inside other views' : ['files', 'requirements'].includes(id) ? 'No view' : undefined);
+    assert.equal(p.viewNote, id === 'annotations' ? 'Inside other views' : id === 'console' ? 'Its own page in each project' : ['files', 'requirements'].includes(id) ? 'No view' : undefined);
   }
   assert.deepEqual(seen.sort(), Object.keys(names).sort());
   assert.deepEqual(seenViews.sort(), Object.keys(views).sort());

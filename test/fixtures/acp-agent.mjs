@@ -61,6 +61,7 @@ createInterface({ input: process.stdin }).on('line', line => {
       run('fit', 'rtk python3 analysis.py', Array.from({ length: 30 }, (_, i) => '\u001b[1mrow ' + i + '\u001b[0m 臭氧').join('\n') + '\n', 0, 'completed');
       run('bad', 'Rscript model.R', 'Error in lm(y ~ x): object not found\nExecution halted\n', 1, 'failed');
       run('lost', 'sleep 9', '', null, 'failed');
+      run('script', "cd data && python3 - <<'PY'\r\nimport csv\nprint(len(list(csv.reader(open('a.csv')))))\nPY", '3\n', 0, 'completed');
     }
     if (text === 'wait') { update(p.sessionId, { sessionUpdate: 'tool_call', toolCallId: 'slow', title: 'Waiting', status: 'in_progress' }); return; }
     if (text === 'rho-permission') {

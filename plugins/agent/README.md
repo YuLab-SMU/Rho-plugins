@@ -8,8 +8,9 @@ cannot answer new native permission prompts; ACP supplies interactive choices.
 External activity retention stays independent of managed execution and does not
 confer Core acceptance, deduplication or scientific validity.
 
-`@rho-workspace/plugin-agent` 0.4.18 adds visible tool titles, ACP tool categories
-and one identifying input (command, path, pattern or query) to conversation steps,
+`@rho-workspace/plugin-agent` 0.4.19 adds visible tool titles, ACP tool categories
+and one identifying input (path, pattern or query, or the whole command up to
+8192 characters) to conversation steps,
 plus Claude/Codex ACP conversations and an external-client relay, native-log
 collection, original feedback, MCP and presentation entries.
 

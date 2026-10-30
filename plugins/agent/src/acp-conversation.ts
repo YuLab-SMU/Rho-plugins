@@ -16,8 +16,16 @@ function stepText(value: unknown, max = 512) {
   if (!line) return undefined;
   return line.length > max ? line.slice(0, max - 1).replace(/[\uD800-\uDBFF]$/, '') + '…' : line;
 }
+// A command is kept whole, up to this many characters, so a person can read and run exactly what
+// ran; a path, pattern or address keeps its first line.
+export const commandDetailLimit = 8192;
 function toolDetail(input: Record<string, unknown> | undefined) {
-  for (const key of ['command', 'file_path', 'notebook_path', 'path', 'pattern', 'query', 'url', 'description']) {
+  const command = input?.command;
+  if (typeof command === 'string' && command.trim()) {
+    const whole = command.replace(/\r\n/g, '\n').trim();
+    return whole.length > commandDetailLimit ? whole.slice(0, commandDetailLimit - 1).replace(/[\uD800-\uDBFF]$/, '') + '…' : whole;
+  }
+  for (const key of ['file_path', 'notebook_path', 'path', 'pattern', 'query', 'url', 'description']) {
     const value = stepText(input?.[key]);
     if (value) return value;
   }
