@@ -1,8 +1,9 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.2.0 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.3.0 keeps a live R session and a live Python
 session for a project, which an Agent and the person share, on this machine or on a
-server reached with ssh.
+server: one the person manages with serverctl, reached through it, or one reached with
+ssh.
 
 `KernelHost` runs each cell in its language's resident process, in the project
 folder: what one cell defines is there for the next, whoever ran it. R code runs
@@ -57,16 +58,23 @@ starts one. Interrupt sends `SIGINT` and stops the running cell while the sessio
 its values remain. Stop ends the session (`SIGTERM`, then `SIGKILL` after a grace
 period); the running cell ends with an error and waiting cells are not run.
 
-A session can run on a server. A place names an ssh destination (a Host in the
-person's ssh config, `user@host` or `ssh://user@host:port`), a folder there (absolute
+A session can run on a server. A place names the server, a folder there (absolute
 or `~/…`) and setup lines run in that folder before a session starts (`module load R`,
-`conda activate env`). The project chooses where each language's next session starts
+`conda activate env`). A server the person manages with
+[serverctl](https://github.com/xiayh0107/servers-connect) (`via: serverctl`, the
+server's name there) is reached through `serverctl exec`, which holds its login in the
+system's vault and its connection settings; a place named without `via` is reached
+through serverctl when serverctl manages a server of that name, and a place reached through
+serverctl stays with it when it is changed on the same server. Another server is an
+ssh destination (a Host in the person's ssh config, `user@host` or
+`ssh://user@host:port`). The project chooses where each language's next session starts
 (`use`, this machine unless chosen); a cell may name a place for a session that is not
 live yet, and a cell naming another place than the live session's is refused, since
 its values stay where they are. ssh runs as the person's own setup has it (their
 config, keys and agent) in batch mode, so it never asks for a password or accepts a
-new host key; when it cannot log in, what it said is the session's problem. One
-connection per server is shared (`ControlMaster`, sockets in `/tmp/rho-ssh-<uid>`).
+new host key; when it or serverctl cannot log in, what it said is the session's
+problem. One connection per server is shared (`ControlMaster`, sockets in
+`/tmp/rho-ssh-<uid>`, or serverctl's own with `--reuse 60`).
 The session runs in a login shell (`bash -lc`), so module systems and conda set up R
 and Python as the person's terminal there has them, and what that shell prints on the
 way in is not taken as an answer. A login whose character set is not UTF-8 (no locale,
@@ -79,10 +87,23 @@ the session's temporary folder there and sent with their answers. Interrupt and 
 signal the session's process group on the server through the shared connection. When
 the connection is lost (ssh ends with 255), the session ends as `disconnected`: the
 running cell is `unknown` and its process on the server was not seen to end; nothing
-is run again. A check connects and reports the system, the machine's name, the folder
+is run again. Through serverctl, a session lasts at most serverctl's limit for one
+command, 7 days, and then ends with that said. A check connects and reports the system, the machine's name, the folder
 as the server resolves it, R with jsonlite and Python with matplotlib. A session
 reports the machine it runs on (`host`) and its folder. Lineage paths in a server
 session are within its place's folder.
+
+How a server is used is the server's own: its environments, where heavy work goes and
+what to avoid there are written in the skills serverctl binds to it, not here.
+`servers()` (`kernel.servers`) reads serverctl's registry without connecting: each
+server's name, system and tags, and the skills bound to it with serverctl's status for
+each; a server's address and account stay with serverctl. `serverSkill(server, name)`
+(`kernel.server.skill`) reads one skill's `SKILL.md` (up to 256 KiB) where serverctl
+resolves it. serverctl resolves a server's skills together and fails when one is
+missing or invalid; then none of them is read, as serverctl intends. The Agent's
+instructions say to read a server's skills before naming a place or running code
+there, and to follow them, for example in the place's setup lines; they guide work on
+that server and grant nothing.
 
 A place's files are listed and copied within its folder only: a path with `..`, or one
 that leads out through a link, is refused, and a link is not copied. A listing names
@@ -103,7 +124,7 @@ most 4 MiB per cell, 500 kept cells (the oldest finished ones go first, with the
 plots), 200 listed variables, 32 files named per cell (`lineageLimits`) and a 10 minute wait for a cell. A session that is not
 ready within 30 seconds (90 on a server) is ended. At most 16 places are named; a check
 ends after 60 seconds, a listing after 30 with at most 500 entries from 1 MiB, a signal
-after 15; files larger than 64 MiB are not copied and a copy ends after 10 minutes; the
+after 15, and a read of serverctl's registry after 15; files larger than 64 MiB are not copied and a copy ends after 10 minutes; the
 newest 500 copies are recorded. Past a limit a cell is refused with the named
 limit. Reading a value shows at most 50 columns, pages of 50 rows, elements or parts
 (at most 200 when asked), 200 parts beside a page, cells of 120 characters and 16 KiB
@@ -113,7 +134,8 @@ the session goes on. Memory and time used by the code itself are not bounded her
 
 The R session needs R with the `jsonlite` package; the Python session needs Python
 3, and matplotlib for figures; on a server they need the same there, with `bash`,
-`head -c` and `ps`, and on this machine OpenSSH. State lives under
+`head -c` and `ps`, and on this machine OpenSSH (or serverctl, for the servers it
+manages). State lives under
 `.rho/plugins/kernel/` in the project. The package grants no authority: the
 application decides who may run, interrupt or stop.
 

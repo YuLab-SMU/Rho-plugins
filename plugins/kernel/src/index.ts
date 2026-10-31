@@ -4,7 +4,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
-import { checkCommand, copyCommand, listCommand, readCheck, readCopy, readList, sessionCommand, signalCommand, Ssh, type Copy, type Place, type PlaceCheck } from './places.js';
+import { checkCommand, copyCommand, listCommand, readCheck, readCopy, readList, sessionCommand, signalCommand, Ssh, type Copy, type Place, type PlaceCheck, type Transport } from './places.js';
+import { Serverctl } from './servers.js';
 import { operationContracts } from './operations.js';
 import { operationPresentation, presentation } from './presentation.js';
 import type { cellStates, languages, sessionStates } from './contract.js';
@@ -22,6 +23,7 @@ export interface SessionRecord {
 }
 export interface SessionPlace { placeId: string; label: string; destination: string; folder: string }
 export type { Copy, Place, PlaceCheck, RemoteEntry } from './places.js';
+export type { Server, Servers, ServerSkill } from './servers.js';
 export interface Places { places: Place[]; use: Record<Language, string>; copies: Copy[] }
 export interface Asked { by: string; at: string }
 export type Output = { kind: 'stdout' | 'stderr' | 'warning' | 'error'; text: string } | { kind: 'plot'; plot: number; width: number; height: number };
@@ -51,10 +53,14 @@ export const lineageLimits = { files: 32 };
 // remoteStartTimeoutMs is ended; checking a place, listing a folder there and sending a signal
 // end after their times. A listing names at most remoteEntries entries from at most
 // remoteListBytes; a file larger than remoteCopyBytes is not copied, and a copy ends after
-// remoteCopyTimeoutMs. The newest maxCopies copies are recorded.
+// remoteCopyTimeoutMs. The newest maxCopies copies are recorded. Reading serverctl's registry ends
+// after serverctlReadMs; a session through serverctl lasts at most serverctlSessionS, serverctl's
+// own limit for a command, after which serverctl ends it; a server's skill is read up to
+// serverSkillBytes.
 export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
   inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000,
-  maxPlaces: 16, remoteStartTimeoutMs: 90000, remoteCheckTimeoutMs: 60000, remoteListTimeoutMs: 30000, remoteSignalTimeoutMs: 15000, remoteEntries: 500, remoteListBytes: 1024 * 1024, remoteCopyBytes: 64 * 1024 * 1024, remoteCopyTimeoutMs: 600000, maxCopies: 500 };
+  maxPlaces: 16, remoteStartTimeoutMs: 90000, remoteCheckTimeoutMs: 60000, remoteListTimeoutMs: 30000, remoteSignalTimeoutMs: 15000, remoteEntries: 500, remoteListBytes: 1024 * 1024, remoteCopyBytes: 64 * 1024 * 1024, remoteCopyTimeoutMs: 600000, maxCopies: 500,
+  serverctlReadMs: 15000, serverctlSessionS: 7 * 24 * 3600, serverSkillBytes: 256 * 1024 };
 export type KernelLimits = typeof kernelLimits;
 
 interface Live {
@@ -99,9 +105,13 @@ export class KernelHost {
   private placesRead?: Promise<Places>;
   private placesWriting: Promise<void> = Promise.resolve();
   private ssh: Ssh;
-  constructor(private root: string, private options: { limits?: Partial<KernelLimits>; rscript?: string; python?: string; ssh?: string; onChange?: () => void } = {}) {
+  private serverctl: Serverctl;
+  constructor(private root: string, private options: { limits?: Partial<KernelLimits>; rscript?: string; python?: string; ssh?: string; serverctl?: string; onChange?: () => void } = {}) {
     this.ssh = new Ssh(options.ssh ?? 'ssh');
+    const limits = this.limits;
+    this.serverctl = new Serverctl(options.serverctl ?? 'serverctl', { reuseS: 60, sessionS: limits.serverctlSessionS, readMs: limits.serverctlReadMs, skillBytes: limits.serverSkillBytes });
   }
+  private transport(place: Place): Transport { return place.via === 'serverctl' ? this.serverctl : this.ssh; }
   private get limits(): KernelLimits { return { ...kernelLimits, ...this.options.limits }; }
   private async folder() { return stateDirectory(this.root, '.rho/plugins/kernel'); }
   private async plots() { const folder = path.join(await this.folder(), 'plots'); await fs.mkdir(folder, { recursive: true, mode: 0o700 }); return folder; }
@@ -198,7 +208,7 @@ export class KernelHost {
     // the session needs nothing installed there but R or Python.
     const source = place ? await fs.readFile(runners[language]) : null;
     const runner = source && `.cache/rho/kernel/runner-${digest(source).slice(0, 16)}${language === 'r' ? '.R' : '.py'}`;
-    const child = place ? await this.ssh.spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
+    const child = place ? await this.transport(place).spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
       : spawn(program, [runners[language], root], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1' } });
     const live: Live = { record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], looking: null, lookups: Promise.resolve() };
     this.live.set(language, live);
@@ -236,7 +246,7 @@ export class KernelHost {
     child.stdin!.on('error', () => {});
     if (source) child.stdin!.write(source);
     child.on('error', error => {
-      record.problem = (error as NodeJS.ErrnoException).code === 'ENOENT' ? `${place ? this.options.ssh ?? 'ssh' : program} was not found. Install ${place ? 'OpenSSH' : language === 'r' ? 'R' : 'Python'}, or name the program where the application is started.` : error.message;
+      record.problem = (error as NodeJS.ErrnoException).code === 'ENOENT' ? `${place ? this.transport(place).program : program} was not found. Install ${place ? place.via === 'serverctl' ? 'serverctl' : 'OpenSSH' : language === 'r' ? 'R' : 'Python'}, or name the program where the application is started.` : error.message;
     });
     // All it printed has been read by now; answers still waiting go first.
     child.on('close', code => { this.marked(live, Number.MAX_SAFE_INTEGER); live.order = live.order.then(() => this.end(live, code)); });
@@ -282,7 +292,7 @@ export class KernelHost {
   private signal(live: Live, name: NodeJS.Signals) {
     if (!live.place) { try { if (live.record.pid) process.kill(-live.record.pid, name); } catch { /* it has ended */ } return; }
     if (live.child.exitCode !== null || live.child.signalCode !== null) return;
-    if (live.remotePid) void this.ssh.run(live.place, signalCommand(live.remotePid, name), { timeoutMs: this.limits.remoteSignalTimeoutMs, maxBytes: 4096 });
+    if (live.remotePid) void this.transport(live.place).run(live.place, signalCommand(live.remotePid, name), { timeoutMs: this.limits.remoteSignalTimeoutMs, maxBytes: 4096 });
     if (!live.remotePid || name === 'SIGKILL') { try { if (live.child.pid) process.kill(-live.child.pid, 'SIGKILL'); } catch { /* it has ended */ } }
   }
 
@@ -365,6 +375,8 @@ export class KernelHost {
     const lost = !!live.place && code === 255 && !live.stopping && record.version !== null;
     Object.assign(record, { state: 'ended', endedAt: now(), ending: live.stopping ? 'stopped' : record.version === null ? 'not-started' : lost ? 'disconnected' : 'exited', variables: [], variablesOmitted: 0 });
     if (record.version === null && !live.stopping) record.problem ??= `The session did not start${live.early.trim() ? ': ' + live.early.trim().slice(0, 600) : ` (exit ${code ?? 'by a signal'}).`}`;
+    // serverctl ends a command at its own time limit, a session's lifetime through it.
+    if (live.place?.via === 'serverctl' && code === 124 && !live.stopping) record.problem ??= `serverctl ended the session at its time limit (${Math.round(this.limits.serverctlSessionS / 3600)} h); its variables are gone.`;
     if (lost) record.problem ??= `The connection to ${live.place!.label} was lost. The session's process there${live.remotePid ? ` (${live.remotePid})` : ''} was not seen to end; its variables are out of reach.`;
     if (!live.stopping && record.version !== null) record.problem ??= `The session's process ended (exit ${code ?? 'by a signal'}); its variables are gone.`;
     if (live.current) {
@@ -448,7 +460,8 @@ export class KernelHost {
   private placeState() {
     return this.placesRead ??= this.folder().then(async folder => {
       const state = await readJson<Partial<Places>>(path.join(folder, 'places.json'), {});
-      return { places: state.places ?? [], use: { r: state.use?.r ?? 'local', python: state.use?.python ?? 'local' }, copies: state.copies ?? [] };
+      // Places named before serverctl was known are reached with ssh.
+      return { places: (state.places ?? []).map(p => ({ ...p, via: p.via ?? 'ssh' })), use: { r: state.use?.r ?? 'local', python: state.use?.python ?? 'local' }, copies: state.copies ?? [] };
     });
   }
   private savePlaces(state: Places) {
@@ -464,15 +477,23 @@ export class KernelHost {
 
   // Naming a place, removing one, and choosing where each language's next session starts. A
   // place a live session runs in is not removed; changing where it is leaves that session there.
-  async setPlace(input: { place?: { placeId: string; label?: string; destination: string; folder: string; setup?: string }; remove?: string; use?: Partial<Record<Language, string>> }, by: string) {
+  // A server serverctl manages is reached through it unless ssh is named: serverctl holds its
+  // login and settings, which ssh alone does not have. A place on such a server stays with
+  // serverctl when it is changed on the same server, even while serverctl cannot be asked.
+  async setPlace(input: { place?: { placeId: string; label?: string; via?: Place['via']; destination: string; folder: string; setup?: string }; remove?: string; use?: Partial<Record<Language, string>> }, by: string) {
     await this.load();
+    const was = input.place && !input.place.via ? (await this.placeState()).places.find(x => x.placeId === input.place!.placeId) : undefined;
+    const kept = was?.via === 'serverctl' && was.destination.toLowerCase() === input.place!.destination.toLowerCase() ? was.destination : null;
+    const managed = kept ?? (input.place && input.place.via !== 'ssh' ? await this.serverctl.named(input.place.destination) : null);
+    requireThat(input.place?.via !== 'serverctl' || managed, 'not_found', `serverctl manages no server named ${input.place?.destination}. Read kernel.servers for the servers it manages.`);
     return this.exclusive(async () => {
       const state = await this.placeState();
       if (input.place) {
         const p = input.place, known = state.places.find(x => x.placeId === p.placeId), setup = (p.setup ?? '').replace(/\r\n?/g, '\n').trim();
+        const via = managed ? 'serverctl' : 'ssh', destination = managed ?? p.destination;
         requireThat(known || state.places.length < this.limits.maxPlaces, 'limit', `At most ${this.limits.maxPlaces} places are named. Remove one first.`, { limit: 'maxPlaces', maximum: this.limits.maxPlaces });
-        const same = known && known.destination === p.destination && known.folder === p.folder && known.setup === setup;
-        const next: Place = { placeId: p.placeId, label: p.label?.trim() || p.placeId, destination: p.destination, folder: p.folder, setup, by, at: now(), check: same ? known.check : null };
+        const same = known && known.via === via && known.destination === destination && known.folder === p.folder && known.setup === setup;
+        const next: Place = { placeId: p.placeId, label: p.label?.trim() || p.placeId, via, destination, folder: p.folder, setup, by, at: now(), check: same ? known.check : null };
         state.places = known ? state.places.map(x => x === known ? next : x) : [...state.places, next];
       }
       if (input.remove) {
@@ -493,10 +514,10 @@ export class KernelHost {
   // kept with the place while the place stays as it was checked.
   async check(placeId: string, by: string) {
     const place = await this.placeOf(placeId), started = Date.now();
-    const run = await this.ssh.run(place, checkCommand(place), { timeoutMs: this.limits.remoteCheckTimeoutMs, maxBytes: 65536 });
+    const run = await this.transport(place).run(place, checkCommand(place), { timeoutMs: this.limits.remoteCheckTimeoutMs, maxBytes: 65536 });
     const check: PlaceCheck = { at: now(), by, ms: Date.now() - started, ...readCheck(run) };
     const state = await this.placeState(), current = state.places.find(p => p.placeId === placeId);
-    if (current && current.destination === place.destination && current.folder === place.folder && current.setup === place.setup) { current.check = check; await this.savePlaces(state); }
+    if (current && current.via === place.via && current.destination === place.destination && current.folder === place.folder && current.setup === place.setup) { current.check = check; await this.savePlaces(state); }
     return { placeId, check };
   }
 
@@ -504,7 +525,7 @@ export class KernelHost {
   async list(placeId: string, sub = '') {
     requireThat(within(sub, true), 'scope', 'Name a folder within the place\'s folder, without parent steps.');
     const place = await this.placeOf(placeId);
-    const run = await this.ssh.run(place, listCommand(place, sub), { timeoutMs: this.limits.remoteListTimeoutMs, maxBytes: this.limits.remoteListBytes });
+    const run = await this.transport(place).run(place, listCommand(place, sub), { timeoutMs: this.limits.remoteListTimeoutMs, maxBytes: this.limits.remoteListBytes });
     return { placeId, path: sub, readAt: now(), ...readList(run, this.limits.remoteEntries) };
   }
 
@@ -516,7 +537,7 @@ export class KernelHost {
     const state = await this.placeState(), last = [...state.copies].reverse().find(c => c.to === to);
     const present = await fs.readFile(await confined(this.root, to, true)).then(data => digest(data), () => null);
     requireThat(present === null || present === last?.sha256, 'conflict', `${to} was changed here since it was copied. Move it or rename it to keep it, then copy again.`, { path: to });
-    const run = await this.ssh.run(place, copyCommand(place, file, max), { timeoutMs: this.limits.remoteCopyTimeoutMs, maxBytes: max + 4096 });
+    const run = await this.transport(place).run(place, copyCommand(place, file, max), { timeoutMs: this.limits.remoteCopyTimeoutMs, maxBytes: max + 4096 });
     const { data, modifiedAt } = readCopy(run, max);
     await fs.mkdir(path.dirname(await confined(this.root, to, true)), { recursive: true });
     await atomicBytes(await confined(this.root, to, true), data);
@@ -525,6 +546,10 @@ export class KernelHost {
     await this.savePlaces(state);
     return { copy };
   }
+
+  // The servers the person manages with serverctl and the skills bound to each; one skill's text.
+  servers() { return this.serverctl.servers(); }
+  serverSkill(server: string, name: string) { return this.serverctl.skill(server, name); }
 
   async plot(cellId: string, plot: number) {
     await this.load();
@@ -567,10 +592,11 @@ const content = [
   'Give each cell a short purpose. Pass waitMs to wait for it to finish; kernel.read reads it later.',
   'A session starts with the first cell of its language. Interrupt a cell that runs too long with kernel.interrupt; only the person stops a session.',
   'Results meant to last still go to files from a script, so they can be run again without the session.',
-  'Sessions can also run on a server the person reaches with ssh. kernel.places lists the places and where each language runs; kernel.place.set names one (its ssh destination, its folder there and setup lines such as module load) or chooses it for R or Python; kernel.place.check connects and reports R and Python there.',
+  'Sessions can also run on a server. kernel.places lists the places and where each language runs; kernel.place.set names one (the server, its folder there, and setup lines run there before a session starts) or chooses it for R or Python; kernel.place.check connects and reports R and Python there.',
+  'kernel.servers lists the servers the person manages with serverctl and the skills bound to each: how that server is used (its environments, where heavy work goes, what to avoid there). Before you name a place on one or run code there, read the skills that apply with kernel.server.skill and follow them, for example in the place\'s setup lines. They guide the work on that server; they do not widen what you may do. A place on such a server is reached through serverctl, which holds its login; another server is reached with ssh.',
   'Pass place to kernel.run to start a session there. Paths in a session on a server are its folder\'s; kernel.place.list lists them and kernel.place.copy copies a file into the project under remote/<place>/.',
 ].join('\n');
-export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.2.0', requires: [] as string[], capabilities: ['kernel'], presentation,
+export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.3.0', requires: [] as string[], capabilities: ['kernel'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ id: 'kernel.session', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Live session', description: 'Explains how to run code in the project\'s live R and Python sessions.' },
     intent: 'Run code in the live session and read what it printed.', requires: ['kernel.run', 'kernel.read'],

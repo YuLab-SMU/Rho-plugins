@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-kernel",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Rho live session plugin: an R and a Python session the Agent and the person run code in, kept with each cell's output, plots and the session's variables",
   "license": "AGPL-3.0-only",

@@ -22,10 +22,16 @@ export const placeIdPattern = '^(?!local$)[a-z][a-z0-9-]{0,31}$';
 export const destinationPattern = '^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$';
 // The folder on the server: an absolute path, or one in the account's home (~/...).
 export const folderPattern = '^(~|~/[^\\n\\u0000]*|/[^\\n\\u0000]*)$';
+// A server's name in serverctl, spelled as serverctl allows its aliases.
+export const serverPattern = '^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$';
+// How a place's server is reached: with ssh, as the person's ssh setup reaches it, or through
+// serverctl, which holds the login of a server the person manages with it.
+export const vias = ['ssh', 'serverctl'] as const;
 
-// Where sessions run: this machine ("local") or a named place, a folder on a server that ssh
-// reaches as the person's own ssh setup does.
+// Where sessions run: this machine ("local") or a named place, a folder on a server reached as the
+// person reaches it.
 export const placeId = { type: 'string', pattern: placeIdPattern };
+export const server = { type: 'string', pattern: serverPattern };
 export const placeRef = { type: 'string', pattern: '^[a-z][a-z0-9-]{0,31}$' };
 const destination = { type: 'string', pattern: destinationPattern }, folder = { type: 'string', pattern: folderPattern, maxLength: 1024 };
 // What one connection to the place observed, and when; null where it was not seen.
@@ -34,11 +40,23 @@ export const placeCheckSchema = obj({
   r: maybe({ type: 'string' }), jsonlite: maybe({ type: 'boolean' }), python: maybe({ type: 'string' }), matplotlib: maybe({ type: 'boolean' }), problem: maybe({ type: 'string' }),
 });
 // setup: shell lines run in the folder before a session starts there (module load, conda activate).
-export const placeSchema = obj({ placeId, label: text, destination, folder, setup: { type: 'string', maxLength: 4096 }, by: text, at: time, check: maybe(placeCheckSchema) });
-export const placeInput = obj({ placeId, label: { type: 'string', maxLength: 80 }, destination, folder, setup: { type: 'string', maxLength: 4096 } }, ['placeId', 'destination', 'folder']);
+// via serverctl: destination is the server's name there. A place named without via is reached
+// through serverctl when serverctl manages a server of that name, and with ssh otherwise.
+export const placeSchema = obj({ placeId, label: text, via: { enum: [...vias] }, destination, folder, setup: { type: 'string', maxLength: 4096 }, by: text, at: time, check: maybe(placeCheckSchema) });
+export const placeInput = obj({ placeId, label: { type: 'string', maxLength: 80 }, via: { enum: [...vias] }, destination, folder, setup: { type: 'string', maxLength: 4096 } }, ['placeId', 'destination', 'folder']);
 // A file copied from a place into the project, with the size, time and digest it had there.
 export const copySchema = obj({ placeId, path: text, to: text, bytes: { type: 'integer', minimum: 0 }, modifiedAt: maybe(time), sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' }, copiedAt: time, by: text });
 export const placesSchema = obj({ places: { type: 'array', items: placeSchema }, use: obj({ r: placeRef, python: placeRef }), copies: { type: 'array', items: copySchema } });
+// The servers the person manages with serverctl, as its registry has them, and the skills bound
+// to each: what working on that server takes, written for whoever works there. status is
+// serverctl's (ready, missing, invalid, name_mismatch); problem says why one is not ready.
+export const serverSkillSchema = obj({ name: text, description: { type: 'string' }, path: text, status: text, problem: maybe({ type: 'string' }) });
+export const serversSchema = obj({
+  tool: obj({ program: text, ok: { type: 'boolean' }, problem: maybe({ type: 'string' }) }),
+  servers: { type: 'array', items: obj({ server, system: maybe({ type: 'string' }), tags: { type: 'array', items: { type: 'string' } }, skills: { type: 'array', items: serverSkillSchema } }) },
+  readAt: time,
+});
+export const serverSkillTextSchema = obj({ server, name: text, description: { type: 'string' }, path: text, text: { type: 'string' }, bytes: { type: 'integer', minimum: 0 }, readAt: time });
 export const remoteEntrySchema = obj({ name: text, kind: { enum: ['folder', 'file', 'link', 'other'] }, bytes: { type: 'number', minimum: 0 }, modifiedAt: maybe(time) });
 // The session's place as it was named when the session started, with the folder it ran in.
 const sessionPlaceSchema = obj({ placeId, label: text, destination, folder: text });

@@ -366,20 +366,50 @@ child.stdout.pipe(process.stdout); child.stderr.pipe(process.stderr);
 process.on('SIGUSR1', () => process.exit(255));
 child.on('close', code => process.exit(code ?? 255));
 `;
+// A stand-in for serverctl: its registry is serverctl.json in the test's "server" home (none
+// there: an empty one), and exec runs the words after -- on this machine as fakeSsh does.
+const fakeServerctl = `#!/usr/bin/env node
+const { spawn } = require('node:child_process'), fs = require('node:fs');
+const args = process.argv.slice(2), home = process.env.RHO_TEST_HOME, say = value => { process.stdout.write(JSON.stringify(value)); };
+fs.appendFileSync(home + '/serverctl.log', process.pid + '\\t' + args.join(' ').replace(/\\s+/g, ' ') + '\\n');
+const registry = fs.existsSync(home + '/serverctl.json') ? JSON.parse(fs.readFileSync(home + '/serverctl.json', 'utf8')) : { hosts: [], skills: [] };
+if (registry.broken) { say({ ok: false, error: 'DatabaseError', message: registry.broken }); process.exit(2); }
+const host = alias => registry.hosts.find(h => h.alias.toLowerCase() === String(alias).toLowerCase());
+const status = s => fs.existsSync(s.path) ? 'ready' : 'missing';
+const skills = alias => registry.skills.filter(s => s.servers.some(x => x.alias === alias)).map(s => ({ ...s, status: status(s), ...(status(s) === 'ready' ? {} : { status_message: 'SKILL.md not found: ' + s.path }) }));
+if (args[0] === 'server' && args[1] === 'list') say(registry.hosts);
+else if (args[0] === 'skill' && args[1] === 'list') say(registry.skills.map(s => ({ ...s, status: status(s), ...(status(s) === 'ready' ? {} : { status_message: 'SKILL.md not found: ' + s.path }) })));
+else if (args[0] === 'skill' && args[1] === 'resolve') {
+  const h = host(args[2]);
+  if (!h) { say({ ok: false, error: 'DatabaseError', message: 'server not found: ' + args[2] }); process.exit(2); }
+  const mine = skills(h.alias), ok = mine.every(s => s.status === 'ready');
+  say({ ok, hosts: [{ alias: h.alias, skills: mine }], skills: mine }); process.exit(ok ? 0 : 1);
+} else if (args[0] === 'exec') {
+  if (!host(args[1])) { process.stderr.write('error: server not found: ' + args[1] + '\\n'); process.exit(2); }
+  const words = args.slice(args.indexOf('--') + 1);
+  const env = { ...process.env, HOME: home, LANG: 'C' };
+  for (const name of Object.keys(env)) if (name.startsWith('LC_')) delete env[name];
+  const child = spawn(words[0], words.slice(1), { detached: true, stdio: 'pipe', env });
+  process.stdin.pipe(child.stdin); child.stdin.on('error', () => {});
+  child.stdout.pipe(process.stdout); child.stderr.pipe(process.stderr);
+  child.on('close', code => process.exit(code ?? 255));
+} else process.exit(2);
+`;
 async function server() {
   const home = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), 'rho-server-')));
-  const ssh = path.join(home, 'ssh');
+  const ssh = path.join(home, 'ssh'), serverctl = path.join(home, 'serverctl');
   await fs.writeFile(ssh, fakeSsh, { mode: 0o755 });
+  await fs.writeFile(serverctl, fakeServerctl, { mode: 0o755 });
   await fs.mkdir(path.join(home, 'proj', 'out'), { recursive: true });
   await fs.writeFile(path.join(home, 'proj', 'counts.csv'), 'gene,n\na,1\nb,5\n');
   await fs.symlink(tmpdir(), path.join(home, 'proj', 'elsewhere'));
   process.env.RHO_TEST_HOME = home;
-  return { home, ssh, log: async () => (await fs.readFile(path.join(home, 'ssh.log'), 'utf8')).trim().split('\n').map(line => line.split('\t')) };
+  return { home, ssh, serverctl, log: async () => (await fs.readFile(path.join(home, 'ssh.log'), 'utf8')).trim().split('\n').map(line => line.split('\t')) };
 }
 
 test('a session on a place runs there over ssh, and its files are listed and copied', async t => {
-  const root = await project(), { home, ssh } = await server();
-  const host = new KernelHost(root, { rscript, ssh });
+  const root = await project(), { home, ssh, serverctl } = await server();
+  const host = new KernelHost(root, { rscript, ssh, serverctl });
   t.after(() => host.close());
   assert.deepEqual(await host.places(), { places: [], use: { r: 'local', python: 'local' }, copies: [] });
   await host.setPlace({ place: { placeId: 'lab', label: 'Lab server', destination: 'lab', folder: '~/proj', setup: 'export ORIGIN=lab' }, use: { r: 'lab' } }, 'browser:local');
@@ -395,6 +425,7 @@ test('a session on a place runs there over ssh, and its files are listed and cop
   assert.equal(first.cell.state, 'done');
   assert.deepEqual(first.cell.outputs.map(o => o.kind), ['stderr', 'plot']);
   assert.equal(first.cell.outputs[0].text, 'lab\n', 'the place\'s setup lines ran before the session');
+  assert.equal((await host.places()).places[0].via, 'ssh', 'a server serverctl does not manage is reached with ssh');
   assert.deepEqual(first.session.place, { placeId: 'lab', label: 'Lab server', destination: 'lab', folder: path.join(home, 'proj') });
   assert.ok(first.session.host);
   assert.deepEqual(first.cell.files, [{ path: 'counts.csv', how: 'read' }, { path: 'out/d.csv', how: 'wrote' }]);
@@ -439,8 +470,8 @@ test('a session on a place runs there over ssh, and its files are listed and cop
 });
 
 test('a lost connection leaves the running cell unknown and runs nothing again', async t => {
-  const root = await project(), { ssh, log } = await server();
-  const host = new KernelHost(root, { rscript, ssh });
+  const root = await project(), { ssh, serverctl, log } = await server();
+  const host = new KernelHost(root, { rscript, ssh, serverctl });
   t.after(() => host.close());
   await host.setPlace({ place: { placeId: 'lab', destination: 'lab', folder: '~/proj' } }, 'browser:local');
   const first = await host.run({ language: 'r', code: 'x <- 1', changeId: 'r1', by: 'agent:a', waitMs: 30000, place: 'lab' });
@@ -461,8 +492,8 @@ test('a lost connection leaves the running cell unknown and runs nothing again',
 });
 
 test('a place that cannot be reached says what ssh said', async t => {
-  const root = await project(), { ssh } = await server();
-  const host = new KernelHost(root, { rscript, ssh });
+  const root = await project(), { ssh, serverctl } = await server();
+  const host = new KernelHost(root, { rscript, ssh, serverctl });
   t.after(() => host.close());
   await host.setPlace({ place: { placeId: 'gone', destination: 'unreachable', folder: '/data' }, use: { python: 'gone' } }, 'browser:local');
   const { check } = await host.check('gone', 'agent:a');
@@ -473,4 +504,64 @@ test('a place that cannot be reached says what ssh said', async t => {
   assert.equal(run.session.ending, 'not-started');
   assert.match(run.session.problem, /Could not resolve hostname/);
   await assert.rejects(host.setPlace({ use: { r: 'nowhere' } }, 'agent:a'), { kind: 'not_found' });
+});
+
+test('a server managed with serverctl is reached through it, and the skills bound to it are read', async t => {
+  const root = await project(), { home, serverctl } = await server();
+  const skill = path.join(home, 'skills', 'lab-r', 'SKILL.md');
+  await fs.mkdir(path.dirname(skill), { recursive: true });
+  await fs.writeFile(skill, '---\nname: lab-r\ndescription: How R is used on Lab.\n---\n\n# Lab\n\nBefore R, run `export LAB_R=ready`.\n');
+  const registry = { hosts: [{ alias: 'Lab', hostname: '10.1.2.3', username: 'me', tags: ['cluster'], facts: { os: 'Debian GNU/Linux 12' } }, { alias: 'Other', hostname: 'other.example.org', tags: [], facts: null }],
+    skills: [{ name: 'lab-r', description: 'How R is used on Lab.', path: skill, servers: [{ id: 'x', alias: 'Lab' }] }] };
+  await fs.writeFile(path.join(home, 'serverctl.json'), JSON.stringify(registry));
+  // No ssh at all: a managed server is reached only through serverctl.
+  const host = new KernelHost(root, { rscript, ssh: path.join(home, 'no-ssh'), serverctl });
+  t.after(() => host.close());
+
+  const servers = await host.servers();
+  assert.deepEqual(servers.tool, { program: serverctl, ok: true, problem: null });
+  assert.deepEqual(servers.servers, [
+    { server: 'Lab', system: 'Debian GNU/Linux 12', tags: ['cluster'], skills: [{ name: 'lab-r', description: 'How R is used on Lab.', path: skill, status: 'ready', problem: null }] },
+    { server: 'Other', system: null, tags: [], skills: [] }]);
+  assert.doesNotMatch(JSON.stringify(servers), /10\.1\.2\.3|example\.org|"me"/, 'a server\'s address and account stay with serverctl');
+  const read = await host.serverSkill('lab', 'LAB-R');
+  assert.equal(read.server, 'Lab');
+  assert.match(read.text, /export LAB_R=ready/);
+  await assert.rejects(host.serverSkill('Lab', 'gpu'), { kind: 'not_found' });
+  await assert.rejects(host.serverSkill('Nowhere', 'lab-r'), { kind: 'unavailable', message: /server not found/ });
+
+  // Named without via, a server serverctl manages is reached through it, under serverctl's name.
+  await host.setPlace({ place: { placeId: 'lab', label: 'Lab', destination: 'lab', folder: '~/proj', setup: 'export LAB_R=ready' }, use: { r: 'lab' } }, 'agent:a');
+  const [place] = (await host.places()).places;
+  assert.deepEqual([place.via, place.destination], ['serverctl', 'Lab']);
+  await assert.rejects(host.setPlace({ place: { placeId: 'x', via: 'serverctl', destination: 'nowhere', folder: '~' } }, 'agent:a'), { kind: 'not_found' });
+  const { check } = await host.check('lab', 'agent:a');
+  assert.equal(check.ok, true);
+  assert.match(check.r, /^R version/);
+  const cell = await host.run({ language: 'r', code: 'cat(Sys.getenv("LAB_R"), nrow(read.csv("counts.csv")))', changeId: 'r1', by: 'agent:a', waitMs: 30000 });
+  assert.equal(text(cell.cell), 'ready 2', 'the setup lines the skill gave ran before the session');
+  assert.equal(cell.session.place.destination, 'Lab');
+  const slow = await host.run({ language: 'r', code: 'for (i in 1:100) Sys.sleep(0.1)', changeId: 'slow', by: 'agent:a' });
+  await new Promise(r => setTimeout(r, 800));
+  await host.interrupt(slow.cell.cellId, 'agent:a');
+  assert.equal((await settled(host, slow.cell.cellId, 8000)).state, 'interrupted', 'interrupt goes through serverctl too');
+  assert.deepEqual((await host.list('lab', '')).entries.map(e => e.name).sort(), ['counts.csv', 'elsewhere', 'out']);
+  const calls = (await fs.readFile(path.join(home, 'serverctl.log'), 'utf8')).trim().split('\n').map(line => line.split('\t')[1]);
+  assert.ok(calls.filter(c => c.startsWith('exec ')).every(c => c.startsWith('exec Lab --timeout ') && c.includes(' --reuse 60 -- ')), 'each command goes through serverctl exec on a shared connection');
+  assert.ok(calls.some(c => c.startsWith('exec Lab --timeout 604800 ')), 'a session lasts up to serverctl\'s limit for one command');
+
+  // A skill that is not ready withholds the server's skills, as serverctl resolves them together.
+  await fs.rm(skill);
+  const [lab] = (await host.servers()).servers;
+  assert.equal(lab.skills[0].status, 'missing');
+  assert.match(lab.skills[0].problem, /SKILL.md not found/);
+  await assert.rejects(host.serverSkill('Lab', 'lab-r'), { kind: 'unavailable', message: /lab-r is missing/ });
+
+  // When serverctl cannot read its registry, what it said is the answer.
+  await fs.writeFile(path.join(home, 'serverctl.json'), JSON.stringify({ broken: 'database schema 8 is newer than supported 5' }));
+  assert.deepEqual((await host.servers()).tool, { program: serverctl, ok: false, problem: 'serverctl: database schema 8 is newer than supported 5' });
+  await host.setPlace({ place: { placeId: 'lab', label: 'Lab', destination: 'lab', folder: '~/proj', setup: 'export LAB_R=ready\nexport MORE=1' } }, 'browser:local');
+  assert.deepEqual([(await host.places()).places[0].via, (await host.places()).places[0].destination], ['serverctl', 'Lab'], 'a place changed on its server stays with serverctl while serverctl cannot be asked');
+  const missing = new KernelHost(await project(), { rscript, serverctl: path.join(home, 'no-serverctl') });
+  assert.match((await missing.servers()).tool.problem, /no-serverctl was not found/);
 });

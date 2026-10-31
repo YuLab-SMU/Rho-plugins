@@ -1,5 +1,5 @@
 import { objectSchema as obj } from '@rho-workspace/plugin-contracts';
-import { cellId, cellSchema, changeId, copySchema, inspectStates, language, objectSchema, placeCheckSchema, placeId, placeInput, placeRef, placesSchema, remoteEntrySchema, sessionId, sessionSchema, sortInput } from './contract.js';
+import { cellId, cellSchema, changeId, copySchema, inspectStates, language, objectSchema, placeCheckSchema, placeId, placeInput, placeRef, placesSchema, remoteEntrySchema, server, serverSkillTextSchema, serversSchema, sessionId, sessionSchema, sortInput } from './contract.js';
 
 // Owner business contracts. Application project/authentication fields are separate.
 export const operationContracts = {
@@ -66,5 +66,19 @@ export const operationContracts = {
     inputSchema: obj({ placeId, path: { type: 'string', minLength: 1, maxLength: 1024 } }),
     outputSchema: obj({ copy: copySchema }),
     requires: [] as string[], effect: 'file' as const,
+  },
+  // The servers serverctl manages and the skills bound to each, read from its registry now; no
+  // server is connected to.
+  'kernel.servers': {
+    inputSchema: obj({}, []),
+    outputSchema: serversSchema,
+    requires: [] as string[], effect: 'read' as const,
+  },
+  // One skill bound to a server, as its file reads now. A server whose skills serverctl cannot
+  // all resolve gives none: its guidance is not taken in part.
+  'kernel.server.skill': {
+    inputSchema: obj({ server, name: { type: 'string', minLength: 1, maxLength: 128 } }),
+    outputSchema: serverSkillTextSchema,
+    requires: [] as string[], effect: 'read' as const,
   },
 };
