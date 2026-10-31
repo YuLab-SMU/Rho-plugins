@@ -10,7 +10,12 @@ visible values as the console does, and the first error stops the rest of the ce
 Python code runs in one namespace and shows the value of a cell's last expression.
 Each cell keeps what it printed, as it is printed, with its messages, warnings and
 error in their place among the printed lines, and the plots it made (R base and grid
-graphics, and matplotlib figures in Python, as PNG files). After each cell the
+graphics, and matplotlib figures in Python, as PNG files). R draws on one recording
+device that stays open for the session, as the console's does: a later cell can draw
+over an earlier cell's plot (a line over its points) and reports the plot it changed,
+and each page is recorded before a new one starts, so a sourced script that draws two
+plots keeps both. Calls that only set graphics state (`par`, `palette`, `layout`) do not
+make a page new. Python closes its figures after each cell. After each cell the
 session lists its variables with their type, size and a one-line summary.
 Each cell also names the values it made or changed (`defined`) and, when neither list
 was cut, those it removed (`removed`).

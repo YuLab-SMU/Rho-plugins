@@ -45,6 +45,10 @@ variables <- function(most) {
   }), omitted = length(names) - length(shown))
 }
 same <- function(a, b) length(a) == length(b) && all(vapply(seq_along(a), function(j) identical(a[[j]], b[[j]]), logical(1)))
+# What a page draws: its display list without the calls that only set graphics state, such as the
+# par() a plot function calls before it starts a new page.
+quiet <- c("C_par", "palette", "palette2", "C_layout")
+drawn <- function(list) Filter(function(e) !(tryCatch({ f <- e[[2]][[1]]; if (is.list(f) && !is.null(f$name)) f$name else "" }, error = function(err) "") %in% quiet), list)
 # A plot that only adds to the one before it (a line drawn over points) replaces it.
 final_plots <- function(plots) {
   keep <- rep(TRUE, length(plots))
@@ -62,19 +66,30 @@ call_text <- function(condition) {
   paste0(" in ", paste(deparse(call, nlines = 1), collapse = " "))
 }
 
-run <- function(msg) {
-  id <- msg$id; plots <- list(); ok <- TRUE; interrupted <- FALSE
-  # Plots are recorded on a device that draws nothing, after each top-level expression, and
-  # drawn to files at the end; a device the code opens itself is its own.
+# Plots are recorded on a device that draws nothing. It stays open for the session, as the
+# console's does, so a later cell can draw over an earlier cell's plot (a line over its points).
+# A page is recorded before a new page starts and after each top-level expression, so a script
+# that draws several keeps each; a cell reports the pages it drew or changed, drawn to files at
+# its end. A device the code opens itself is its own.
+device <- NULL; seen <- NULL; plots <- list()
+recording <- function() {
+  if (!is.null(device) && device %in% grDevices::dev.list()) { grDevices::dev.set(device); return() }
   grDevices::pdf(NULL, width = 7, height = 5); grDevices::dev.control("enable")
-  device <- grDevices::dev.cur(); seen <- NULL
-  snapshot <- function() {
-    if (!(device %in% grDevices::dev.list())) return()
-    current <- grDevices::dev.cur(); if (current != device) grDevices::dev.set(device)
-    p <- grDevices::recordPlot()
-    if (current != device) grDevices::dev.set(current)
-    if (length(p[[1]]) && !(length(seen) && same(p[[1]], seen))) { plots[[length(plots) + 1]] <<- p; seen <<- p[[1]] }
-  }
+  device <<- grDevices::dev.cur(); seen <<- NULL
+}
+snapshot <- function() {
+  if (is.null(device) || !(device %in% grDevices::dev.list())) return()
+  current <- grDevices::dev.cur(); if (current != device) grDevices::dev.set(device)
+  p <- grDevices::recordPlot()
+  if (current != device) grDevices::dev.set(current)
+  if (length(drawn(p[[1]])) && !(length(seen) && same(drawn(p[[1]]), drawn(seen)))) { plots[[length(plots) + 1]] <<- p; seen <<- p[[1]] }
+}
+setHook("before.plot.new", function() snapshot())
+setHook("before.grid.newpage", function() snapshot())
+
+run <- function(msg) {
+  id <- msg$id; plots <<- list(); ok <- TRUE; interrupted <- FALSE
+  recording()
   tryCatch({
     exprs <- tryCatch(parse(text = msg$code, keep.source = FALSE), error = function(e) {
       ok <<- FALSE; say(list(id = id, kind = "error", text = paste0("Error: ", conditionMessage(e), "\n"))); NULL })
@@ -91,7 +106,7 @@ run <- function(msg) {
       if (!went) break
     }
   }, interrupt = function(e) { interrupted <<- TRUE; ok <<- FALSE; cat("\n") })
-  shown <- final_plots(plots)
+  shown <- final_plots(plots); plots <<- list()
   for (i in seq_along(shown)) {
     if (i > msg$maxPlots) break
     file <- file.path(msg$plots, paste0(id, "-", i, ".png"))
@@ -100,7 +115,6 @@ run <- function(msg) {
     grDevices::dev.off()
     say(list(id = id, kind = "plot", file = file, width = 1008, height = 720))
   }
-  if (device %in% grDevices::dev.list()) grDevices::dev.off(device)
   say(list(id = id, kind = "done", ok = ok, interrupted = interrupted, variables = variables(msg$maxVariables)))
 }
 
@@ -255,6 +269,10 @@ describe_value <- function(x, msg, name, code, trail) {
 `%||%` <- function(a, b) if (is.null(a) || !length(a) || identical(a, "")) b else a
 inspect <- function(msg) {
   reply <- function(x) emit(c(list(id = msg$id, kind = "inspected"), x))
+  # A value that draws when printed (a ggplot) draws on a device of the reading's own, so the
+  # session's plot is unchanged.
+  before <- grDevices::dev.cur(); grDevices::pdf(NULL); mine <- grDevices::dev.cur()
+  on.exit({ if (mine %in% grDevices::dev.list()) grDevices::dev.off(mine); if (before %in% grDevices::dev.list()) grDevices::dev.set(before) }, add = TRUE)
   tryCatch({
     if (!exists(msg$name, envir = globalenv(), inherits = FALSE)) return(reply(list(state = "missing", problem = paste(msg$name, "is not in the session."))))
     x <- get(msg$name, envir = globalenv(), inherits = FALSE); code <- sym(msg$name); trail <- list()

@@ -53,6 +53,17 @@ test('R cells share one session: values stay, output, warnings, errors and plots
   const png = await host.plot(plot.cell.cellId, plots[0].plot);
   assert.equal(png.mediaType, 'image/png');
   assert.equal(Buffer.from(png.data, 'base64').subarray(1, 4).toString(), 'PNG');
+  // The plot stays open for the session: a later cell draws over it, as a script run line by
+  // line does, and reports the plot it changed.
+  const over = await host.run({ language: 'r', code: 'abline(h = 3, lty = 2)', changeId: 'over', by: 'browser:local', waitMs: 30000 });
+  assert.equal(over.cell.state, 'done', 'a line drawn over an earlier cell\'s plot needs no new plot');
+  assert.equal(over.cell.outputs.filter(o => o.kind === 'plot').length, 1);
+  assert.equal((await host.run({ language: 'r', code: 'k <- 1', changeId: 'none', by: 'browser:local', waitMs: 30000 })).cell.outputs.filter(o => o.kind === 'plot').length, 0, 'a cell that draws nothing shows no plot');
+  // A new plot whose function sets par() first does not show the page before it again.
+  assert.equal((await host.run({ language: 'r', code: 'barplot(c(a = 1, b = 2))', changeId: 'bars', by: 'browser:local', waitMs: 30000 })).cell.outputs.filter(o => o.kind === 'plot').length, 1);
+  // One expression that draws two pages (a sourced script) keeps both.
+  const pages = await host.run({ language: 'r', code: 'local({ plot(d$x, d$y); abline(fit); barplot(c(a = 1, b = 2)) })', changeId: 'pages', by: 'browser:local', waitMs: 30000 });
+  assert.equal(pages.cell.outputs.filter(o => o.kind === 'plot').length, 2, 'each page a cell draws is kept');
 
   const failed = await host.run({ language: 'r', code: 'y <- 1\nstop("no such column")\nz <- 2', changeId: 'three', by: 'agent:a', waitMs: 30000 });
   assert.equal(failed.cell.state, 'error');
@@ -212,6 +223,11 @@ test('a value is read as its session describes it, without starting, waiting or 
   assert.equal(table.object.kind, 'table');
   assert.deepEqual(table.object.table.rowLabels, ['1', '3'], 'sorted rows keep their own labels');
   assert.deepEqual(table.object.table.columns.map(c => [c.name, c.type, c.missing, c.values]), [['x', 'numeric', 1, ['3', '2']], ['g', 'factor', 0, ['a', 'a']]]);
+  // A value that draws when printed (as a ggplot does) draws on the reading's own device: the
+  // session's plot is unchanged, so the next cell shows none.
+  await host.run({ language: 'r', code: 'print.drawn <- function(x, ...) { plot(1:3); invisible(x) }\nart <- structure(quote(f(a)), class = "drawn")', changeId: 'art', by: 'agent:a', waitMs: 30000 });
+  assert.equal((await host.inspect({ language: 'r', name: 'art' })).state, 'shown');
+  assert.equal((await host.run({ language: 'r', code: 'k <- 1', changeId: 'after-art', by: 'agent:a', waitMs: 30000 })).cell.outputs.filter(o => o.kind === 'plot').length, 0);
   const model = (await host.inspect({ language: 'r', name: 'fit' })).object;
   assert.equal(model.kind, 'model');
   assert.ok(model.facts.some(f => f.label === 'Family' && /binomial/.test(f.value)));
