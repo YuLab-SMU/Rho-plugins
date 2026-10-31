@@ -42,6 +42,7 @@
     "plugins/markdown",
     "plugins/html",
     "plugins/console",
-    "plugins/kernel"
+    "plugins/kernel",
+    "plugins/skills"
   ]
 }

@@ -44,6 +44,7 @@ cannot be packed as an aggregate runtime package.
 | `annotations` | Version-anchored feedback and explicit replies over Documents drafts and source-owner-validated anchors | [Annotations](plugins/annotations/README.md) |
 | `console` | Commands a person runs in the project folder, with kept output, stop and restart-honest endings | [Console](plugins/console/README.md) |
 | `kernel` | Live R and Python sessions an Agent and the person share: cells, output, plots, variables, interrupt and restart-honest endings | [Notebook](plugins/kernel/README.md) |
+| `skills` | How work is done in a project, as SKILL.md files every Agent reads: each change's author, reason, evidence and undo | [Skills](plugins/skills/README.md) |
 
 `@rho-workspace/plugin-markdown` is a browser view only, not a capability: a UI
 extension over Documents that reads a Markdown document as formatted text
