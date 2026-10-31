@@ -1,0 +1,33 @@
+{
+  "name": "@rho-workspace/plugin-html",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Rho HTML page view over the Documents buffer",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "exports": {
+    "./ui": "./dist/ui.js",
+    "./page": "./dist/page.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "rho-ui.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "rho": {
+    "ui": "./rho-ui.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "@rho-workspace/plugin-documents": "0.4.9",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  }
+}

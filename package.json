@@ -40,6 +40,7 @@
     "plugins/agent",
     "plugins/annotations",
     "plugins/markdown",
+    "plugins/html",
     "plugins/console",
     "plugins/kernel"
   ]

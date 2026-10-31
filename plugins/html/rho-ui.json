@@ -1,0 +1,14 @@
+{
+  "format": "rho.ui-extension/1",
+  "plugin": "documents",
+  "component": "html.reader",
+  "version": "0.1.0",
+  "displayName": "HTML page",
+  "description": "Shows an HTML document as the page it makes, with its project styles, scripts and images and nothing from the web, from the same buffer as the editor. Source shows the editor.",
+  "entry": "./ui",
+  "development": "./src/ui.tsx",
+  "export": "HtmlView",
+  "propsSchema": { "type": "object", "properties": { "title": { "type": "string" } } },
+  "bindings": { "document": "document" },
+  "requiredOperations": ["document.read"]
+}
