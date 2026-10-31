@@ -60,7 +60,8 @@ period); the running cell ends with an error and waiting cells are not run.
 
 A session can run on a server. A place names the server, a folder there (absolute
 or `~/…`) and setup lines run in that folder before a session starts (`module load R`,
-`conda activate env`). A server the person manages with
+`conda activate env`). Setup lines that make the folder (`mkdir -p`) run in the home folder
+while it is not there yet; a check runs them too and reports the folder they leave. A server the person manages with
 [serverctl](https://github.com/xiayh0107/servers-connect) (`via: serverctl`, the
 server's name there) is reached through `serverctl exec`, which holds its login in the
 system's vault and its connection settings; a place named without `via` is reached
@@ -89,7 +90,7 @@ the connection is lost (ssh ends with 255), the session ends as `disconnected`: 
 running cell is `unknown` and its process on the server was not seen to end; nothing
 is run again. Through serverctl, a session lasts at most serverctl's limit for one
 command, 7 days, and then ends with that said. A check connects and reports the system, the machine's name, the folder
-as the server resolves it, R with jsonlite and Python with matplotlib. A session
+as the server resolves it after the setup lines, R with jsonlite and Python with matplotlib. A session
 reports the machine it runs on (`host`) and its folder. Lineage paths in a server
 session are within its place's folder.
 

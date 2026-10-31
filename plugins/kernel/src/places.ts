@@ -103,9 +103,11 @@ const utf8 = `case "$(locale charmap 2>/dev/null)" in UTF-8|utf8) ;; *) if [ -z 
 // account's cache folder under its digest; into the folder, the place's own setup lines (module
 // load, conda activate) there, and then the runner, its answers on standard output and what the
 // code prints on standard error: ssh carries two streams back, and the answers need their own.
+// The folder is the one there after the setup lines, which may make it; a check looks for it the
+// same way.
 export function sessionCommand(place: Place, program: string, runner: string, bytes: number) {
   return login(`f="$HOME"/${quote(runner)}; mkdir -p "$(dirname "$f")" && head -c ${bytes} > "$f.$$" && mv -f "$f.$$" "$f" || exit 96
-cd -- ${folderIn(place.folder)} || exit 97
+cd -- ${folderIn(place.folder)} 2>/dev/null
 ${place.setup}
 cd -- ${folderIn(place.folder)} || exit 97
 ${utf8}
@@ -120,8 +122,9 @@ export function signalCommand(pid: number, signal: NodeJS.Signals): Remote {
 export function checkCommand(place: Place) {
   const r = quote('cat(R.version.string, requireNamespace("jsonlite", quietly = TRUE), sep = "\\t")');
   const python = quote('import sys, importlib.util as u; print("Python " + sys.version.split()[0], u.find_spec("matplotlib") is not None, sep="\\t")');
-  return login(String.raw`if cd -- ${folderIn(place.folder)} 2>/dev/null; then f=$(pwd -P); else f=; fi
+  return login(String.raw`cd -- ${folderIn(place.folder)} 2>/dev/null
 ${place.setup}
+if cd -- ${folderIn(place.folder)} 2>/dev/null; then f=$(pwd -P); else f=; fi
 ${utf8}
 printf '\036RHO\036\n'
 printf 'system\t%s\n' "$(uname -sm 2>/dev/null)"

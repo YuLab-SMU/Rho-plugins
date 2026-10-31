@@ -491,6 +491,25 @@ test('a lost connection leaves the running cell unknown and runs nothing again',
   assert.equal((await host.read()).cells.filter(c => c.code === 'Sys.sleep(5)').length, 1, 'the unknown cell is not run again');
 });
 
+// The pa14-qs case (Rho-cases, 2026-10-31): an Agent put the skill's `mkdir -p` in a place's
+// setup; the check looked for the folder before it ran and reported none, and a session started
+// without that check would not have found it.
+test('a place whose setup lines make its folder is ready for a session and a check alike', async t => {
+  const root = await project(), { home, ssh, serverctl } = await server();
+  const host = new KernelHost(root, { rscript, ssh, serverctl });
+  t.after(() => host.close());
+  await host.setPlace({ place: { placeId: 'new', label: 'New results', destination: 'lab', folder: '~/results/a', setup: 'mkdir -p ~/results/a' }, use: { r: 'new' } }, 'agent:a');
+  const run = await host.run({ language: 'r', code: 'cat(basename(getwd()))', changeId: 'w', by: 'agent:a', waitMs: 30000 });
+  assert.equal(run.cell.state, 'done', run.cell.problem ?? run.session.problem ?? '');
+  assert.equal(run.session.place.folder, path.join(home, 'results', 'a'));
+  await host.setPlace({ place: { placeId: 'other', label: 'Other results', destination: 'lab', folder: '~/results/b', setup: 'mkdir -p ~/results/b' } }, 'agent:a');
+  const { check } = await host.check('other', 'agent:a');
+  assert.equal(check.ok, true, check.problem ?? '');
+  assert.equal(check.folder, path.join(home, 'results', 'b'));
+  await host.setPlace({ place: { placeId: 'none', label: 'Nowhere', destination: 'lab', folder: '~/results/c' } }, 'agent:a');
+  assert.equal((await host.check('none', 'agent:a')).check.problem, 'The folder is not on the server, or this account cannot open it.');
+});
+
 test('a place that cannot be reached says what ssh said', async t => {
   const root = await project(), { ssh, serverctl } = await server();
   const host = new KernelHost(root, { rscript, ssh, serverctl });
