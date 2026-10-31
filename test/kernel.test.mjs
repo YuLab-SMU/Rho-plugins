@@ -198,3 +198,73 @@ test('limits: code size, waiting cells, kept output and a program that is missin
   assert.match(session.problem, /was not found/);
   await missing.close();
 });
+
+test('a value is read as its session describes it, without starting, waiting or changing anything', async t => {
+  const root = await project();
+  const host = new KernelHost(root, { rscript, limits: { inspectTimeoutMs: 800 } });
+  t.after(() => host.close());
+  assert.equal((await host.inspect({ language: 'r', name: 'd' })).state, 'none', 'reading starts no session');
+  assert.deepEqual((await host.read()).sessions, []);
+  const made = await host.run({ language: 'r', code: 'd <- data.frame(x = c(3, 1, 2, NA), g = factor(c("a", "b", "a", "b")))\nfit <- glm(I(x > 1) ~ g, data = d, family = binomial)\nl <- list(a = 1, b = list(c = "z"))', changeId: 'make', by: 'agent:a', waitMs: 30000 });
+  assert.deepEqual(made.cell.defined, ['d', 'fit', 'l'], 'the cell names what it made');
+  const table = await host.inspect({ language: 'r', name: 'd', limit: 2, sort: { column: 0, descending: true } });
+  assert.equal(table.state, 'shown'); assert.equal(table.afterCell, 1);
+  assert.equal(table.object.kind, 'table');
+  assert.deepEqual(table.object.table.rowLabels, ['1', '3'], 'sorted rows keep their own labels');
+  assert.deepEqual(table.object.table.columns.map(c => [c.name, c.type, c.missing, c.values]), [['x', 'numeric', 1, ['3', '2']], ['g', 'factor', 0, ['a', 'a']]]);
+  const model = (await host.inspect({ language: 'r', name: 'fit' })).object;
+  assert.equal(model.kind, 'model');
+  assert.ok(model.facts.some(f => f.label === 'Family' && /binomial/.test(f.value)));
+  assert.deepEqual(model.table.rowLabels, ['(Intercept)', 'gb']);
+  assert.equal(model.children.items[0].expression, 'fit$coefficients');
+  assert.ok(model.table.columns[0].values.every(v => !/0$/.test(v) || /^-?\d+$/.test(v)), 'each coefficient at its own precision, without padding');
+  // Counts read as counts: one way by value, two ways as rows and columns.
+  await host.run({ language: 'r', code: 'one <- table(d$g)\ntwo <- table(d$g, d$x > 1)', changeId: 'counts', by: 'agent:a', waitMs: 30000 });
+  const one = (await host.inspect({ language: 'r', name: 'one' })).object;
+  assert.equal(one.kind, 'vector'); assert.deepEqual(one.values.items, [{ name: 'a', value: '2' }, { name: 'b', value: '2' }]);
+  assert.ok(one.facts.some(f => f.label === 'Total' && f.value === '4'));
+  const two = (await host.inspect({ language: 'r', name: 'two' })).object;
+  assert.equal(two.kind, 'table'); assert.deepEqual(two.table.rowLabels, ['a', 'b']); assert.deepEqual(two.table.columns.map(c => c.name), ['FALSE', 'TRUE']);
+  const part = await host.inspect({ language: 'r', name: 'l', path: [1, 0] });
+  assert.equal(part.object.expression, 'l$b$c'); assert.equal(part.object.values.items[0].value, 'z');
+  assert.equal((await host.inspect({ language: 'r', name: 'l', path: [5] })).state, 'missing');
+  // A reading that takes too long is interrupted and the session goes on.
+  await host.run({ language: 'r', code: 'slow <- structure(list(), class = "slow")\nprint.slow <- function(x, ...) Sys.sleep(30)', changeId: 'slow', by: 'agent:a', waitMs: 30000 });
+  const started = Date.now();
+  assert.equal((await host.inspect({ language: 'r', name: 'slow' })).state, 'timeout');
+  assert.ok(Date.now() - started < 8000);
+  // While a cell runs the answer is busy, and a cell queued during a reading waits for it.
+  const running = await host.run({ language: 'r', code: 'Sys.sleep(1)\nrm(l)', changeId: 'busy', by: 'agent:a' });
+  assert.equal((await host.inspect({ language: 'r', name: 'd' })).state, 'busy');
+  const after = await settled(host, running.cell.cellId);
+  assert.equal(after.state, 'done'); assert.deepEqual(after.removed, ['l']);
+  assert.equal((await host.inspect({ language: 'r', name: 'd' })).state, 'shown');
+  const [reading, queued] = await Promise.all([host.inspect({ language: 'r', name: 'fit' }), host.run({ language: 'r', code: 'nrow(d)', changeId: 'after', by: 'agent:a', waitMs: 30000 })]);
+  assert.equal(reading.state, 'shown'); assert.equal(queued.cell.state, 'done');
+  assert.match(text(queued.cell), /\[1\] 4/);
+  assert.deepEqual((await host.inspect({ language: 'r', name: 'd' })).object.table.columns.map(c => c.name), ['x', 'g'], 'reading changed nothing');
+});
+
+test('Python values: a data frame, an array, a dict, an object and a value that takes too long', async t => {
+  const root = await project();
+  const host = new KernelHost(root, { python: process.env.RHO_PYTHON ?? 'python3', limits: { inspectTimeoutMs: 800 } });
+  t.after(() => host.close());
+  let pandas = true;
+  const probe = await host.run({ language: 'python', code: 'import importlib.util\nimportlib.util.find_spec("pandas") is not None', changeId: 'probe', by: 'agent:a', waitMs: 30000 });
+  if (!/True/.test(text(probe.cell))) pandas = false;
+  await host.run({ language: 'python', code: 'd = {"a": 1, "b": {"c": "z"}}\nclass Box:\n    def __init__(self): self.size = 3\nbox = Box()\nclass Slow:\n    def __repr__(self):\n        import time; time.sleep(30)\nslow = Box()\nslow.inner = Slow()', changeId: 'make', by: 'agent:a', waitMs: 30000 });
+  const dict = (await host.inspect({ language: 'python', name: 'd', path: [1] })).object;
+  assert.equal(dict.expression, "d['b']"); assert.deepEqual(dict.children.items.map(c => [c.name, c.expression]), [['c', "d['b']['c']"]]);
+  assert.deepEqual((await host.inspect({ language: 'python', name: 'box' })).object.children.items.map(c => c.expression), ['box.size']);
+  // Its part's repr is what takes too long.
+  assert.equal((await host.inspect({ language: 'python', name: 'slow' })).state, 'timeout');
+  const next = await host.run({ language: 'python', code: '1 + 1', changeId: 'next', by: 'agent:a', waitMs: 30000 });
+  assert.equal(text(next.cell), '2\n', 'the session goes on after an interrupted reading');
+  if (!pandas) { t.diagnostic('pandas is not installed; the data frame was not read'); return; }
+  await host.run({ language: 'python', code: 'import pandas as pd, numpy as np\nframe = pd.DataFrame({"x": [3.0, 1.0, None], "s": ["p", "q", "r"]})\narr = np.arange(6).reshape(2, 3)', changeId: 'frame', by: 'agent:a', waitMs: 30000 });
+  const frame = (await host.inspect({ language: 'python', name: 'frame', sort: { column: 0, descending: false } })).object;
+  assert.equal(frame.kind, 'table'); assert.deepEqual(frame.table.rowLabels, ['1', '0', '2']);
+  assert.deepEqual(frame.table.columns[0].values, ['1', '3', 'NaN']);
+  assert.equal((await host.inspect({ language: 'python', name: 'arr' })).object.size, '2 × 3');
+  assert.equal((await host.inspect({ language: 'python', name: 'frame', path: [1] })).object.expression, "frame['s']");
+});

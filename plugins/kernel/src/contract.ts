@@ -34,4 +34,31 @@ export const cellSchema = obj({
   // Bytes the cell printed, bytes kept, and whether some past the kept size were left out.
   bytes: { type: 'integer', minimum: 0 }, kept: { type: 'integer', minimum: 0 }, cut: { type: 'boolean' },
   interrupt: maybe(askedSchema), problem: maybe({ type: 'string' }),
-});
+  // The variables the session listed differently after the cell (new, or another type, size or
+  // summary) and those it no longer listed. Cells recorded before this was kept have neither.
+  defined: { type: 'array', items: text }, removed: { type: 'array', items: text },
+}, ['cellId', 'changeId', 'by', 'sessionId', 'language', 'code', 'purpose', 'queuedAt', 'startedAt', 'endedAt', 'state', 'number', 'outputs', 'bytes', 'kept', 'cut', 'interrupt', 'problem']);
+
+// One value of a live session as its session describes it: the kind of thing it is, short facts,
+// and one page of its rows, its elements or its parts, each part with the code that reaches it.
+// Pages and texts are cut at the plugin's limits and say how many there are in all.
+export const objectKinds = ['table', 'model', 'vector', 'list', 'function', 'value', 'other'] as const;
+const count = { type: 'integer', minimum: 0 };
+const strings = { type: 'array', items: { type: 'string' } };
+const columnSchema = obj({ name: { type: 'string' }, type: { type: 'string' }, numeric: { type: 'boolean' }, missing: count, summary: { type: 'string' }, values: strings });
+const sortSchema = obj({ column: count, descending: { type: 'boolean' } });
+const tableSchema = obj({ rows: count, columnsTotal: count, offset: count, rowLabels: strings, columns: { type: 'array', items: columnSchema }, sort: maybe(sortSchema), sortRefused: maybe({ type: 'string' }) }, ['rows', 'columnsTotal', 'offset', 'rowLabels', 'columns']);
+const valuesSchema = obj({ total: count, offset: count, items: { type: 'array', items: obj({ name: maybe({ type: 'string' }), value: { type: 'string' } }) } });
+const childSchema = obj({ index: count, name: { type: 'string' }, type: { type: 'string' }, size: { type: 'string' }, summary: { type: 'string' }, expression: { type: 'string' } });
+export const objectSchema = obj({
+  name: text, expression: text, trail: { type: 'array', items: obj({ index: count, name: { type: 'string' } }) },
+  kind: { enum: [...objectKinds] }, type: { type: 'string' }, size: { type: 'string' }, bytes: { type: 'number', minimum: 0 },
+  facts: { type: 'array', items: obj({ label: { type: 'string' }, value: { type: 'string' } }) },
+  table: tableSchema, values: valuesSchema, children: obj({ total: count, offset: count, items: { type: 'array', items: childSchema } }),
+  text: obj({ label: { type: 'string' }, text: { type: 'string' }, cut: { type: 'boolean' } }),
+}, ['name', 'expression', 'trail', 'kind', 'type', 'size', 'bytes', 'facts']);
+// shown: described; busy: a cell is running or waiting; none: no live session of that language;
+// missing: no such value or part; timeout: reading it took too long and was stopped; failed: the
+// session could not describe it; ended: the session ended while it was read.
+export const inspectStates = ['shown', 'busy', 'none', 'missing', 'timeout', 'failed', 'ended'] as const;
+export const sortInput = sortSchema;

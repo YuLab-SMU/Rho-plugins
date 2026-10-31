@@ -12,6 +12,21 @@ Each cell keeps what it printed, as it is printed, with its messages, warnings a
 error in their place among the printed lines, and the plots it made (R base and grid
 graphics, and matplotlib figures in Python, as PNG files). After each cell the
 session lists its variables with their type, size and a one-line summary.
+Each cell also names the values it made or changed (`defined`) and, when neither list
+was cut, those it removed (`removed`).
+
+`inspect` reads one value of a live session as its session describes it, by name and
+by a path of parts within it (a list's element, a column, a model's component, an
+attribute), with the code that reaches it (`fit$coefficients`, `d['b']`). It answers
+what kind of thing the value is (table, model, vector, list, function, single value or
+other), its class, size and facts, and a page of it: a table's rows with each column's
+type, missing count and summary, sorted by a column on request; a model's formula, fit
+statistics and coefficients (R `lm`, `glm` and other fits with `coef`, `htest`;
+statsmodels results; scikit-learn estimators); a vector's elements and, when
+categorical, its counts; a list's parts; a function's code; and otherwise the value as
+printed. Reading never starts a session, answers `busy` while a cell runs or waits,
+runs nothing the person wrote except the value's own printing and changes nothing; a
+cell asked for during a reading waits for it.
 
 A cell keeps its `changeId` per caller: repeating the same identity returns the same
 cell and never runs it twice. Cells run one at a time in their session, in the order
@@ -30,7 +45,11 @@ cell's output (the rest is counted and the cell marked cut), at most 8 plots of 
 most 4 MiB per cell, 500 kept cells (the oldest finished ones go first, with their
 plots), 200 listed variables and a 10 minute wait for a cell. A session that is not
 ready within 30 seconds is ended. Past a limit a cell is refused with the named
-limit. Memory and time used by the code itself are not bounded here.
+limit. Reading a value shows at most 50 columns, pages of 50 rows, elements or parts
+(at most 200 when asked), 200 parts beside a page, cells of 120 characters and 16 KiB
+of printed text, each marked when cut; a table of more than a million rows is not
+sorted, with the reason. A reading is interrupted after 10 seconds (`timeout`) and
+the session goes on. Memory and time used by the code itself are not bounded here.
 
 The R session needs R with the `jsonlite` package; the Python session needs Python
 3, and matplotlib for figures. State lives under

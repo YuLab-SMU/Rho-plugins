@@ -97,6 +97,219 @@ def run(msg):
     except Exception as error: emit({'id': cell, 'kind': 'stderr', 'text': f'The figures could not be saved: {error}\n'})
     emit({'id': cell, 'kind': 'done', 'ok': ok, 'interrupted': interrupted, 'variables': variables(msg['maxVariables'])})
 
+# Looking at a value without changing it: what kind of thing it is and its facts, a page of its
+# rows, elements or parts, and the code that reaches each part. Nothing is printed and nothing is
+# assigned in the session; a value's own repr may run for its printed form. Every list, page and
+# text is cut at the limits the host sends.
+def type_name(value):
+    kind = type(value)
+    return kind.__name__ if kind.__module__ in ('builtins', '__main__') else kind.__module__.split('.')[0] + '.' + kind.__name__
+
+def size_of(value):
+    shape = getattr(value, 'shape', None)
+    if isinstance(shape, tuple): return ' × '.join(str(n) for n in shape)
+    if hasattr(value, '__len__') and not isinstance(value, (str, bytes, type)) and not callable(value):
+        try: return str(len(value))
+        except Exception: return ''
+    return ''
+
+def bytes_of(value):
+    try:
+        usage = getattr(value, 'memory_usage', None)
+        if callable(usage) and hasattr(value, 'columns'): return int(usage(deep=False).sum())
+        return int(getattr(value, 'nbytes', 0)) or sys.getsizeof(value)
+    except Exception: return 0
+
+def summary_of(value):
+    try:
+        if callable(value) and hasattr(value, '__name__'): return clip(value.__name__ + str(__import__('inspect').signature(value)))
+        if hasattr(value, 'columns'): return clip(', '.join(map(str, list(value.columns)[:12])))
+        return clip(repr(value))
+    except Exception: return ''
+
+def cell_text(value, width):
+    try:
+        if value is None: return 'None'
+        if isinstance(value, float): text = format(value, '.6g')
+        else: text = str(value)
+    except Exception: text = '<' + type(value).__name__ + '>'
+    text = ' '.join(text.split()) if '\n' in text else text
+    return text if len(text) <= width else text[:width - 1] + '…'
+
+def number(value):
+    try: return format(float(value), '.6g')
+    except Exception: return str(value)
+
+def column_summary(column, limits):
+    pd = sys.modules.get('pandas')
+    try:
+        if pd is not None and pd.api.types.is_bool_dtype(column): return f'{int(column.sum())} True'
+        if pd is not None and pd.api.types.is_numeric_dtype(column) and column.notna().any(): return f'{number(column.min())} – {number(column.max())}'
+        if pd is not None and pd.api.types.is_datetime64_any_dtype(column) and column.notna().any(): return f'{column.min()} – {column.max()}'
+        if str(column.dtype) == 'category': return f'{len(column.cat.categories)} categories'
+        if len(column) <= limits['maxSortRows']: return f'{column.nunique(dropna=True)} distinct'
+    except Exception: pass
+    return ''
+
+def table_page(frame, msg, labels=None):
+    pd = sys.modules.get('pandas') or __import__('pandas')
+    limits = msg['limits']
+    if not isinstance(frame, pd.DataFrame): frame = pd.DataFrame(frame)
+    n, total = frame.shape
+    order, sorted_, refused = None, None, None
+    sort = msg.get('sort')
+    if sort and sort.get('column', -1) < total:
+        if n > limits['maxSortRows']: refused = f"Sorting takes at most {limits['maxSortRows']} rows."
+        else:
+            column = frame.iloc[:, sort['column']].reset_index(drop=True)
+            order = list(column.sort_values(ascending=not sort.get('descending'), na_position='last', kind='mergesort').index)
+            sorted_ = sort
+    offset = min(msg['offset'], max(0, n - 1))
+    positions = (order if order is not None else range(n))[offset:offset + msg['limit']]
+    positions = list(positions)
+    page = frame.iloc[positions]
+    if labels is None: labels = [str(label) for label in frame.index]
+    columns = []
+    for j in range(min(total, limits['maxColumns'])):
+        column = frame.iloc[:, j]
+        numeric = bool(pd.api.types.is_numeric_dtype(column)) and not pd.api.types.is_bool_dtype(column)
+        values = ['NaN' if numeric and pd.isna(v) else cell_text(v, limits['maxCellChars']) for v in page.iloc[:, j].tolist()]
+        columns.append({'name': str(frame.columns[j]), 'type': str(column.dtype), 'numeric': numeric, 'missing': int(column.isna().sum()), 'summary': column_summary(column, limits), 'values': values})
+    return {'rows': n, 'columnsTotal': total, 'offset': offset, 'rowLabels': [labels[p] for p in positions], 'sort': sorted_, 'sortRefused': refused, 'columns': columns}
+
+def parts(value):
+    """The parts a value is made of, and how code reaches each: (names, get(i), code(expr, i))."""
+    pd = sys.modules.get('pandas')
+    if isinstance(value, dict):
+        keys = list(value.keys())
+        return [str(k) for k in keys], lambda i: value[keys[i]], lambda e, i: f'{e}[{keys[i]!r}]'
+    if isinstance(value, (list, tuple)):
+        return [f'[{i}]' for i in range(len(value))], lambda i: value[i], lambda e, i: f'{e}[{i}]'
+    if pd is not None and isinstance(value, pd.DataFrame):
+        cols = list(value.columns)
+        return [str(c) for c in cols], lambda i: value.iloc[:, i], lambda e, i: f'{e}[{cols[i]!r}]'
+    if isinstance(value, (str, bytes, int, float, bool, complex, type(None), types.ModuleType)) or callable(value): return None
+    try: attrs = sorted(k for k, v in vars(value).items() if not k.startswith('_'))
+    except TypeError: return None
+    return attrs, lambda i: getattr(value, attrs[i]), lambda e, i: f'{e}.{attrs[i]}'
+
+def kind_of(value):
+    pd, np = sys.modules.get('pandas'), sys.modules.get('numpy')
+    if pd is not None and isinstance(value, pd.DataFrame): return 'table'
+    if np is not None and isinstance(value, np.ndarray) and value.ndim == 2: return 'table'
+    if hasattr(value, 'params') and hasattr(value, 'bse'): return 'model'
+    if hasattr(value, 'get_params') and hasattr(value, 'fit'): return 'model'
+    if callable(value): return 'function'
+    if pd is not None and isinstance(value, pd.Series): return 'vector'
+    if np is not None and isinstance(value, np.ndarray) and value.ndim == 1: return 'vector'
+    if isinstance(value, (list, tuple)) and value and all(isinstance(v, (int, float, str, bool)) or v is None for v in value[:200]): return 'vector'
+    if isinstance(value, (str, bytes, int, float, bool, complex, type(None))) or (np is not None and isinstance(value, np.generic)): return 'value'
+    if isinstance(value, (dict, list, tuple)) or parts(value): return 'list'
+    return 'other'
+
+def printed(value, limits, label):
+    try: text = repr(value)
+    except Exception as error: text = f'It could not be printed: {error}'
+    cut = len(text.encode()) > limits['maxText']
+    return {'label': label, 'text': text.encode()[:limits['maxText']].decode('utf-8', 'ignore') if cut else text, 'cut': cut}
+
+def describe_value(value, msg, name, code, trail):
+    pd, np = sys.modules.get('pandas'), sys.modules.get('numpy')
+    limits, facts = msg['limits'], []
+    def fact(label, v):
+        if v is not None and v != '': facts.append({'label': label, 'value': clip(v, 200)})
+    kind = kind_of(value)
+    out = {'name': name, 'expression': code, 'trail': trail, 'kind': kind, 'type': type_name(value), 'size': size_of(value), 'bytes': bytes_of(value)}
+    if kind == 'table':
+        frame = value if pd is not None and isinstance(value, pd.DataFrame) else (pd or __import__('pandas')).DataFrame(value)
+        fact('Rows', frame.shape[0]); fact('Columns', frame.shape[1]); fact('Missing values', int(frame.isna().sum().sum()))
+        out['table'] = table_page(frame, msg)
+    elif kind == 'model' and hasattr(value, 'params') and hasattr(value, 'bse'):
+        for label, attr in (('Model', 'model'), ('Observations', 'nobs'), ('R²', 'rsquared'), ('Adjusted R²', 'rsquared_adj'), ('AIC', 'aic'), ('BIC', 'bic'), ('Log-likelihood', 'llf')):
+            v = getattr(value, attr, None)
+            if v is not None: fact(label, type(v).__name__ if attr == 'model' else number(v))
+        frame = (pd or __import__('pandas')).DataFrame({'coef': value.params, 'std err': value.bse, **({'t / z': value.tvalues} if hasattr(value, 'tvalues') else {}), **({'P>|t|': value.pvalues} if hasattr(value, 'pvalues') else {})})
+        out['table'] = table_page(frame.astype(float).round(6), msg)
+        try: out['text'] = {'label': 'As it prints its summary', 'text': str(value.summary())[:limits['maxText']], 'cut': False}
+        except Exception: pass
+    elif kind == 'model':
+        fact('Model', type(value).__name__)
+        # The settings it was made with that differ from the class's defaults; all are among its parts.
+        try:
+            defaults = {k: p.default for k, p in __import__('inspect').signature(type(value).__init__).parameters.items()}
+            for key, v in sorted(value.get_params(deep=False).items()):
+                if key not in defaults or repr(defaults[key]) != repr(v): fact(key, repr(v))
+        except Exception: pass
+        coef = getattr(value, 'coef_', None)
+        if coef is not None and np is not None:
+            coef = np.atleast_2d(coef)
+            names = list(getattr(value, 'feature_names_in_', [f'x{i}' for i in range(coef.shape[1])]))
+            frame = (pd or __import__('pandas')).DataFrame(coef.T, index=[str(n) for n in names], columns=[f'coef {c}' for c in getattr(value, 'classes_', [])][-coef.shape[0]:] if coef.shape[0] > 1 else ['coef'])
+            out['table'] = table_page(frame.round(6), msg)
+        intercept = getattr(value, 'intercept_', None)
+        if intercept is not None: fact('Intercept', ' '.join(number(v) for v in np.atleast_1d(intercept)) if np is not None else str(intercept))
+        if hasattr(value, 'classes_'): fact('Classes', ', '.join(map(str, value.classes_)))
+        if hasattr(value, 'n_features_in_'): fact('Features', value.n_features_in_)
+        if coef is None and not hasattr(value, 'n_features_in_'): fact('Fitted', 'no')
+    elif kind == 'value':
+        out['values'] = {'total': 1, 'offset': 0, 'items': [{'name': None, 'value': cell_text(value, limits['maxText'])}]}
+    elif kind == 'vector':
+        series = (pd or __import__('pandas')).Series(value) if not (pd is not None and isinstance(value, pd.Series)) else value
+        total, missing = len(series), int(series.isna().sum())
+        fact('Length', total)
+        if missing: fact('Missing', missing)
+        numeric = (pd or __import__('pandas')).api.types.is_numeric_dtype(series) and not (pd or __import__('pandas')).api.types.is_bool_dtype(series)
+        if numeric and total > 1 and missing < total:
+            fact('Min', number(series.min())); fact('Median', number(series.median())); fact('Mean', number(series.mean())); fact('Max', number(series.max()))
+            if total > 2: fact('SD', number(series.std()))
+        elif total > 1 and total <= limits['maxSortRows']:
+            counts = series.astype(str).value_counts(dropna=False)
+            fact('Distinct', len(counts))
+            first = dict(msg, offset=0, sort=None)
+            out['table'] = table_page((pd or __import__('pandas')).DataFrame({'value': counts.index.astype(str), 'count': counts.values}), first, [str(i + 1) for i in range(len(counts))])
+        offset = min(msg['offset'], max(0, total - 1))
+        labelled = not isinstance(series.index, (pd or __import__('pandas')).RangeIndex)
+        out['values'] = {'total': total, 'offset': offset, 'items': [{'name': str(series.index[i]) if labelled else None, 'value': cell_text(series.iloc[i], limits['maxCellChars'])} for i in range(offset, min(total, offset + msg['limit']))]}
+    elif kind == 'function':
+        inspect = __import__('inspect')
+        try: fact('Arguments', str(inspect.signature(value)))
+        except Exception: pass
+        try: text = inspect.getsource(value)
+        except Exception: text = linecache.getlines(getattr(getattr(value, '__code__', None), 'co_filename', '')) and ''.join(linecache.getlines(value.__code__.co_filename)) or repr(value)
+        cut = len(text.encode()) > limits['maxText']
+        out['text'] = {'label': 'Code', 'text': text.encode()[:limits['maxText']].decode('utf-8', 'ignore') if cut else text, 'cut': cut}
+    elif kind == 'other': out['text'] = printed(value, limits, 'As Python prints it')
+    p = parts(value) if kind not in ('table', 'vector', 'value', 'function') else None
+    if p and p[0]:
+        names, get, reach = p
+        total = len(names); offset = min(msg['offset'], max(0, total - 1)) if kind == 'list' else 0
+        items = []
+        for i in range(offset, min(total, offset + (msg['limit'] if kind == 'list' else limits['maxChildren']))):
+            try: v = get(i)
+            except Exception as error: v = error
+            items.append({'index': i, 'name': names[i], 'type': type_name(v), 'size': size_of(v), 'summary': summary_of(v), 'expression': reach(code, i)})
+        out['children'] = {'total': total, 'offset': offset, 'items': items}
+    if kind == 'list' and 'children' not in out: out['text'] = printed(value, limits, 'As Python prints it')
+    out['facts'] = facts
+    return out
+
+def inspect_value(msg):
+    reply = lambda answer: emit({'id': msg['id'], 'kind': 'inspected', **answer})
+    try:
+        name = msg['name']
+        if name not in namespace: return reply({'state': 'missing', 'problem': f'{name} is not in the session.'})
+        value, code, trail = namespace[name], name, []
+        for step in msg.get('path') or []:
+            p = parts(value)
+            if not p or step >= len(p[0]): return reply({'state': 'missing', 'problem': f'That part is no longer in {code}.'})
+            value, code = p[1](step), p[2](code, step)
+            trail.append({'index': step, 'name': p[0][step]})
+        reply({'state': 'shown', 'object': describe_value(value, msg, name, code, trail)})
+    except KeyboardInterrupt:
+        reply({'state': 'timeout', 'problem': 'Reading the value took too long and was stopped.'})
+    except Exception as error:
+        reply({'state': 'failed', 'problem': f'{type(error).__name__}: {error}'})
+
 emit({'kind': 'ready', 'version': 'Python ' + sys.version.split()[0], 'pid': os.getpid(), 'variables': variables(200)})
 while True:
     try:
@@ -107,5 +320,6 @@ while True:
     try:
         msg = json.loads(line)
         if msg.get('op') == 'run': run(msg)
+        if msg.get('op') == 'inspect': inspect_value(msg)
     except KeyboardInterrupt:
         continue

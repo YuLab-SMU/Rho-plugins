@@ -24,6 +24,7 @@ export const operationPresentation = {
   'kernel.run': { order: 10, displayName: 'Run a cell', description: "Runs code in the project's live R or Python session and keeps what it prints, its plots and the session's variables.", readOnly: false, runsCode: true },
   'kernel.read': { order: 20, displayName: 'Read the session', description: "Reads the sessions, their variables and the cells run in them.", readOnly: true, runsCode: false },
   'kernel.plot': { order: 30, displayName: 'Read a plot', description: "Reads one plot a cell drew, as a PNG image.", readOnly: true, runsCode: false },
+  'kernel.inspect': { order: 35, displayName: 'Look at a value', description: "Describes one value of a live session: a table's rows and columns, a model's fit and coefficients, a list's parts, a vector's values, a function's code.", readOnly: true, runsCode: false },
   'kernel.interrupt': { order: 40, displayName: 'Interrupt a cell', description: "Stops the cell that is running; the session and its variables stay.", readOnly: false, runsCode: false },
   'kernel.stop': { order: 50, displayName: 'Stop a session', description: "Ends a session; its variables are gone.", readOnly: false, runsCode: false },
 } satisfies Record<string, EntryPresentation>;

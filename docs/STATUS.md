@@ -20,10 +20,14 @@ shell commands in the project folder and retains each one's identity, ending and
 bounded output. Notebook 0.1.0 (`plugins/kernel`) keeps a live R and a live Python
 session per project that an Agent and the person share: cells keep their identity,
 order, output as it is printed, plots and the session's variables; interrupt names a
-cell and stop names a session; sessions end with their host and are recorded so. Markdown 0.2.0 ticks to-dos in place, edits with a formatting toolbar
+cell and stop names a session; sessions end with their host and are recorded so. Its
+`kernel.inspect` reads one value as its session describes it (table, model, vector,
+list, function) with a page of it and the code that reaches each part, without
+starting, waiting for or changing a session, and each cell names the values it made,
+changed and removed. Markdown 0.2.0 ticks to-dos in place, edits with a formatting toolbar
 and hides comment-only lines; its view contract stays 0.1.0. The earlier
 code/highlight/command-output work is retained.
-The owner suite passes 132/132; application composition and installation are checked
+The owner suite passes 134/134; application composition and installation are checked
 by Rho, separately from component checks.
 
 | Owner | Implemented boundary | Material limit |

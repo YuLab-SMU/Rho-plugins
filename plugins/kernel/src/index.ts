@@ -22,20 +22,30 @@ export interface CellRecord {
   cellId: string; changeId: string; by: string; sessionId: string; language: Language; code: string; purpose: string | null;
   queuedAt: string; startedAt: string | null; endedAt: string | null; state: typeof cellStates[number]; number: number;
   outputs: Output[]; bytes: number; kept: number; cut: boolean; interrupt: Asked | null; problem: string | null;
+  defined?: string[]; removed?: string[];
 }
+export type InspectInput = { language: Language; name: string; path?: number[]; offset?: number; limit?: number; sort?: { column: number; descending: boolean } };
 // The protected resources are this machine's processes and memory, and the project's state
 // folder. At most one session runs per language, and at most maxQueued cells wait in each. A
 // cell keeps its first maxOutputBytes of output (the rest is counted) and at most maxPlots
 // plots of at most maxPlotBytes each; at most maxCells cells are kept, the oldest going first
 // with their plots. The session lists at most maxVariables variables. A run waits at most
 // maxWaitMs for its cell. What a session's own code allocates is not bounded here.
-export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20 };
+// Reading a value shows at most inspectColumns columns, a page of at most 200 rows, elements or
+// parts (inspectRows unless asked), cells of inspectCellChars characters and a printed form of
+// inspectTextBytes; a table sorts only up to inspectSortRows rows. A reading that takes longer
+// than inspectTimeoutMs is interrupted, and the session waits for it no longer than
+// inspectGiveUpMs more before the caller is told.
+export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
+  inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000 };
 export type KernelLimits = typeof kernelLimits;
 
 interface Live {
   record: SessionRecord; child: ChildProcess; answers: string; early: string; order: Promise<void>; queue: CellRecord[]; current: CellRecord | null; stopping: boolean; timer?: NodeJS.Timeout;
   // Printed text not yet placed, the highest mark seen on standard output, and answers waiting for theirs.
   printed: string; mark: number; held: Array<{ seq: number; msg: unknown }>; release?: NodeJS.Timeout;
+  // The value being read now, and the readings waiting their turn.
+  looking: { id: string; done: (msg: any) => void } | null; lookups: Promise<unknown>;
 }
 const markStart = '\x1eRHO:';
 const runners: Record<Language, string> = {
@@ -130,7 +140,7 @@ export class KernelHost {
       }
       live.record.cells++;
       const cell: CellRecord = { cellId: id('k-'), changeId: input.changeId, by: input.by, sessionId: live.record.sessionId, language: input.language, code: input.code, purpose: input.purpose?.trim().slice(0, 200) || null,
-        queuedAt: now(), startedAt: null, endedAt: null, state: 'queued', number: live.record.cells, outputs: [], bytes: 0, kept: 0, cut: false, interrupt: null, problem: null };
+        queuedAt: now(), startedAt: null, endedAt: null, state: 'queued', number: live.record.cells, outputs: [], bytes: 0, kept: 0, cut: false, interrupt: null, problem: null, defined: [], removed: [] };
       this.cells.push(cell); live.queue.push(cell);
       this.changed();
       await this.pump(live);
@@ -150,7 +160,7 @@ export class KernelHost {
     const program = language === 'r' ? this.options.rscript ?? 'Rscript' : this.options.python ?? 'python3';
     const root = await fs.realpath(this.root);
     const child = spawn(program, [runners[language], root], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1' } });
-    const live: Live = { record, child, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [] };
+    const live: Live = { record, child, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], looking: null, lookups: Promise.resolve() };
     this.live.set(language, live);
     record.pid = child.pid ?? null;
     live.timer = setTimeout(() => { if (record.state === 'starting') { record.problem = `The session did not start within ${Math.round(this.limits.startTimeoutMs / 1000)} s.`; this.signal(live, 'SIGKILL'); } }, this.limits.startTimeoutMs);
@@ -222,7 +232,7 @@ export class KernelHost {
   private signal(live: Live, name: NodeJS.Signals) { try { if (live.record.pid) process.kill(-live.record.pid, name); } catch { /* it has ended */ } }
 
   private async pump(live: Live) {
-    if (live.current || live.record.state !== 'idle' || !live.queue.length) return;
+    if (live.current || live.looking || live.record.state !== 'idle' || !live.queue.length) return;
     const cell = live.queue.shift()!;
     live.current = cell; cell.state = 'running'; cell.startedAt = now(); live.record.state = 'busy';
     live.child.stdin!.write(JSON.stringify({ op: 'run', id: cell.cellId, number: cell.number, code: cell.code, plots: await this.plots(), maxPlots: this.limits.maxPlots, maxVariables: this.limits.maxVariables }) + '\n');
@@ -248,6 +258,7 @@ export class KernelHost {
       Object.assign(record, { state: 'idle', version: String(msg.version ?? ''), variables: msg.variables?.items ?? [], variablesOmitted: msg.variables?.omitted ?? 0, variablesAt: now() });
       this.changed(); await this.pump(live); return;
     }
+    if (msg.kind === 'inspected') { const looking = live.looking; if (looking && looking.id === msg.id) looking.done(msg); return; }
     if (!cell || msg.id !== cell.cellId) return;
     if (['stdout', 'stderr', 'warning', 'error'].includes(msg.kind)) { this.append(cell, msg.kind, String(msg.text ?? '')); this.soon(); return; }
     if (msg.kind === 'plot') {
@@ -262,7 +273,13 @@ export class KernelHost {
     }
     if (msg.kind === 'done') {
       cell.state = msg.interrupted ? 'interrupted' : msg.ok ? 'done' : 'error'; cell.endedAt = now();
-      Object.assign(record, { state: 'idle', variables: msg.variables?.items ?? record.variables, variablesOmitted: msg.variables?.omitted ?? 0, variablesAt: now() });
+      // What the cell made or changed, as the session lists its variables before and after it. A
+      // name past the listed ones may still be there, so removals are said only of a whole list.
+      const after: Variable[] = msg.variables?.items ?? record.variables, mark = (v: Variable) => [v.type, v.size, v.bytes, v.summary].join('\u0000');
+      const before = new Map(record.variables.map(v => [v.name, mark(v)]));
+      cell.defined = after.filter(v => before.get(v.name) !== mark(v)).map(v => v.name);
+      cell.removed = record.variablesOmitted || msg.variables?.omitted ? [] : [...before.keys()].filter(name => !after.some(v => v.name === name));
+      Object.assign(record, { state: 'idle', variables: after, variablesOmitted: msg.variables?.omitted ?? 0, variablesAt: now() });
       live.current = null;
       this.finish(cell);
       this.changed(); await this.pump(live);
@@ -272,6 +289,7 @@ export class KernelHost {
 
   private end(live: Live, code: number | null) {
     clearTimeout(live.timer);
+    live.looking?.done({ state: 'ended', problem: 'The session ended while the value was read.' });
     const record = live.record;
     Object.assign(record, { state: 'ended', endedAt: now(), ending: live.stopping ? 'stopped' : record.version === null ? 'not-started' : 'exited', variables: [], variablesOmitted: 0 });
     if (record.version === null && !live.stopping) record.problem ??= `The session did not start${live.early.trim() ? ': ' + live.early.trim().slice(0, 600) : ` (exit ${code ?? 'by a signal'}).`}`;
@@ -323,6 +341,34 @@ export class KernelHost {
     return { session: structuredClone(live.record) };
   }
 
+  // Reading a value never starts a session and never waits for a cell: while one runs or waits
+  // the answer is busy. Readings of one session go one at a time, and a cell queued meanwhile
+  // starts when the reading ends. The value is read as the session holds it now.
+  async inspect(input: InspectInput) {
+    await this.load();
+    const live = this.live.get(input.language);
+    const answer = (state: string, extra: { problem?: string | null; object?: unknown } = {}) => ({ state, sessionId: live?.record.sessionId ?? null, afterCell: live?.record.cells ?? 0, readAt: now(), problem: extra.problem ?? null, object: extra.object ?? null });
+    if (!live || live.stopping) return answer('none', { problem: `There is no live ${input.language === 'r' ? 'R' : 'Python'} session.` });
+    const busy = () => live.record.state === 'starting' ? 'The session is starting.' : live.current || live.queue.length ? 'A cell is running in the session; the value can be read when it ends.' : null;
+    if (busy()) return answer('busy', { problem: busy() });
+    const reading = live.lookups.then(() => {
+      if (busy() || live.stopping || live.record.state === 'ended') return answer(live.record.state === 'ended' ? 'ended' : 'busy', { problem: busy() ?? 'The session ended.' });
+      return new Promise<ReturnType<typeof answer>>(resolve => {
+        const lookId = id('i-'), limits = this.limits;
+        let told = false;
+        const tell = (msg: any) => { if (!told) { told = true; resolve(answer(msg.state, { problem: msg.problem, object: msg.object })); } };
+        const slow = setTimeout(() => this.signal(live, 'SIGINT'), limits.inspectTimeoutMs);
+        const giveUp = setTimeout(() => tell({ state: 'timeout', problem: 'Reading the value took too long; the session has not answered yet.' }), limits.inspectTimeoutMs + limits.inspectGiveUpMs);
+        // The session stays held until it answers, whatever the caller was told.
+        live.looking = { id: lookId, done: msg => { clearTimeout(slow); clearTimeout(giveUp); if (live.looking?.id === lookId) live.looking = null; tell(msg); void this.pump(live); } };
+        live.child.stdin!.write(JSON.stringify({ op: 'inspect', id: lookId, name: input.name, path: input.path ?? [], offset: input.offset ?? 0, limit: Math.min(input.limit ?? limits.inspectRows, 200), sort: input.sort ?? null,
+          limits: { maxColumns: limits.inspectColumns, maxChildren: limits.inspectChildren, maxCellChars: limits.inspectCellChars, maxText: limits.inspectTextBytes, maxSortRows: limits.inspectSortRows } }) + '\n');
+      });
+    });
+    live.lookups = reading.catch(() => {});
+    return reading;
+  }
+
   async plot(cellId: string, plot: number) {
     await this.load();
     const cell = this.cells.find(c => c.cellId === cellId);
@@ -343,6 +389,7 @@ export class KernelHost {
       live.child.stdin!.end(); this.signal(live, 'SIGTERM');
     }));
     for (const live of [...this.live.values()]) {
+      live.looking?.done({ state: 'ended', problem: 'Rho closed while the value was read.' });
       Object.assign(live.record, { state: 'ended', endedAt: now(), ending: 'rho-closed', variables: [] });
       if (live.current) Object.assign(live.current, { state: 'unknown', endedAt: now(), problem: 'Rho closed while this cell ran.' });
       for (const cell of live.queue) Object.assign(cell, { state: 'not-run', endedAt: now(), problem: 'Rho closed before this cell ran.' });
