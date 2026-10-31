@@ -1,11 +1,13 @@
 # Current component status
 
-Updated: 2026-10-30.
+Updated: 2026-10-31.
 
 Files 0.5.0, Annotations 0.5.2 and Tables 0.5.0 supply immutable captures,
 version-bound human decisions and explicit multi-field comparison. Documents
 0.4.8 adds confirmed selection review and captured text comparison, and hands an
-embedding view its editor (`onEditor`). Agent 0.4.23
+embedding view its editor (`onEditor`); 0.4.9 shows its header controls only while
+they can act (Save with unsaved edits, Review with a selection, Highlight changes
+while Agent or disk edits remain). Agent 0.4.23
 delegates the compatible capture entry to Files and exposes frozen-context delivery
 facts. It keeps a command's whole text (8 KiB) instead of its first line, so a
 here-document an Agent ran can be read and run again, and the Agent's own words on

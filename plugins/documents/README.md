@@ -130,6 +130,9 @@ Keyboard undo uses `undoOwn`; there is no local persistent undo/redo stack.
 Agent line marks can be hidden; Changes exposes exact before text and one
 Revert per Agent change, including separate changes within the same input group.
 Save scheduling stays with the external Agent, with no save timer or save state.
+In an embedding header (0.4.9) a control is there while it can act: Save while the
+buffer has unsaved edits, Review selected text with a selection, and Highlight changes
+while Agent or disk edits remain in the text. The embedding application styles them.
 The unconfirmed text budget is configurable via the adapter’s
 `maxUnconfirmedBytes` (default 1 MiB); rejected input preserves earlier text.
 Recovery copies and pending deliveries survive view closure within this tab;

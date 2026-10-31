@@ -233,17 +233,25 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
 
   useEffect(() => { if (documentVersion !== undefined) void sync.observe(documentVersion, documentRevision).catch(() => undefined); }, [sync, documentVersion, documentRevision]);
 
+  // The Agent's and the disk's edits still in the text: marked while shown, and the reason the
+  // header offers to hide them at all.
+  const agentRanges = useMemo(() => {
+    const buffer = sync.confirmed;
+    if (!buffer?.history?.length) return [];
+    const live = groupsActive(buffer);
+    return currentRanges(buffer.history, e => e.kind === 'edit' && (e.author.startsWith('agent:') || e.author === 'disk')).filter(r => live.has(r.changeId));
+  }, [sync, tick]);
   useEffect(() => {
-    const cm = editor.current, buffer = sync.confirmed;
-    if (!cm || !buffer) return;
-    const ranges = showAgent ? currentRanges(buffer.history ?? [], e => e.kind === 'edit' && (e.author.startsWith('agent:') || e.author === 'disk')) : [];
-    const live = (buffer.history ?? []).length ? groupsActive(buffer) : new Set<string>();
-    cm.dispatch({ effects: marks.of(ranges.filter(r => live.has(r.changeId))) });
-  }, [sync, tick, showAgent]);
+    const cm = editor.current;
+    if (!cm || !sync.confirmed) return;
+    cm.dispatch({ effects: marks.of(showAgent ? agentRanges : []) });
+  }, [sync, tick, agentRanges, showAgent]);
 
   if (!documentId) return <div className="rho-doc"><p className="rho-doc-exact">This view has no document.</p></div>;
   const changes = <Changes sync={sync} me={sync.me} canRevert={!readOnly} />;
-  const save = saveable && <button type="button" aria-label="Save document" disabled={!sync.confirmed || !!sync.aside || composing || !sync.confirmed.dirty && !sync.busy}
+  // The header offers what can be done now: Save while text differs from the file, Review with a
+  // selection, the highlight switch while there are edits to highlight.
+  const save = saveable && sync.confirmed?.dirty && <button type="button" aria-label="Save document" disabled={!sync.confirmed || !!sync.aside || composing || !sync.confirmed.dirty && !sync.busy}
     onClick={() => void sync.save()}>Save</button>;
   return <div className={'rho-doc' + (appearance === 'message' ? ' rho-doc-message' : '')} data-active={active || undefined}>
     {!editable && <p className="rho-doc-exact">This tab can read this document but not edit it.</p>}
@@ -253,7 +261,7 @@ function LiveDocumentView({ view, projectId, client, active, documentVersion, do
     {sync.notice && <div className="rho-doc-band" role="status"><span className="rho-doc-fill">{sync.notice}</span></div>}
     {sync.unconfirmed && <div className="rho-doc-band" role="status" data-rho-unconfirmed=""><span className="rho-doc-fill">Your last change is not confirmed yet. It stays here and is sent again until Rho answers.</span></div>}
     <div className="rho-doc-editor" ref={host} />
-    {active && headerTarget && createPortal(<>{save}{reviewSelection && <button disabled={!range || !sync.confirmed || sync.busy || composing || sync.sent !== sync.confirmed.content || !!sync.aside} onClick={() => range && sync.confirmed && reviewSelection({ kind: 'document', documentId, version: sync.confirmed.version, from: range.from, to: range.to })}>Review selected text</button>}{askable && appearance === 'document' && <AskAboutSelection client={client} projectId={projectId} documentId={documentId} range={range} version={sync.confirmed && !sync.busy && !sync.aside && !composing && sync.sent === sync.confirmed.content ? sync.confirmed.version : null} />}<label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Highlight changes</label></>, headerTarget)}
+    {active && headerTarget && createPortal(<>{save}{reviewSelection && range && <button disabled={!sync.confirmed || sync.busy || composing || sync.sent !== sync.confirmed.content || !!sync.aside} onClick={() => range && sync.confirmed && reviewSelection({ kind: 'document', documentId, version: sync.confirmed.version, from: range.from, to: range.to })}>Review selected text</button>}{askable && appearance === 'document' && <AskAboutSelection client={client} projectId={projectId} documentId={documentId} range={range} version={sync.confirmed && !sync.busy && !sync.aside && !composing && sync.sent === sync.confirmed.content ? sync.confirmed.version : null} />}{agentRanges.length > 0 && <label className="rho-doc-highlight"><input type="checkbox" checked={showAgent} onChange={e => setShowAgent(e.target.checked)} />Highlight changes</label>}</>, headerTarget)}
     {active && !headerTarget && save && <div className="rho-doc-band">{save}</div>}
     {active && (contextTarget ? createPortal(changes, contextTarget) : contextTarget === null ? null : <div style={{ padding: '8px 12px', borderTop: '1px solid var(--border,#e4e7eb)', maxHeight: '40%', overflow: 'auto' }}>{changes}</div>)}
   </div>;
