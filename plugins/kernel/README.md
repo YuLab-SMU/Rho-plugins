@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.1.0 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.1.1 keeps a live R session and a live Python
 session for a project, which an Agent and the person share.
 
 `KernelHost` runs each cell in its language's resident process, in the project
@@ -18,7 +18,23 @@ plots keeps both. Calls that only set graphics state (`par`, `palette`, `layout`
 make a page new. Python closes its figures after each cell. After each cell the
 session lists its variables with their type, size and a one-line summary.
 Each cell also names the values it made or changed (`defined`) and, when neither list
-was cut, those it removed (`removed`).
+was cut, those it removed (`removed`). It names the values it read (`used`): the names
+its code mentions, other than as a whole assignment's target, that the session held
+before it ran. The arguments of a function, lambda or comprehension and what it assigns
+for itself are its own (in R only `<<-` assigns from within a function), and the field
+after `$` or `@` is part of its value. A name the cell assigned before it mentions it (in an
+earlier statement, or a loop's variable in its body) is the cell's own, so a cell run
+again does not read the value it replaces. A value changed in place (`m$x <- …`,
+`d['b'] = …`, `x += 1`) counts as defined. It names the project paths its string
+literals named that existed before it ran or after (`files`, each `read`, or `wrote`
+when the file appeared or its size or modification time changed), as paths within the
+project; a path outside the project is left out, and so is a string used as a key or an
+index (`d['raw']`, `ann[, c("Locus.Tag")]`). A folder's path ends in `/`: it was
+written to when it appeared or its entries changed, and a folder holding another named
+path is left to that path. These come from the code as written, without running it
+again: a name built at run time, a file named by a variable or one written by a function
+the cell called is not seen. A value of an S4 class that `readRDS` has just loaded is
+listed with its size at once, as printing it would show it.
 
 `inspect` reads one value of a live session as its session describes it, by name and
 by a path of parts within it (a list's element, a column, a model's component, an
@@ -48,7 +64,7 @@ Limits (`kernelLimits`, each configurable): one session per language, at most 16
 cells waiting in each, cells of at most 64 KiB of code, the first 256 KiB of each
 cell's output (the rest is counted and the cell marked cut), at most 8 plots of at
 most 4 MiB per cell, 500 kept cells (the oldest finished ones go first, with their
-plots), 200 listed variables and a 10 minute wait for a cell. A session that is not
+plots), 200 listed variables, 32 files named per cell (`lineageLimits`) and a 10 minute wait for a cell. A session that is not
 ready within 30 seconds is ended. Past a limit a cell is refused with the named
 limit. Reading a value shows at most 50 columns, pages of 50 rows, elements or parts
 (at most 200 when asked), 200 parts beside a page, cells of 120 characters and 16 KiB

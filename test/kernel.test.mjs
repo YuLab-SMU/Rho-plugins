@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { KernelHost, kernelLimits } from '@rho-workspace/plugin-kernel';
 
 const rscript = process.env.RHO_RSCRIPT ?? 'Rscript';
@@ -283,4 +284,67 @@ test('Python values: a data frame, an array, a dict, an object and a value that 
   assert.deepEqual(frame.table.columns[0].values, ['1', '3', 'NaN']);
   assert.equal((await host.inspect({ language: 'python', name: 'arr' })).object.size, '2 × 3');
   assert.equal((await host.inspect({ language: 'python', name: 'frame', path: [1] })).object.expression, "frame['s']");
+});
+
+test('a cell names the values and project files it read and what it made of them', async t => {
+  const root = await project();
+  await fs.mkdir(path.join(root, 'data')); await fs.mkdir(path.join(root, 'out'));
+  await fs.writeFile(path.join(root, 'data', 'm.csv'), 'g,x\na,1\nb,2\na,4\n');
+  const host = new KernelHost(root, { rscript });
+  t.after(() => host.close());
+  const run = async (language, code, changeId) => (await host.run({ language, code, changeId, by: 'agent:a', waitMs: 30000 })).cell;
+  const read = await run('r', 'm <- read.csv("data/m.csv")\nfirebrick <- "firebrick"', 'r1');
+  assert.deepEqual(read.used, [], 'a name the session did not hold is not a read');
+  assert.deepEqual(read.files, [{ path: 'data/m.csv', how: 'read' }], 'a string that is not a file is no file');
+  const made = await run('r', 'means <- aggregate(x ~ g, data = m, FUN = mean)\nwrite.csv(means, "out/means.csv", row.names = FALSE)', 'r2');
+  assert.deepEqual(made.used, ['m']); assert.deepEqual(made.defined, ['means']);
+  assert.deepEqual(made.files, [{ path: 'out/means.csv', how: 'wrote' }]);
+  const changed = await run('r', 'm$x <- m$x * 2', 'r3');
+  assert.deepEqual(changed.defined, ['m'], 'a change that keeps the listing the same is still a change');
+  assert.deepEqual(changed.used, ['m']);
+  assert.deepEqual((await run('r', 'outside <- "../elsewhere.csv"', 'r4')).files, [], 'a path outside the project is not followed');
+  const py = await run('python', 'import csv\nrows = list(csv.DictReader(open("data/m.csv")))\ntotal = sum(float(r["x"]) for r in rows)', 'p1');
+  assert.deepEqual(py.files, [{ path: 'data/m.csv', how: 'read' }]);
+  assert.deepEqual(py.defined.sort(), ['rows', 'total']);
+  const next = await run('python', 'rows[0]["x"] = "9"\nshare = total / len(rows)', 'p2');
+  assert.deepEqual(next.used, ['rows', 'total']);
+  assert.deepEqual(next.defined.sort(), ['rows', 'share'], 'a value changed in place is defined by the cell that changed it');
+});
+
+test('what a function or comprehension binds is its own, and folders are read and written', async t => {
+  const root = await project();
+  await fs.mkdir(path.join(root, 'aln'));
+  for (const name of ['a.fa', 'b.fa']) await fs.writeFile(path.join(root, 'aln', name), '>s\nAC\n');
+  const host = new KernelHost(root, { rscript });
+  t.after(() => host.close());
+  const run = async (language, code, changeId) => (await host.run({ language, code, changeId, by: 'agent:a', waitMs: 30000 })).cell;
+  await run('r', 'x <- 3\nk <- 2\np <- "kept"', 'r1');
+  const r = await run('r', 'sq <- sapply(1:3, function(x) { p <- x * k; p })\ng <- function(p) p$n', 'r2');
+  assert.deepEqual(r.used, ['k'], 'arguments and names a function assigns for itself are not the session\'s');
+  assert.deepEqual(r.defined.sort(), ['g', 'sq']);
+  const listed = await run('r', 'fa <- list.files("aln")\ndir.create("out")\nwriteLines(fa, file.path("out", "names.txt"))', 'r3');
+  assert.deepEqual(listed.files, [{ path: 'aln/', how: 'read' }, { path: 'out/', how: 'wrote' }]);
+  assert.deepEqual((await run('r', 'dir.create("out2")\nwriteLines("a", "out2/a.txt")', 'r4')).files, [{ path: 'out2/a.txt', how: 'wrote' }], 'a folder holding a named file is left to the file');
+  const again = await run('r', 'for (p in 1:2) k <- k + p\nfa <- list.files("aln")\nlength(fa)', 'r5');
+  assert.deepEqual(again.used, ['k'], 'a cell run again reads what it made itself, not the value it is about to replace');
+  await run('python', 'p = "kept"\nn = 0', 'p1');
+  const py = await run('python', 'import pathlib\nnames = {p.name: len(p.read_text()) for p in sorted(pathlib.Path("aln").glob("*.fa"))}\nsizes = sorted(names.values(), key=lambda p: -p)', 'p2');
+  assert.deepEqual(py.used, [], 'a comprehension\'s and a lambda\'s names are their own');
+  assert.deepEqual(py.defined.sort(), ['names', 'sizes']);
+  assert.deepEqual(py.files, [{ path: 'aln/', how: 'read' }]);
+  assert.deepEqual((await run('python', 'names = {"a": 1}\nfor key in names:\n    n += names[key]', 'p3')).used, ['n']);
+  assert.deepEqual((await run('python', 'cols = {"aln": 1}\nfirst = cols["aln"]', 'p4')).files, [], 'a key that matches a folder\'s name is not the folder');
+  assert.deepEqual((await run('r', 'l <- list(aln = 1)\nl[["aln"]]', 'r6')).files, []);
+});
+
+test('an S4 value read from a file lists its size at once, so printing it changes nothing', async t => {
+  const root = await project();
+  const made = spawnSync(rscript, ['-e', 'saveRDS(Matrix::Matrix(1:6, 2, sparse = TRUE), "m.rds")'], { cwd: root });
+  if (made.status !== 0) { t.skip('the Matrix package is not installed'); return; }
+  const host = new KernelHost(root, { rscript });
+  t.after(() => host.close());
+  const run = async (code, changeId) => (await host.run({ language: 'r', code, changeId, by: 'agent:a', waitMs: 30000 })).cell;
+  await run('m <- readRDS("m.rds")', 'r1');
+  assert.equal((await host.read()).sessions[0].variables.find(v => v.name === 'm').size, '2 × 3');
+  assert.deepEqual((await run('m', 'r2')).defined, [], 'printing a value does not make it');
 });

@@ -35,8 +35,13 @@ export const cellSchema = obj({
   bytes: { type: 'integer', minimum: 0 }, kept: { type: 'integer', minimum: 0 }, cut: { type: 'boolean' },
   interrupt: maybe(askedSchema), problem: maybe({ type: 'string' }),
   // The variables the session listed differently after the cell (new, or another type, size or
-  // summary) and those it no longer listed. Cells recorded before this was kept have neither.
+  // summary) or that its code assigned to, and those it no longer listed. Cells recorded before
+  // this was kept have neither.
   defined: { type: 'array', items: text }, removed: { type: 'array', items: text },
+  // The session's values the code read (names it mentions that the session held before it), and
+  // the project files and folders (ending in /) its strings name, as read or written. Cells
+  // recorded before have neither.
+  used: { type: 'array', items: text }, files: { type: 'array', items: obj({ path: text, how: { enum: ['read', 'wrote'] } }) },
 }, ['cellId', 'changeId', 'by', 'sessionId', 'language', 'code', 'purpose', 'queuedAt', 'startedAt', 'endedAt', 'state', 'number', 'outputs', 'bytes', 'kept', 'cut', 'interrupt', 'problem']);
 
 // One value of a live session as its session describes it: the kind of thing it is, short facts,

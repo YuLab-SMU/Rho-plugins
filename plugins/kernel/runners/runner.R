@@ -33,16 +33,94 @@ describe <- function(x) {
   line <- tryCatch(utils::capture.output(utils::str(x, max.level = 0, give.attr = FALSE, vec.len = 3))[1], error = function(e) "")
   clip(trimws(gsub("\\s+", " ", if (is.na(line)) "" else line)), 160)
 }
+# The first dispatch of a primitive such as dim() on an S4 class just loaded by readRDS answers as
+# if it had no method (a DESeqResults lists 6, not 5828 × 6, until it is printed); asking the
+# class what it extends settles the dispatch first, so a listing does not change between cells.
+primed <- function(x) { if (isS4(x)) invisible(tryCatch(methods::is(x), error = function(e) NULL)); x }
 variables <- function(most) {
   names <- ls(globalenv())
   shown <- utils::head(names, most)
   list(items = lapply(shown, function(n) {
-    x <- get(n, envir = globalenv())
+    x <- primed(get(n, envir = globalenv()))
     d <- dim(x)
     list(name = n, type = class(x)[1],
          size = if (!is.null(d)) paste(d, collapse = " × ") else if (is.function(x) || is.environment(x)) "" else as.character(length(x)),
          bytes = as.numeric(utils::object.size(x)), summary = describe(x))
   }), omitted = length(names) - length(shown))
+}
+# What a cell's code reads and assigns, from its parsed text before it runs: the names it mentions
+# other than a bare name it assigns to, the names it assigns to (also through x$a <-,
+# names(x) <- and a for loop's variable), and its strings. A function's arguments and what it
+# assigns for itself are its own: within a function only `<<-` assigns. A name mentioned after an
+# assignment to it has ended (or after a loop's header) is the cell's own. Nothing is run to find them.
+lineage_of <- function(code) {
+  pd <- tryCatch(utils::getParseData(parse(text = code, keep.source = TRUE)), error = function(e) NULL)
+  if (is.null(pd) || !nrow(pd)) return(list(mentioned = character(), assigned = character(), strings = character()))
+  kids <- function(id) { k <- pd[pd$parent == id, ]; k[order(k$line1, k$col1), ] }
+  within <- function(row) (pd$line1 > row$line1 | (pd$line1 == row$line1 & pd$col1 >= row$col1)) & (pd$line2 < row$line2 | (pd$line2 == row$line2 & pd$col2 <= row$col2))
+  funs <- lapply(which(pd$token == "FUNCTION" | grepl("^'\\\\+'$", pd$token)), function(f) {
+    inside <- within(pd[pd$id == pd$parent[f], ])
+    list(inside = inside, own = pd$text[inside & pd$token == "SYMBOL_FORMALS"])
+  })
+  bare <- integer(); assigned <- character(); ends <- pd[0, c("line2", "col2")]
+  targets <- lapply(which(pd$token %in% c("LEFT_ASSIGN", "EQ_ASSIGN", "RIGHT_ASSIGN")), function(op) {
+    parts <- kids(pd$parent[op]); if (!nrow(parts)) return(NULL)
+    side <- if (pd$token[op] == "RIGHT_ASSIGN") parts[nrow(parts), ] else parts[1, ]
+    inner <- kids(side$id)
+    if (nrow(inner) == 1 && inner$token == "SYMBOL") return(list(op = op, row = inner, bare = TRUE))
+    named <- pd[within(side) & pd$token == "SYMBOL", ]
+    if (nrow(named)) list(op = op, row = named[order(named$line1, named$col1), ][1, ], bare = FALSE)
+  })
+  loops <- lapply(which(pd$token == "forcond"), function(f) { v <- kids(pd$id[f]); v <- v[v$token == "SYMBOL", ]; if (nrow(v)) list(op = which(pd$parent == pd$id[f])[1], row = v[1, ], bare = TRUE) })
+  for (t in Filter(Negate(is.null), c(targets, loops))) {
+    if (t$bare) bare <- c(bare, t$row$id)
+    holders <- Filter(function(f) funs[[f]]$inside[t$op], seq_along(funs))
+    if (length(holders) && !(pd$text[t$op] %in% c("<<-", "->>"))) { for (f in holders) funs[[f]]$own <- c(funs[[f]]$own, t$row$text); next }
+    assigned <- c(assigned, t$row$text); ends <- rbind(ends, pd[pd$id == pd$parent[t$op], c("line2", "col2")])
+  }
+  own <- logical(nrow(pd))
+  for (f in funs) own <- own | (f$inside & pd$text %in% f$own)
+  # The part named after $ or @ (m$x) is a field of the value, not a value of the session.
+  for (sign in which(pd$token %in% c("'$'", "'@'"))) { after <- kids(pd$parent[sign]); own <- own | pd$id %in% after$id[which(after$id == pd$id[sign]) + 1L] }
+  earlier <- vapply(seq_len(nrow(pd)), function(i) any(assigned == pd$text[i] & (ends$line2 < pd$line1[i] | (ends$line2 == pd$line1[i] & ends$col2 < pd$col1[i]))), logical(1))
+  words <- pd[pd$token %in% c("SYMBOL", "SYMBOL_FUNCTION_CALL") & !(pd$id %in% bare) & !own & !earlier, "text"]
+  # A string that indexes a value (ann[, c("Locus.Tag")], x[["trimmed"]]) names a part, not a path.
+  index <- logical(nrow(pd))
+  for (b in which(pd$token %in% c("'['", "LBB"))) { args <- kids(pd$parent[b]); args <- args[args$line1 > pd$line1[b] | (args$line1 == pd$line1[b] & args$col1 > pd$col1[b]), ]; for (k in seq_len(nrow(args))) index <- index | within(args[k, ]) }
+  quoted <- pd[pd$token == "STR_CONST" & !index, "text"]
+  list(mentioned = unique(words), assigned = unique(assigned), strings = unique(substring(quoted, 2, nchar(quoted) - 1)))
+}
+# The strings that name a place in the project, each as its project path, with the file's or
+# folder's size and time before the cell. A path outside the project is not followed.
+project_paths <- function(strings, most = 32L) {
+  root <- normalizePath(getwd())
+  s <- utils::head(strings[nchar(strings) > 0 & nchar(strings) < 512 & !grepl("[\n\r\t]", strings)], most)
+  out <- list()
+  for (p in s) {
+    full <- if (grepl("^(/|~)", p)) path.expand(p) else file.path(root, p)
+    dir <- suppressWarnings(normalizePath(dirname(full), mustWork = FALSE))
+    # The folder may not be there yet: one the cell makes before it writes into it.
+    if (basename(full) %in% c(".", "..") || (!dir.exists(dir) && grepl("(^|/)[.][.](/|$)", p))) next
+    full <- file.path(dir, basename(full))
+    if (!startsWith(full, paste0(root, "/"))) next
+    out[substring(full, nchar(root) + 2)] <- list(stamp(full))
+  }
+  out
+}
+stamp <- function(file) { i <- file.info(file, extra_cols = FALSE); if (is.na(i$size)) NULL else if (isTRUE(i$isdir)) c(-1, as.numeric(i$mtime)) else c(i$size, as.numeric(i$mtime)) }
+# Each named file the cell left in place is one it read; one it made or changed is one it wrote.
+# A folder ends in /: one whose entries changed was written to. A folder that holds another named
+# path is left to that path.
+touched <- function(before) {
+  out <- list()
+  for (p in names(before)) {
+    now <- stamp(file.path(getwd(), p)); was <- before[[p]]
+    if (is.null(now)) next
+    folder <- now[1] == -1
+    if (folder && any(startsWith(setdiff(names(before), p), paste0(p, "/")))) next
+    out[[length(out) + 1]] <- list(path = if (folder) paste0(p, "/") else p, how = if (is.null(was) || !identical(was, now)) "wrote" else "read")
+  }
+  out
 }
 same <- function(a, b) length(a) == length(b) && all(vapply(seq_along(a), function(j) identical(a[[j]], b[[j]]), logical(1)))
 # What a page draws: its display list without the calls that only set graphics state, such as the
@@ -89,6 +167,7 @@ setHook("before.grid.newpage", function() snapshot())
 
 run <- function(msg) {
   id <- msg$id; plots <<- list(); ok <- TRUE; interrupted <- FALSE
+  known <- ls(globalenv()); seen <- lineage_of(msg$code); files <- project_paths(seen$strings)
   recording()
   tryCatch({
     exprs <- tryCatch(parse(text = msg$code, keep.source = FALSE), error = function(e) {
@@ -115,7 +194,8 @@ run <- function(msg) {
     grDevices::dev.off()
     say(list(id = id, kind = "plot", file = file, width = 1008, height = 720))
   }
-  say(list(id = id, kind = "done", ok = ok, interrupted = interrupted, variables = variables(msg$maxVariables)))
+  say(list(id = id, kind = "done", ok = ok, interrupted = interrupted, variables = variables(msg$maxVariables),
+    used = I(intersect(seen$mentioned, known)), assigned = I(seen$assigned), files = touched(files)))
 }
 
 # Looking at a value without changing it: what kind of thing it is and its facts, a page of its
@@ -124,7 +204,7 @@ run <- function(msg) {
 # for its printed form. Every list, page and text is cut at the limits the host sends.
 strings <- function(x) I(as.character(x))
 sym <- function(n) if (nzchar(n) && identical(make.names(n), n)) n else paste0("`", gsub("`", "\\\\`", n), "`")
-size_of <- function(x) { d <- dim(x); if (!is.null(d)) paste(d, collapse = " × ") else if (is.function(x) || is.environment(x)) "" else as.character(length(x)) }
+size_of <- function(x) { d <- dim(primed(x)); if (!is.null(d)) paste(d, collapse = " × ") else if (is.function(x) || is.environment(x)) "" else as.character(length(x)) }
 # A page of values as R prints them in a table, each cut to a cell's width.
 # A column of results (coefficients) has each value at its own precision, without padding.
 cells <- function(v, width, each = FALSE) {

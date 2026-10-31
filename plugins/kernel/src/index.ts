@@ -23,6 +23,8 @@ export interface CellRecord {
   queuedAt: string; startedAt: string | null; endedAt: string | null; state: typeof cellStates[number]; number: number;
   outputs: Output[]; bytes: number; kept: number; cut: boolean; interrupt: Asked | null; problem: string | null;
   defined?: string[]; removed?: string[];
+  // The session's values the code read, and the project files its strings name, read or written.
+  used?: string[]; files?: Array<{ path: string; how: 'read' | 'wrote' }>;
 }
 export type InspectInput = { language: Language; name: string; path?: number[]; offset?: number; limit?: number; sort?: { column: number; descending: boolean } };
 // The protected resources are this machine's processes and memory, and the project's state
@@ -36,6 +38,8 @@ export type InspectInput = { language: Language; name: string; path?: number[]; 
 // inspectTextBytes; a table sorts only up to inspectSortRows rows. A reading that takes longer
 // than inspectTimeoutMs is interrupted, and the session waits for it no longer than
 // inspectGiveUpMs more before the caller is told.
+// A cell names at most this many project files it read or wrote.
+export const lineageLimits = { files: 32 };
 export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
   inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000 };
 export type KernelLimits = typeof kernelLimits;
@@ -140,7 +144,7 @@ export class KernelHost {
       }
       live.record.cells++;
       const cell: CellRecord = { cellId: id('k-'), changeId: input.changeId, by: input.by, sessionId: live.record.sessionId, language: input.language, code: input.code, purpose: input.purpose?.trim().slice(0, 200) || null,
-        queuedAt: now(), startedAt: null, endedAt: null, state: 'queued', number: live.record.cells, outputs: [], bytes: 0, kept: 0, cut: false, interrupt: null, problem: null, defined: [], removed: [] };
+        queuedAt: now(), startedAt: null, endedAt: null, state: 'queued', number: live.record.cells, outputs: [], bytes: 0, kept: 0, cut: false, interrupt: null, problem: null, defined: [], removed: [], used: [], files: [] };
       this.cells.push(cell); live.queue.push(cell);
       this.changed();
       await this.pump(live);
@@ -277,7 +281,12 @@ export class KernelHost {
       // name past the listed ones may still be there, so removals are said only of a whole list.
       const after: Variable[] = msg.variables?.items ?? record.variables, mark = (v: Variable) => [v.type, v.size, v.bytes, v.summary].join('\u0000');
       const before = new Map(record.variables.map(v => [v.name, mark(v)]));
-      cell.defined = after.filter(v => before.get(v.name) !== mark(v)).map(v => v.name);
+      // A name the code assigns to is defined even where its listing reads the same (df$a <- df$a * 2).
+      const listed = new Set(after.map(v => v.name)), names = (value: unknown) => Array.isArray(value) ? value.filter((n): n is string => typeof n === 'string' && n.length <= 256).slice(0, this.limits.maxVariables) : [];
+      cell.defined = [...new Set([...after.filter(v => before.get(v.name) !== mark(v)).map(v => v.name), ...names(msg.assigned).filter(n => listed.has(n))])];
+      cell.used = names(msg.used);
+      cell.files = (Array.isArray(msg.files) ? msg.files : []).filter((f: any) => typeof f?.path === 'string' && f.path.length <= 512 && !f.path.startsWith('/') && !f.path.split('/').includes('..') && (f.how === 'read' || f.how === 'wrote'))
+        .slice(0, lineageLimits.files).map((f: any) => ({ path: f.path, how: f.how }));
       cell.removed = record.variablesOmitted || msg.variables?.omitted ? [] : [...before.keys()].filter(name => !after.some(v => v.name === name));
       Object.assign(record, { state: 'idle', variables: after, variablesOmitted: msg.variables?.omitted ?? 0, variablesAt: now() });
       live.current = null;

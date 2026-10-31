@@ -31,11 +31,14 @@ def clip(text, n=160):
     text = ' '.join(str(text).split())
     return text if len(text) <= n else text[:n - 1] + '…'
 
-def variables(most):
-    # Modules, and classes and functions imported from elsewhere, are where values come from,
-    # not values; what a cell defines itself is listed.
+# Modules, and classes and functions imported from elsewhere, are where values come from,
+# not values; what a cell defines itself is listed.
+def listed():
     imported = lambda v: (isinstance(v, type) or callable(v)) and getattr(v, '__module__', '__main__') != '__main__'
-    names = [k for k, v in namespace.items() if not k.startswith('_') and not isinstance(v, types.ModuleType) and not imported(v)]
+    return [k for k, v in namespace.items() if not k.startswith('_') and not isinstance(v, types.ModuleType) and not imported(v)]
+
+def variables(most):
+    names = listed()
     items = []
     for name in names[:most]:
         value = namespace[name]
@@ -69,8 +72,124 @@ def save_figures(cell, folder, most):
             emit({'id': cell, 'kind': 'plot', 'file': file, 'width': int(w * 144), 'height': int(h * 144)})
     plt.close('all')
 
+# What a cell's code reads and assigns, from its parsed text before it runs: the names it loads,
+# the names it binds (also through df[...] = or obj.attr =, def, class and import), and its
+# strings. What a function, lambda or comprehension binds is its own, and so is a name the cell
+# bound in an earlier statement. Nothing is run to find them.
+def lineage_of(code):
+    try: tree = ast.parse(code)
+    except SyntaxError: return set(), [], []
+    mentioned, assigned, strings = set(), [], []
+    scopes = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda, ast.ClassDef, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+    # A name the cell bound in an earlier statement is its own when read again; a statement's
+    # names are bound once it has run (a loop's target before its body).
+    before, pending, keys = set(), [], set()
+    def bind(name):
+        assigned.append(name)
+        if pending: pending[-1].add(name)
+    def settle():
+        before.update(pending[-1]); pending[-1].clear()
+    def base(node):
+        while isinstance(node, (ast.Attribute, ast.Subscript, ast.Starred)): node = node.value
+        return node.id if isinstance(node, ast.Name) else None
+    # The names a function, lambda, class or comprehension binds for itself: its arguments, its
+    # loop targets and what it assigns, other than names it declares global.
+    def own(scope):
+        names, declared = set(), set()
+        for node in ast.walk(scope):
+            if isinstance(node, (ast.Global, ast.Nonlocal)): declared |= set(node.names)
+            elif isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load): names.add(node.id)
+            elif isinstance(node, ast.arg): names.add(node.arg)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node is not scope: names.add(node.name)
+            elif isinstance(node, (ast.Import, ast.ImportFrom)): names |= {(a.asname or a.name).split('.')[0] for a in node.names}
+        return names - declared
+    def visit(node, local):
+        if local is None and isinstance(node, ast.stmt):
+            pending.append(set())
+            statement(node)
+            before.update(pending.pop())
+        else: inner(node, local)
+    def statement(node):
+        if isinstance(node, (ast.For, ast.AsyncFor)):
+            visit(node.iter, None); visit(node.target, None); settle()
+            for child in node.body + node.orelse: visit(child, None)
+        elif isinstance(node, (ast.With, ast.AsyncWith)):
+            for item in node.items: visit(item, None)
+            settle()
+            for child in node.body: visit(child, None)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            if isinstance(node, ast.AugAssign) and isinstance(node.target, ast.Name) and node.target.id not in before: mentioned.add(node.target.id)
+            if node.value is not None: visit(node.value, None)
+            for target in node.targets if isinstance(node, ast.Assign) else [node.target]: visit(target, None)
+        else: inner(node, None)
+    # At the top level (local is None) names are the session's; within a scope only a mention of a
+    # name the scope does not bind reads one. A comprehension's first iterable is read outside it.
+    def inner(node, local):
+        if isinstance(node, scopes):
+            if local is None and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)): bind(node.name)
+            within = (local or set()) | own(node)
+            first = node.generators[0].iter if isinstance(node, (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)) else None
+            if first is not None: visit(first, local)
+            for child in ast.iter_child_nodes(node):
+                if child is not getattr(node, 'generators', [None])[0]: visit(child, within)
+                else:
+                    for part in ast.iter_child_nodes(child):
+                        if part is not first: visit(part, within)
+            return
+        if isinstance(node, ast.Name):
+            if local is None and not isinstance(node.ctx, ast.Load): bind(node.id)
+            elif isinstance(node.ctx, ast.Load) and node.id not in before and node.id not in (local or ()): mentioned.add(node.id)
+        elif local is None and isinstance(node, (ast.Attribute, ast.Subscript)) and not isinstance(node.ctx, ast.Load):
+            if base(node): bind(base(node))
+        elif local is None and isinstance(node, (ast.Import, ast.ImportFrom)):
+            for a in node.names: bind((a.asname or a.name).split('.')[0])
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str) and id(node) not in keys: strings.append(node.value)
+        for child in ast.iter_child_nodes(node): visit(child, local)
+    # A string that is a key or an index (d['trimmed'], df[['raw', 'clipkit']]) names a part, not a path.
+    for node in ast.walk(tree):
+        parts = node.keys if isinstance(node, ast.Dict) else [node.slice] if isinstance(node, ast.Subscript) else []
+        for part in parts:
+            for leaf in part.elts if isinstance(part, (ast.List, ast.Tuple)) else [part]:
+                if isinstance(leaf, ast.Constant): keys.add(id(leaf))
+    for node in tree.body: visit(node, None)
+    return mentioned, list(dict.fromkeys(assigned)), list(dict.fromkeys(strings))
+
+# The strings that name a place in the project, each as its project path, with the file's or
+# folder's size and time before the cell. A path outside the project is not followed.
+def stamp(path):
+    try:
+        info = os.stat(path)
+        return ('folder', info.st_mtime_ns) if os.path.isdir(path) else (info.st_size, info.st_mtime_ns)
+    except OSError: return None
+
+def project_paths(strings, most=32):
+    root, out = os.path.realpath(os.getcwd()), {}
+    for text in [t for t in strings if 0 < len(t) < 512 and not any(c in t for c in '\n\r\t')][:most]:
+        full = os.path.expanduser(text) if text.startswith(('/', '~')) else os.path.join(root, text)
+        # The folder may not be there yet: one the cell makes before it writes into it.
+        folder = os.path.realpath(os.path.dirname(full))
+        full = os.path.normpath(os.path.join(folder, os.path.basename(full)))
+        if full.startswith(root + os.sep): out[full[len(root) + 1:]] = stamp(full)
+    return out
+
+# Each named file the cell left in place is one it read; one it made or changed is one it wrote.
+# A folder ends in /: one whose entries changed was written to. A folder that holds another named
+# path is left to that path.
+def touched(before):
+    out = []
+    for path, was in before.items():
+        now = stamp(os.path.join(os.getcwd(), path))
+        if now is None: continue
+        folder = now[0] == 'folder'
+        if folder and any(other != path and other.startswith(path + '/') for other in before): continue
+        out.append({'path': path + ('/' if folder else ''), 'how': 'read' if was == now else 'wrote'})
+    return out
+
 def run(msg):
     cell, ok, interrupted = msg['id'], True, False
+    known = set(listed())
+    mentioned, assigned, strings = lineage_of(msg['code'])
+    files = project_paths(strings)
     # Each cell's code is kept under its own name, so a traceback shows the line that failed,
     # also inside a function an earlier cell defined.
     name = f"<cell {msg.get('number', '')}>"
@@ -95,7 +214,8 @@ def run(msg):
         sys.stdout, sys.stderr = real_out, real_err
     try: save_figures(cell, msg['plots'], msg['maxPlots'])
     except Exception as error: emit({'id': cell, 'kind': 'stderr', 'text': f'The figures could not be saved: {error}\n'})
-    emit({'id': cell, 'kind': 'done', 'ok': ok, 'interrupted': interrupted, 'variables': variables(msg['maxVariables'])})
+    emit({'id': cell, 'kind': 'done', 'ok': ok, 'interrupted': interrupted, 'variables': variables(msg['maxVariables']),
+          'used': sorted(mentioned & known), 'assigned': assigned, 'files': touched(files)})
 
 # Looking at a value without changing it: what kind of thing it is and its facts, a page of its
 # rows, elements or parts, and the code that reaches each part. Nothing is printed and nothing is
