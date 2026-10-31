@@ -3,7 +3,7 @@
 # namespace kept for the life of this process; a cell whose last statement is an expression shows
 # that value, as a notebook does. Figures made with matplotlib are saved after each cell. An
 # interrupt (SIGINT) stops the cell that is running and leaves the session and its variables.
-import ast, io, json, linecache, os, sys, traceback, types
+import ast, base64, io, json, linecache, os, platform, sys, tempfile, traceback, types
 
 root = sys.argv[1]
 os.chdir(root)
@@ -60,16 +60,21 @@ def variables(most):
         items.append({'name': name, 'type': type(value).__name__, 'size': size, 'bytes': bytes_, 'summary': summary})
     return {'items': items, 'omitted': max(0, len(names) - most)}
 
-def save_figures(cell, folder, most):
+# A session on a server draws in its own temporary folder and sends each figure with its answer.
+def save_figures(cell, folder, most, inline=False):
     plt = sys.modules.get('matplotlib.pyplot')
     if not plt: return
     for i, number in enumerate(plt.get_fignums()):
         figure = plt.figure(number)
         if i < most:
-            file = os.path.join(folder, f'{cell}-{i + 1}.png')
+            file = os.path.join(folder or tempfile.gettempdir(), f'{cell}-{i + 1}.png')
             figure.savefig(file, dpi=144, bbox_inches='tight')
             w, h = figure.get_size_inches()
-            emit({'id': cell, 'kind': 'plot', 'file': file, 'width': int(w * 144), 'height': int(h * 144)})
+            plot = {'id': cell, 'kind': 'plot', 'file': file, 'width': int(w * 144), 'height': int(h * 144)}
+            if inline:
+                with open(file, 'rb') as f: plot['data'] = base64.b64encode(f.read()).decode('ascii')
+                os.remove(file)
+            emit(plot)
     plt.close('all')
 
 # What a cell's code reads and assigns, from its parsed text before it runs: the names it loads,
@@ -212,7 +217,7 @@ def run(msg):
         emit({'id': cell, 'kind': 'error', 'text': 'Traceback (most recent call last):\n' + text if frames else text})
     finally:
         sys.stdout, sys.stderr = real_out, real_err
-    try: save_figures(cell, msg['plots'], msg['maxPlots'])
+    try: save_figures(cell, msg['plots'], msg['maxPlots'], msg.get('inline', False))
     except Exception as error: emit({'id': cell, 'kind': 'stderr', 'text': f'The figures could not be saved: {error}\n'})
     emit({'id': cell, 'kind': 'done', 'ok': ok, 'interrupted': interrupted, 'variables': variables(msg['maxVariables']),
           'used': sorted(mentioned & known), 'assigned': assigned, 'files': touched(files)})
@@ -430,7 +435,7 @@ def inspect_value(msg):
     except Exception as error:
         reply({'state': 'failed', 'problem': f'{type(error).__name__}: {error}'})
 
-emit({'kind': 'ready', 'version': 'Python ' + sys.version.split()[0], 'pid': os.getpid(), 'variables': variables(200)})
+emit({'kind': 'ready', 'version': 'Python ' + sys.version.split()[0], 'pid': os.getpid(), 'host': platform.node(), 'folder': os.getcwd(), 'variables': variables(200)})
 while True:
     try:
         line = requests.readline()

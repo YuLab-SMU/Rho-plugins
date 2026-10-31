@@ -15,15 +15,46 @@ export const askedSchema = obj({ by: text, at: time });
 export const sessionStates = ['starting', 'idle', 'busy', 'ended'] as const;
 export const cellStates = ['queued', 'running', 'done', 'error', 'interrupted', 'not-run', 'unknown'] as const;
 export const variableSchema = obj({ name: text, type: { type: 'string' }, size: { type: 'string' }, bytes: { type: 'number', minimum: 0 }, summary: { type: 'string' } });
+
+export const placeIdPattern = '^(?!local$)[a-z][a-z0-9-]{0,31}$';
+// An ssh destination as ssh takes it: a Host from the person's config, user@host or
+// ssh://user@host:port. It never starts with "-", so it cannot be read as an option.
+export const destinationPattern = '^[A-Za-z0-9_.%+@:\\[\\]/][A-Za-z0-9_.%+@:\\[\\]/-]{0,254}$';
+// The folder on the server: an absolute path, or one in the account's home (~/...).
+export const folderPattern = '^(~|~/[^\\n\\u0000]*|/[^\\n\\u0000]*)$';
+
+// Where sessions run: this machine ("local") or a named place, a folder on a server that ssh
+// reaches as the person's own ssh setup does.
+export const placeId = { type: 'string', pattern: placeIdPattern };
+export const placeRef = { type: 'string', pattern: '^[a-z][a-z0-9-]{0,31}$' };
+const destination = { type: 'string', pattern: destinationPattern }, folder = { type: 'string', pattern: folderPattern, maxLength: 1024 };
+// What one connection to the place observed, and when; null where it was not seen.
+export const placeCheckSchema = obj({
+  at: time, by: text, ok: { type: 'boolean' }, ms: { type: 'integer', minimum: 0 }, system: maybe({ type: 'string' }), host: maybe({ type: 'string' }), folder: maybe({ type: 'string' }),
+  r: maybe({ type: 'string' }), jsonlite: maybe({ type: 'boolean' }), python: maybe({ type: 'string' }), matplotlib: maybe({ type: 'boolean' }), problem: maybe({ type: 'string' }),
+});
+// setup: shell lines run in the folder before a session starts there (module load, conda activate).
+export const placeSchema = obj({ placeId, label: text, destination, folder, setup: { type: 'string', maxLength: 4096 }, by: text, at: time, check: maybe(placeCheckSchema) });
+export const placeInput = obj({ placeId, label: { type: 'string', maxLength: 80 }, destination, folder, setup: { type: 'string', maxLength: 4096 } }, ['placeId', 'destination', 'folder']);
+// A file copied from a place into the project, with the size, time and digest it had there.
+export const copySchema = obj({ placeId, path: text, to: text, bytes: { type: 'integer', minimum: 0 }, modifiedAt: maybe(time), sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' }, copiedAt: time, by: text });
+export const placesSchema = obj({ places: { type: 'array', items: placeSchema }, use: obj({ r: placeRef, python: placeRef }), copies: { type: 'array', items: copySchema } });
+export const remoteEntrySchema = obj({ name: text, kind: { enum: ['folder', 'file', 'link', 'other'] }, bytes: { type: 'number', minimum: 0 }, modifiedAt: maybe(time) });
+// The session's place as it was named when the session started, with the folder it ran in.
+const sessionPlaceSchema = obj({ placeId, label: text, destination, folder: text });
+
 export const sessionSchema = obj({
   sessionId, language, state: { enum: [...sessionStates] }, version: maybe({ type: 'string' }), pid: maybe({ type: 'integer' }),
   startedAt: time, startedBy: text, endedAt: maybe(time),
-  // Why it ended: stopped by someone, its process exited, or Rho closed while it ran.
-  ending: maybe({ enum: ['stopped', 'exited', 'rho-closed', 'not-started'] }), stop: maybe(askedSchema), problem: maybe({ type: 'string' }),
+  // Why it ended: stopped by someone, its process exited, the connection to its server was lost
+  // (its process there was not seen to end), or Rho closed while it ran.
+  ending: maybe({ enum: ['stopped', 'exited', 'disconnected', 'rho-closed', 'not-started'] }), stop: maybe(askedSchema), problem: maybe({ type: 'string' }),
   // The session's variables after its last cell, as the session listed them.
   variables: { type: 'array', items: variableSchema }, variablesOmitted: { type: 'integer', minimum: 0 }, variablesAt: maybe(time),
   cells: { type: 'integer', minimum: 0 },
-});
+  // Where it ran (null: this machine) and the machine's own name. Sessions recorded before have neither.
+  place: maybe(sessionPlaceSchema), host: maybe({ type: 'string' }),
+}, ['sessionId', 'language', 'state', 'version', 'pid', 'startedAt', 'startedBy', 'endedAt', 'ending', 'stop', 'problem', 'variables', 'variablesOmitted', 'variablesAt', 'cells']);
 export const outputSchema = obj({ kind: { enum: ['stdout', 'stderr', 'warning', 'error', 'plot'] }, text: { type: 'string' }, plot: { type: 'integer', minimum: 1 }, width: { type: 'integer' }, height: { type: 'integer' } }, ['kind']);
 export const cellSchema = obj({
   cellId, changeId, by: text, sessionId, language, code: { type: 'string' }, purpose: maybe({ type: 'string' }),

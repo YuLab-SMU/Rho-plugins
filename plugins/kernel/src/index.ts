@@ -3,7 +3,8 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { atomicJson, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { checkCommand, copyCommand, listCommand, readCheck, readCopy, readList, sessionCommand, signalCommand, Ssh, type Copy, type Place, type PlaceCheck } from './places.js';
 import { operationContracts } from './operations.js';
 import { operationPresentation, presentation } from './presentation.js';
 import type { cellStates, languages, sessionStates } from './contract.js';
@@ -13,9 +14,15 @@ export interface Variable { name: string; type: string; size: string; bytes: num
 export interface SessionRecord {
   sessionId: string; language: Language; state: typeof sessionStates[number]; version: string | null; pid: number | null;
   startedAt: string; startedBy: string; endedAt: string | null;
-  ending: 'stopped' | 'exited' | 'rho-closed' | 'not-started' | null; stop: Asked | null; problem: string | null;
+  ending: 'stopped' | 'exited' | 'disconnected' | 'rho-closed' | 'not-started' | null; stop: Asked | null; problem: string | null;
   variables: Variable[]; variablesOmitted: number; variablesAt: string | null; cells: number;
+  // Where it ran, as the place was named when it started (null: this machine), and the machine's
+  // own name as the session reported it. Sessions recorded before have neither.
+  place?: SessionPlace | null; host?: string | null;
 }
+export interface SessionPlace { placeId: string; label: string; destination: string; folder: string }
+export type { Copy, Place, PlaceCheck, RemoteEntry } from './places.js';
+export interface Places { places: Place[]; use: Record<Language, string>; copies: Copy[] }
 export interface Asked { by: string; at: string }
 export type Output = { kind: 'stdout' | 'stderr' | 'warning' | 'error'; text: string } | { kind: 'plot'; plot: number; width: number; height: number };
 export interface CellRecord {
@@ -40,12 +47,19 @@ export type InspectInput = { language: Language; name: string; path?: number[]; 
 // inspectGiveUpMs more before the caller is told.
 // A cell names at most this many project files it read or wrote.
 export const lineageLimits = { files: 32 };
+// Places: at most maxPlaces are named. A session on a server that is not ready within
+// remoteStartTimeoutMs is ended; checking a place, listing a folder there and sending a signal
+// end after their times. A listing names at most remoteEntries entries from at most
+// remoteListBytes; a file larger than remoteCopyBytes is not copied, and a copy ends after
+// remoteCopyTimeoutMs. The newest maxCopies copies are recorded.
 export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
-  inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000 };
+  inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000,
+  maxPlaces: 16, remoteStartTimeoutMs: 90000, remoteCheckTimeoutMs: 60000, remoteListTimeoutMs: 30000, remoteSignalTimeoutMs: 15000, remoteEntries: 500, remoteListBytes: 1024 * 1024, remoteCopyBytes: 64 * 1024 * 1024, remoteCopyTimeoutMs: 600000, maxCopies: 500 };
 export type KernelLimits = typeof kernelLimits;
 
 interface Live {
-  record: SessionRecord; child: ChildProcess; answers: string; early: string; order: Promise<void>; queue: CellRecord[]; current: CellRecord | null; stopping: boolean; timer?: NodeJS.Timeout;
+  // A session on a server runs under ssh: its process there has the id it reported.
+  record: SessionRecord; child: ChildProcess; place: Place | null; remotePid: number | null; answers: string; early: string; order: Promise<void>; queue: CellRecord[]; current: CellRecord | null; stopping: boolean; timer?: NodeJS.Timeout;
   // Printed text not yet placed, the highest mark seen on standard output, and answers waiting for theirs.
   printed: string; mark: number; held: Array<{ seq: number; msg: unknown }>; release?: NodeJS.Timeout;
   // The value being read now, and the readings waiting their turn.
@@ -57,6 +71,8 @@ const runners: Record<Language, string> = {
   python: fileURLToPath(new URL('../runners/runner.py', import.meta.url)),
 };
 const id = (prefix: string) => prefix + randomBytes(8).toString('hex');
+// A path within a place's folder: relative, without parent steps (an empty one is the folder).
+const within = (relative: string, folder: boolean) => typeof relative === 'string' && relative.length <= 1024 && (folder || relative.length > 0) && !relative.startsWith('/') && !/[\0\n]/.test(relative) && !relative.split('/').includes('..');
 const ended = (state: CellRecord['state']) => !['queued', 'running'].includes(state);
 
 // The live R and Python sessions of one project, and the cells run in them. A cell keeps its
@@ -80,7 +96,12 @@ export class KernelHost {
     this.turn = next.catch(() => {});
     return next;
   }
-  constructor(private root: string, private options: { limits?: Partial<KernelLimits>; rscript?: string; python?: string; onChange?: () => void } = {}) {}
+  private placesRead?: Promise<Places>;
+  private placesWriting: Promise<void> = Promise.resolve();
+  private ssh: Ssh;
+  constructor(private root: string, private options: { limits?: Partial<KernelLimits>; rscript?: string; python?: string; ssh?: string; onChange?: () => void } = {}) {
+    this.ssh = new Ssh(options.ssh ?? 'ssh');
+  }
   private get limits(): KernelLimits { return { ...kernelLimits, ...this.options.limits }; }
   private async folder() { return stateDirectory(this.root, '.rho/plugins/kernel'); }
   private async plots() { const folder = path.join(await this.folder(), 'plots'); await fs.mkdir(folder, { recursive: true, mode: 0o700 }); return folder; }
@@ -115,7 +136,7 @@ export class KernelHost {
     return { sessions: structuredClone([...sessions].reverse()), cells: structuredClone(cells), omitted: cellId ? 0 : Math.max(0, this.cells.length - limit) };
   }
 
-  async run(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; waitMs?: number }) {
+  async run(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; waitMs?: number; place?: string }) {
     await this.load();
     const cell = await this.exclusive(() => this.queue(input));
     // Waiting for the cell holds nothing: other requests, an interrupt among them, go on.
@@ -127,13 +148,13 @@ export class KernelHost {
     return { cell: structuredClone(cell), session: structuredClone(this.sessions!.find(s => s.sessionId === cell.sessionId)!) };
   }
 
-  private async queue(input: { language: Language; code: string; purpose?: string; changeId: string; by: string }) {
+  private async queue(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; place?: string }) {
     const known = this.cells.find(c => c.changeId === input.changeId && c.by === input.by);
     if (known) {
       requireThat(known.code === input.code && known.language === input.language, 'conflict', 'This change identity already names a different cell.');
     } else {
       requireThat(input.code.trim().length > 0 && Buffer.byteLength(input.code) <= this.limits.maxCodeBytes, 'invalid', `Write code of at most ${this.limits.maxCodeBytes} bytes.`, { limit: 'maxCodeBytes' });
-      const live = await this.ensure(input.language, input.by);
+      const live = await this.ensure(input.language, input.by, input.place);
       requireThat(live.queue.length < this.limits.maxQueued, 'limit', `At most ${this.limits.maxQueued} cells wait in a session. Wait for some to run or interrupt the one running.`, { limit: 'maxQueued', maximum: this.limits.maxQueued });
       // The oldest finished cells make room, with their plots.
       while (this.cells.length >= this.limits.maxCells) {
@@ -152,30 +173,51 @@ export class KernelHost {
     return this.cells.find(c => c.changeId === input.changeId && c.by === input.by)!;
   }
 
-  // The language's live session, started for this caller when there is none.
-  private async ensure(language: Language, by: string) {
-    const running = this.live.get(language);
-    if (running && !running.stopping) return running;
+  // The language's live session, started for this caller when there is none: where the cell
+  // names, else where the project runs that language (this machine unless chosen). A cell that
+  // names another place than where the live session runs is refused; its values stay there.
+  private async ensure(language: Language, by: string, placeId?: string) {
+    const running = this.live.get(language), name = language === 'r' ? 'R' : 'Python';
+    const where = (live: Live) => live.place ? `on ${live.place.label}` : 'on this machine';
+    if (running && !running.stopping) {
+      requireThat(!placeId || placeId === (running.place?.placeId ?? 'local'), 'conflict', `The ${name} session runs ${where(running)}. Run the cell there, or stop that session first; its values stay until then.`, { place: running.place?.placeId ?? 'local' });
+      return running;
+    }
     requireThat(!running, 'conflict', 'The session is stopping. Run the cell again when it has ended.');
-    const record: SessionRecord = { sessionId: id('s-'), language, state: 'starting', version: null, pid: null, startedAt: now(), startedBy: by, endedAt: null, ending: null, stop: null, problem: null, variables: [], variablesOmitted: 0, variablesAt: null, cells: 0 };
+    const chosen = placeId ?? (await this.placeState()).use[language] ?? 'local';
+    const place = chosen === 'local' ? null : (await this.placeState()).places.find(p => p.placeId === chosen) ?? null;
+    requireThat(chosen === 'local' || place, 'not_found', `No place is named ${chosen}. Read kernel.places for the places there are.`);
+    const record: SessionRecord = { sessionId: id('s-'), language, state: 'starting', version: null, pid: null, startedAt: now(), startedBy: by, endedAt: null, ending: null, stop: null, problem: null, variables: [], variablesOmitted: 0, variablesAt: null, cells: 0,
+      place: place ? { placeId: place.placeId, label: place.label, destination: place.destination, folder: place.folder } : null, host: null };
     this.sessions!.push(record);
     const old = this.sessions!.filter(s => s.state === 'ended');
     if (old.length > this.limits.maxEndedSessions) this.sessions!.splice(this.sessions!.indexOf(old[0]!), 1);
-    const program = language === 'r' ? this.options.rscript ?? 'Rscript' : this.options.python ?? 'python3';
+    const program = place ? 'ssh' : language === 'r' ? this.options.rscript ?? 'Rscript' : this.options.python ?? 'python3';
     const root = await fs.realpath(this.root);
-    const child = spawn(program, [runners[language], root], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1' } });
-    const live: Live = { record, child, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], looking: null, lookups: Promise.resolve() };
+    // On a server the runner is sent first on the session's own input, named by its digest, so
+    // the session needs nothing installed there but R or Python.
+    const source = place ? await fs.readFile(runners[language]) : null;
+    const runner = source && `.cache/rho/kernel/runner-${digest(source).slice(0, 16)}${language === 'r' ? '.R' : '.py'}`;
+    const child = place ? await this.ssh.spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
+      : spawn(program, [runners[language], root], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1' } });
+    const live: Live = { record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], looking: null, lookups: Promise.resolve() };
     this.live.set(language, live);
-    record.pid = child.pid ?? null;
-    live.timer = setTimeout(() => { if (record.state === 'starting') { record.problem = `The session did not start within ${Math.round(this.limits.startTimeoutMs / 1000)} s.`; this.signal(live, 'SIGKILL'); } }, this.limits.startTimeoutMs);
-    (child.stdio[3] as NodeJS.ReadableStream).setEncoding('utf8');
-    (child.stdio[3] as NodeJS.ReadableStream).on('data', (chunk: string) => {
+    record.pid = place ? null : child.pid ?? null;
+    const startMs = place ? this.limits.remoteStartTimeoutMs : this.limits.startTimeoutMs;
+    live.timer = setTimeout(() => { if (record.state === 'starting') { record.problem = `The session did not start within ${Math.round(startMs / 1000)} s.`; this.signal(live, 'SIGKILL'); } }, startMs);
+    // ssh carries two streams: the answers come on its standard output and what the session
+    // prints on its standard error, standard output and error together.
+    const answers = (place ? child.stdout : child.stdio[3]) as NodeJS.ReadableStream, printed = (place ? child.stderr : child.stdout) as NodeJS.ReadableStream;
+    answers.setEncoding('utf8');
+    answers.on('data', (chunk: string) => {
       live.answers += chunk;
       for (let at = live.answers.indexOf('\n'); at >= 0; at = live.answers.indexOf('\n')) {
         const line = live.answers.slice(0, at); live.answers = live.answers.slice(at + 1);
         // Answers are taken in the order they came: a cell ends only after its plots are kept.
+        // What a server's login shell printed first is not an answer.
         let msg: any;
         try { msg = JSON.parse(line); } catch { continue; }
+        if (!msg || typeof msg !== 'object') continue;
         // An answer that follows printed text waits for its mark, so it lands after that text.
         if (Number.isInteger(msg?.seq) && msg.seq > live.mark) this.hold(live, msg.seq, msg);
         else this.take(live, msg);
@@ -189,11 +231,12 @@ export class KernelHost {
       if (live.current) { this.append(live.current, kind, text); this.soon(); }
       else if (record.version === null && live.early.length < 2048) live.early += text;
     };
-    child.stdout!.setEncoding('utf8'); child.stderr!.setEncoding('utf8');
-    child.stdout!.on('data', (chunk: string) => this.printed(live, chunk, raw('stdout'))); child.stderr!.on('data', raw('stderr'));
+    printed.setEncoding('utf8'); printed.on('data', (chunk: string) => this.printed(live, chunk, raw('stdout')));
+    if (!place) { child.stderr!.setEncoding('utf8'); child.stderr!.on('data', raw('stderr')); }
     child.stdin!.on('error', () => {});
+    if (source) child.stdin!.write(source);
     child.on('error', error => {
-      record.problem = (error as NodeJS.ErrnoException).code === 'ENOENT' ? `${program} was not found. Install ${language === 'r' ? 'R' : 'Python'}, or name the program where the application is started.` : error.message;
+      record.problem = (error as NodeJS.ErrnoException).code === 'ENOENT' ? `${place ? this.options.ssh ?? 'ssh' : program} was not found. Install ${place ? 'OpenSSH' : language === 'r' ? 'R' : 'Python'}, or name the program where the application is started.` : error.message;
     });
     // All it printed has been read by now; answers still waiting go first.
     child.on('close', code => { this.marked(live, Number.MAX_SAFE_INTEGER); live.order = live.order.then(() => this.end(live, code)); });
@@ -233,13 +276,22 @@ export class KernelHost {
       if (Number.isInteger(mark)) this.marked(live, mark);
     }
   }
-  private signal(live: Live, name: NodeJS.Signals) { try { if (live.record.pid) process.kill(-live.record.pid, name); } catch { /* it has ended */ } }
+  // A session on a server is signalled there, through the shared connection; until it has said
+  // which process it is, and when it is killed, its ssh ends here too. Once its ssh has ended
+  // nothing is sent there: the id may since name another process.
+  private signal(live: Live, name: NodeJS.Signals) {
+    if (!live.place) { try { if (live.record.pid) process.kill(-live.record.pid, name); } catch { /* it has ended */ } return; }
+    if (live.child.exitCode !== null || live.child.signalCode !== null) return;
+    if (live.remotePid) void this.ssh.run(live.place, signalCommand(live.remotePid, name), { timeoutMs: this.limits.remoteSignalTimeoutMs, maxBytes: 4096 });
+    if (!live.remotePid || name === 'SIGKILL') { try { if (live.child.pid) process.kill(-live.child.pid, 'SIGKILL'); } catch { /* it has ended */ } }
+  }
 
   private async pump(live: Live) {
     if (live.current || live.looking || live.record.state !== 'idle' || !live.queue.length) return;
     const cell = live.queue.shift()!;
     live.current = cell; cell.state = 'running'; cell.startedAt = now(); live.record.state = 'busy';
-    live.child.stdin!.write(JSON.stringify({ op: 'run', id: cell.cellId, number: cell.number, code: cell.code, plots: await this.plots(), maxPlots: this.limits.maxPlots, maxVariables: this.limits.maxVariables }) + '\n');
+    // A session on a server draws in its own temporary folder and sends each plot with its answer.
+    live.child.stdin!.write(JSON.stringify({ op: 'run', id: cell.cellId, number: cell.number, code: cell.code, plots: live.place ? null : await this.plots(), inline: !!live.place, maxPlots: this.limits.maxPlots, maxVariables: this.limits.maxVariables }) + '\n');
     this.changed();
   }
 
@@ -259,7 +311,11 @@ export class KernelHost {
     const record = live.record, cell = live.current;
     if (msg.kind === 'ready') {
       clearTimeout(live.timer);
-      Object.assign(record, { state: 'idle', version: String(msg.version ?? ''), variables: msg.variables?.items ?? [], variablesOmitted: msg.variables?.omitted ?? 0, variablesAt: now() });
+      Object.assign(record, { state: 'idle', version: String(msg.version ?? ''), variables: msg.variables?.items ?? [], variablesOmitted: msg.variables?.omitted ?? 0, variablesAt: now(), host: typeof msg.host === 'string' ? msg.host.slice(0, 256) : null });
+      if (live.place) {
+        live.remotePid = Number.isInteger(msg.pid) && msg.pid > 1 ? msg.pid : null; record.pid = live.remotePid;
+        if (typeof msg.folder === 'string' && record.place) record.place.folder = msg.folder.slice(0, 1024);
+      }
       this.changed(); await this.pump(live); return;
     }
     if (msg.kind === 'inspected') { const looking = live.looking; if (looking && looking.id === msg.id) looking.done(msg); return; }
@@ -268,11 +324,15 @@ export class KernelHost {
     if (msg.kind === 'plot') {
       const plots = await this.plots(), file = path.resolve(String(msg.file ?? ''));
       const number = Number(/-(\d+)\.png$/.exec(file)?.[1]);
-      if (path.dirname(file) !== plots || !number) return;
-      const size = await fs.stat(file).then(s => s.size, () => -1);
+      if (!number || (!live.place && path.dirname(file) !== plots)) return;
+      const data = live.place && typeof msg.data === 'string' ? Buffer.from(msg.data, 'base64') : null;
+      const size = live.place ? data?.length ?? -1 : await fs.stat(file).then(s => s.size, () => -1);
       if (size < 0) return;
-      if (size > this.limits.maxPlotBytes) { await fs.rm(file, { force: true }); this.append(cell, 'stderr', `A plot of ${size} bytes was larger than maxPlotBytes and was not kept.\n`); }
-      else cell.outputs.push({ kind: 'plot', plot: number, width: Number(msg.width) || 0, height: Number(msg.height) || 0 });
+      if (size > this.limits.maxPlotBytes) { if (!live.place) await fs.rm(file, { force: true }); this.append(cell, 'stderr', `A plot of ${size} bytes was larger than maxPlotBytes and was not kept.\n`); }
+      else {
+        if (data) await atomicBytes(path.join(plots, `${cell.cellId}-${number}.png`), data);
+        cell.outputs.push({ kind: 'plot', plot: number, width: Number(msg.width) || 0, height: Number(msg.height) || 0 });
+      }
       this.soon(); return;
     }
     if (msg.kind === 'done') {
@@ -300,11 +360,16 @@ export class KernelHost {
     clearTimeout(live.timer);
     live.looking?.done({ state: 'ended', problem: 'The session ended while the value was read.' });
     const record = live.record;
-    Object.assign(record, { state: 'ended', endedAt: now(), ending: live.stopping ? 'stopped' : record.version === null ? 'not-started' : 'exited', variables: [], variablesOmitted: 0 });
+    // ssh ends with 255 when the connection, not the session, ended: the process on the server
+    // was not seen to end, and what the running cell did there was not observed.
+    const lost = !!live.place && code === 255 && !live.stopping && record.version !== null;
+    Object.assign(record, { state: 'ended', endedAt: now(), ending: live.stopping ? 'stopped' : record.version === null ? 'not-started' : lost ? 'disconnected' : 'exited', variables: [], variablesOmitted: 0 });
     if (record.version === null && !live.stopping) record.problem ??= `The session did not start${live.early.trim() ? ': ' + live.early.trim().slice(0, 600) : ` (exit ${code ?? 'by a signal'}).`}`;
+    if (lost) record.problem ??= `The connection to ${live.place!.label} was lost. The session's process there${live.remotePid ? ` (${live.remotePid})` : ''} was not seen to end; its variables are out of reach.`;
     if (!live.stopping && record.version !== null) record.problem ??= `The session's process ended (exit ${code ?? 'by a signal'}); its variables are gone.`;
     if (live.current) {
-      Object.assign(live.current, { state: 'error', endedAt: now(), problem: live.stopping ? 'The session was stopped while this cell ran.' : 'The session ended while this cell ran.' });
+      Object.assign(live.current, lost ? { state: 'unknown', endedAt: now(), problem: `The connection to ${live.place!.label} was lost while this cell ran; whether it finished there was not observed.` }
+        : { state: 'error', endedAt: now(), problem: live.stopping ? 'The session was stopped while this cell ran.' : 'The session ended while this cell ran.' });
       this.finish(live.current);
     }
     for (const cell of live.queue) { Object.assign(cell, { state: 'not-run', endedAt: now(), problem: record.version === null ? record.problem ?? 'The session did not start.' : 'The session ended before this cell ran.' }); this.finish(cell); }
@@ -378,6 +443,89 @@ export class KernelHost {
     return reading;
   }
 
+  // The places a session can run in, where each language's next session starts (this machine
+  // unless chosen), and the files copied from them.
+  private placeState() {
+    return this.placesRead ??= this.folder().then(async folder => {
+      const state = await readJson<Partial<Places>>(path.join(folder, 'places.json'), {});
+      return { places: state.places ?? [], use: { r: state.use?.r ?? 'local', python: state.use?.python ?? 'local' }, copies: state.copies ?? [] };
+    });
+  }
+  private savePlaces(state: Places) {
+    this.placesWriting = this.placesWriting.catch(() => {}).then(async () => atomicJson(path.join(await this.folder(), 'places.json'), state));
+    return this.placesWriting.then(() => this.options.onChange?.());
+  }
+  private async placeOf(placeId: string) {
+    const place = (await this.placeState()).places.find(p => p.placeId === placeId);
+    requireThat(place, 'not_found', `No place is named ${placeId}. Read kernel.places for the places there are.`);
+    return structuredClone(place);
+  }
+  async places() { return structuredClone(await this.placeState()); }
+
+  // Naming a place, removing one, and choosing where each language's next session starts. A
+  // place a live session runs in is not removed; changing where it is leaves that session there.
+  async setPlace(input: { place?: { placeId: string; label?: string; destination: string; folder: string; setup?: string }; remove?: string; use?: Partial<Record<Language, string>> }, by: string) {
+    await this.load();
+    return this.exclusive(async () => {
+      const state = await this.placeState();
+      if (input.place) {
+        const p = input.place, known = state.places.find(x => x.placeId === p.placeId), setup = (p.setup ?? '').replace(/\r\n?/g, '\n').trim();
+        requireThat(known || state.places.length < this.limits.maxPlaces, 'limit', `At most ${this.limits.maxPlaces} places are named. Remove one first.`, { limit: 'maxPlaces', maximum: this.limits.maxPlaces });
+        const same = known && known.destination === p.destination && known.folder === p.folder && known.setup === setup;
+        const next: Place = { placeId: p.placeId, label: p.label?.trim() || p.placeId, destination: p.destination, folder: p.folder, setup, by, at: now(), check: same ? known.check : null };
+        state.places = known ? state.places.map(x => x === known ? next : x) : [...state.places, next];
+      }
+      if (input.remove) {
+        requireThat(![...this.live.values()].some(l => l.place?.placeId === input.remove), 'conflict', 'A live session runs there. Stop it before removing the place.');
+        state.places = state.places.filter(p => p.placeId !== input.remove);
+        for (const language of Object.keys(state.use) as Language[]) if (state.use[language] === input.remove) state.use[language] = 'local';
+      }
+      for (const [language, placeId] of Object.entries(input.use ?? {}) as Array<[Language, string]>) {
+        requireThat(placeId === 'local' || state.places.some(p => p.placeId === placeId), 'not_found', `No place is named ${placeId}.`);
+        state.use[language] = placeId;
+      }
+      await this.savePlaces(state);
+      return structuredClone(state);
+    });
+  }
+
+  // Connecting to a place and looking: the system, the folder, R and Python. What it observed is
+  // kept with the place while the place stays as it was checked.
+  async check(placeId: string, by: string) {
+    const place = await this.placeOf(placeId), started = Date.now();
+    const run = await this.ssh.run(place, checkCommand(place), { timeoutMs: this.limits.remoteCheckTimeoutMs, maxBytes: 65536 });
+    const check: PlaceCheck = { at: now(), by, ms: Date.now() - started, ...readCheck(run) };
+    const state = await this.placeState(), current = state.places.find(p => p.placeId === placeId);
+    if (current && current.destination === place.destination && current.folder === place.folder && current.setup === place.setup) { current.check = check; await this.savePlaces(state); }
+    return { placeId, check };
+  }
+
+  // A folder within a place's folder, as the server lists it now.
+  async list(placeId: string, sub = '') {
+    requireThat(within(sub, true), 'scope', 'Name a folder within the place\'s folder, without parent steps.');
+    const place = await this.placeOf(placeId);
+    const run = await this.ssh.run(place, listCommand(place, sub), { timeoutMs: this.limits.remoteListTimeoutMs, maxBytes: this.limits.remoteListBytes });
+    return { placeId, path: sub, readAt: now(), ...readList(run, this.limits.remoteEntries) };
+  }
+
+  // A copy of one file of a place in the project, at remote/<place>/<path>, with the size, time
+  // and digest it had. A copy changed here since it was made is not replaced.
+  async copy(placeId: string, file: string, by: string) {
+    requireThat(within(file, false), 'scope', 'Name a file within the place\'s folder, without parent steps.');
+    const place = await this.placeOf(placeId), to = `remote/${placeId}/${file}`, max = this.limits.remoteCopyBytes;
+    const state = await this.placeState(), last = [...state.copies].reverse().find(c => c.to === to);
+    const present = await fs.readFile(await confined(this.root, to, true)).then(data => digest(data), () => null);
+    requireThat(present === null || present === last?.sha256, 'conflict', `${to} was changed here since it was copied. Move it or rename it to keep it, then copy again.`, { path: to });
+    const run = await this.ssh.run(place, copyCommand(place, file, max), { timeoutMs: this.limits.remoteCopyTimeoutMs, maxBytes: max + 4096 });
+    const { data, modifiedAt } = readCopy(run, max);
+    await fs.mkdir(path.dirname(await confined(this.root, to, true)), { recursive: true });
+    await atomicBytes(await confined(this.root, to, true), data);
+    const copy: Copy = { placeId, path: file, to, bytes: data.length, modifiedAt, sha256: digest(data), copiedAt: now(), by };
+    state.copies = [...state.copies.filter(c => c.to !== to), copy].slice(-this.limits.maxCopies);
+    await this.savePlaces(state);
+    return { copy };
+  }
+
   async plot(cellId: string, plot: number) {
     await this.load();
     const cell = this.cells.find(c => c.cellId === cellId);
@@ -419,8 +567,10 @@ const content = [
   'Give each cell a short purpose. Pass waitMs to wait for it to finish; kernel.read reads it later.',
   'A session starts with the first cell of its language. Interrupt a cell that runs too long with kernel.interrupt; only the person stops a session.',
   'Results meant to last still go to files from a script, so they can be run again without the session.',
+  'Sessions can also run on a server the person reaches with ssh. kernel.places lists the places and where each language runs; kernel.place.set names one (its ssh destination, its folder there and setup lines such as module load) or chooses it for R or Python; kernel.place.check connects and reports R and Python there.',
+  'Pass place to kernel.run to start a session there. Paths in a session on a server are its folder\'s; kernel.place.list lists them and kernel.place.copy copies a file into the project under remote/<place>/.',
 ].join('\n');
-export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.1.0', requires: [] as string[], capabilities: ['kernel'], presentation,
+export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.2.0', requires: [] as string[], capabilities: ['kernel'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ id: 'kernel.session', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Live session', description: 'Explains how to run code in the project\'s live R and Python sessions.' },
     intent: 'Run code in the live session and read what it printed.', requires: ['kernel.run', 'kernel.read'],

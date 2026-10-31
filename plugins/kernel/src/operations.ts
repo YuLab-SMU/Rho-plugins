@@ -1,10 +1,12 @@
 import { objectSchema as obj } from '@rho-workspace/plugin-contracts';
-import { cellId, cellSchema, changeId, inspectStates, language, objectSchema, sessionId, sessionSchema, sortInput } from './contract.js';
+import { cellId, cellSchema, changeId, copySchema, inspectStates, language, objectSchema, placeCheckSchema, placeId, placeInput, placeRef, placesSchema, remoteEntrySchema, sessionId, sessionSchema, sortInput } from './contract.js';
 
 // Owner business contracts. Application project/authentication fields are separate.
 export const operationContracts = {
+  // place names where a session that is not live yet starts ("local" is this machine); a cell
+  // naming another place than the live session's is refused.
   'kernel.run': {
-    inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 } }, ['language', 'code', 'changeId']),
+    inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 }, place: placeRef }, ['language', 'code', 'changeId']),
     outputSchema: obj({ cell: cellSchema, session: sessionSchema }),
     requires: [] as string[], effect: 'native' as const,
   },
@@ -36,5 +38,33 @@ export const operationContracts = {
     inputSchema: obj({ sessionId }),
     outputSchema: obj({ session: sessionSchema }),
     requires: [] as string[], effect: 'native' as const,
+  },
+  'kernel.places': {
+    inputSchema: obj({}, []),
+    outputSchema: placesSchema,
+    requires: [] as string[], effect: 'read' as const,
+  },
+  // Names a place (or renames, moves or changes its setup), removes one, or chooses where each
+  // language's next session starts.
+  'kernel.place.set': {
+    inputSchema: { ...obj({ place: placeInput, remove: placeId, use: obj({ r: placeRef, python: placeRef }, []) }, []), minProperties: 1 },
+    outputSchema: placesSchema,
+    requires: [] as string[], effect: 'metadata' as const,
+  },
+  'kernel.place.check': {
+    inputSchema: obj({ placeId }),
+    outputSchema: obj({ placeId, check: placeCheckSchema }),
+    requires: [] as string[], effect: 'native' as const,
+  },
+  // path is a folder within the place's folder ("" for the folder itself).
+  'kernel.place.list': {
+    inputSchema: obj({ placeId, path: { type: 'string', maxLength: 1024 } }, ['placeId']),
+    outputSchema: obj({ placeId, path: { type: 'string' }, readAt: { type: 'string', minLength: 1 }, folder: { type: 'string' }, entries: { type: 'array', items: remoteEntrySchema }, omitted: { type: 'integer', minimum: 0 }, cut: { type: 'boolean' } }),
+    requires: [] as string[], effect: 'read' as const,
+  },
+  'kernel.place.copy': {
+    inputSchema: obj({ placeId, path: { type: 'string', minLength: 1, maxLength: 1024 } }),
+    outputSchema: obj({ copy: copySchema }),
+    requires: [] as string[], effect: 'file' as const,
   },
 };

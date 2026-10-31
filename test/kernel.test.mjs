@@ -348,3 +348,129 @@ test('an S4 value read from a file lists its size at once, so printing it change
   assert.equal((await host.read()).sessions[0].variables.find(v => v.name === 'm').size, '2 × 3');
   assert.deepEqual((await run('m', 'r2')).defined, [], 'printing a value does not make it');
 });
+
+// A stand-in for ssh: it runs the command on this machine, as a server would, in its own process
+// group, with HOME set to the test's own "server" home, relaying the two streams ssh carries.
+// SIGUSR1 ends it with 255, as a lost connection ends ssh, and leaves what it ran going.
+const fakeSsh = `#!/usr/bin/env node
+const { spawn } = require('node:child_process'), fs = require('node:fs');
+const args = process.argv.slice(2), at = args.indexOf('--'), [destination, command] = args.slice(at + 1);
+fs.appendFileSync(process.env.RHO_TEST_HOME + '/ssh.log', process.pid + '\\t' + command.replace(/\\s+/g, ' ') + '\\n');
+if (destination === 'unreachable') { process.stderr.write('ssh: Could not resolve hostname unreachable: nodename nor servname provided, or not known\\n'); process.exit(255); }
+// The "server" login has no locale, as a server without the client's locale has none.
+const env = { ...process.env, HOME: process.env.RHO_TEST_HOME, LANG: 'C' };
+for (const name of Object.keys(env)) if (name.startsWith('LC_')) delete env[name];
+const child = spawn('sh', ['-c', command], { detached: true, stdio: 'pipe', env });
+process.stdin.pipe(child.stdin); child.stdin.on('error', () => {});
+child.stdout.pipe(process.stdout); child.stderr.pipe(process.stderr);
+process.on('SIGUSR1', () => process.exit(255));
+child.on('close', code => process.exit(code ?? 255));
+`;
+async function server() {
+  const home = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), 'rho-server-')));
+  const ssh = path.join(home, 'ssh');
+  await fs.writeFile(ssh, fakeSsh, { mode: 0o755 });
+  await fs.mkdir(path.join(home, 'proj', 'out'), { recursive: true });
+  await fs.writeFile(path.join(home, 'proj', 'counts.csv'), 'gene,n\na,1\nb,5\n');
+  await fs.symlink(tmpdir(), path.join(home, 'proj', 'elsewhere'));
+  process.env.RHO_TEST_HOME = home;
+  return { home, ssh, log: async () => (await fs.readFile(path.join(home, 'ssh.log'), 'utf8')).trim().split('\n').map(line => line.split('\t')) };
+}
+
+test('a session on a place runs there over ssh, and its files are listed and copied', async t => {
+  const root = await project(), { home, ssh } = await server();
+  const host = new KernelHost(root, { rscript, ssh });
+  t.after(() => host.close());
+  assert.deepEqual(await host.places(), { places: [], use: { r: 'local', python: 'local' }, copies: [] });
+  await host.setPlace({ place: { placeId: 'lab', label: 'Lab server', destination: 'lab', folder: '~/proj', setup: 'export ORIGIN=lab' }, use: { r: 'lab' } }, 'browser:local');
+  const { check } = await host.check('lab', 'browser:local');
+  assert.equal(check.ok, true);
+  assert.equal(check.folder, path.join(home, 'proj'));
+  assert.match(check.r, /^R version/);
+  assert.equal(check.jsonlite, true);
+  assert.equal((await host.places()).places[0].check.at, check.at, 'what a check saw is kept with the place');
+
+  // R runs where the project chose; the runner is sent on the session's own input.
+  const first = await host.run({ language: 'r', code: 'd <- read.csv("counts.csv")\nmessage(Sys.getenv("ORIGIN"))\nplot(d$n)\nwrite.csv(d, "out/d.csv")', changeId: 'r1', by: 'agent:a', waitMs: 30000 });
+  assert.equal(first.cell.state, 'done');
+  assert.deepEqual(first.cell.outputs.map(o => o.kind), ['stderr', 'plot']);
+  assert.equal(first.cell.outputs[0].text, 'lab\n', 'the place\'s setup lines ran before the session');
+  assert.deepEqual(first.session.place, { placeId: 'lab', label: 'Lab server', destination: 'lab', folder: path.join(home, 'proj') });
+  assert.ok(first.session.host);
+  assert.deepEqual(first.cell.files, [{ path: 'counts.csv', how: 'read' }, { path: 'out/d.csv', how: 'wrote' }]);
+  const png = await host.plot(first.cell.cellId, first.cell.outputs[1].plot);
+  assert.equal(Buffer.from(png.data, 'base64').subarray(1, 4).toString(), 'PNG', 'the plot came with its answer');
+  assert.deepEqual(await fs.readdir(path.join(home, '.cache', 'rho', 'kernel')), [(await fs.readdir(path.join(home, '.cache', 'rho', 'kernel')))[0]]);
+  assert.equal((await host.inspect({ language: 'r', name: 'd' })).object.table.rows, 2);
+  assert.equal(first.session.variables.find(v => v.name === 'd').size, '2 × 2', 'a login without a UTF-8 locale still sends UTF-8');
+  await assert.rejects(host.run({ language: 'r', code: '1', changeId: 'r2', by: 'agent:a', place: 'local' }), { kind: 'conflict', message: /runs on Lab server/ });
+
+  // Interrupting signals the session's process group there; the session and its values stay.
+  const slow = await host.run({ language: 'r', code: 'for (i in 1:100) Sys.sleep(0.1)', changeId: 'slow', by: 'browser:local' });
+  await new Promise(r => setTimeout(r, 800));
+  await host.interrupt(slow.cell.cellId, 'browser:local');
+  assert.equal((await settled(host, slow.cell.cellId, 8000)).state, 'interrupted');
+  assert.match(text((await host.run({ language: 'r', code: 'nrow(d)', changeId: 'r3', by: 'agent:a', waitMs: 30000 })).cell), /\[1\] 2/);
+
+  // Python goes where the cell names; this machine still runs it when asked.
+  const py = await host.run({ language: 'python', code: 'import os\nos.getcwd()', changeId: 'p1', by: 'agent:a', waitMs: 30000, place: 'lab' });
+  assert.equal(text(py.cell), `'${path.join(home, 'proj')}'\n`);
+
+  const listed = await host.list('lab', '');
+  assert.equal(listed.folder, path.join(home, 'proj'));
+  assert.deepEqual(listed.entries.map(e => [e.name, e.kind]), [['out', 'folder'], ['counts.csv', 'file'], ['elsewhere', 'link']]);
+  assert.deepEqual((await host.list('lab', 'out')).entries.map(e => [e.name, e.bytes]), [['d.csv', (await fs.stat(path.join(home, 'proj', 'out', 'd.csv'))).size]]);
+  await assert.rejects(host.list('lab', 'elsewhere'), { kind: 'scope' }, 'a link does not widen what is read there');
+  await assert.rejects(host.list('lab', '../'), { kind: 'scope' });
+  const { copy } = await host.copy('lab', 'out/d.csv', 'browser:local');
+  assert.equal(copy.to, 'remote/lab/out/d.csv');
+  assert.equal(await fs.readFile(path.join(root, copy.to), 'utf8'), await fs.readFile(path.join(home, 'proj', 'out', 'd.csv'), 'utf8'));
+  assert.equal(copy.modifiedAt, (await host.list('lab', 'out')).entries[0].modifiedAt, 'a copy and a listing name the same time');
+  await host.copy('lab', 'out/d.csv', 'browser:local');
+  await fs.appendFile(path.join(root, copy.to), 'mine\n');
+  await assert.rejects(host.copy('lab', 'out/d.csv', 'browser:local'), { kind: 'conflict' }, 'a copy changed here is not replaced');
+  await assert.rejects(host.copy('lab', 'out', 'browser:local'), { kind: 'not_found' });
+  await assert.rejects(host.copy('lab', 'counts.csv', 'browser:local').then(() => host.setPlace({ remove: 'lab' }, 'browser:local')), { kind: 'conflict' }, 'a place a session runs in stays');
+
+  const r = (await host.read()).sessions.find(s => s.language === 'r');
+  await host.stop(r.sessionId, 'browser:local');
+  for (let i = 0; i < 100 && (await host.read()).sessions.find(s => s.sessionId === r.sessionId).state !== 'ended'; i++) await new Promise(r => setTimeout(r, 50));
+  assert.equal((await host.read()).sessions.find(s => s.sessionId === r.sessionId).ending, 'stopped');
+});
+
+test('a lost connection leaves the running cell unknown and runs nothing again', async t => {
+  const root = await project(), { ssh, log } = await server();
+  const host = new KernelHost(root, { rscript, ssh });
+  t.after(() => host.close());
+  await host.setPlace({ place: { placeId: 'lab', destination: 'lab', folder: '~/proj' } }, 'browser:local');
+  const first = await host.run({ language: 'r', code: 'x <- 1', changeId: 'r1', by: 'agent:a', waitMs: 30000, place: 'lab' });
+  const long = await host.run({ language: 'r', code: 'Sys.sleep(5)', changeId: 'r2', by: 'agent:a' });
+  await new Promise(r => setTimeout(r, 500));
+  const [session] = (await log()).find(([, command]) => command.includes('exec Rscript'));
+  process.kill(Number(session), 'SIGUSR1');
+  const cell = await settled(host, long.cell.cellId, 8000);
+  assert.equal(cell.state, 'unknown');
+  assert.match(cell.problem, /connection to lab was lost/);
+  const ended = (await host.read()).sessions.find(s => s.sessionId === first.session.sessionId);
+  assert.equal(ended.ending, 'disconnected');
+  assert.match(ended.problem, /was not seen to end/);
+  const next = await host.run({ language: 'r', code: 'exists("x")', changeId: 'r3', by: 'agent:a', waitMs: 30000 });
+  assert.notEqual(next.session.sessionId, first.session.sessionId, 'the next cell starts another session');
+  assert.equal(next.session.place, null, 'where the project runs R is unchanged by a cell that named a place');
+  assert.equal((await host.read()).cells.filter(c => c.code === 'Sys.sleep(5)').length, 1, 'the unknown cell is not run again');
+});
+
+test('a place that cannot be reached says what ssh said', async t => {
+  const root = await project(), { ssh } = await server();
+  const host = new KernelHost(root, { rscript, ssh });
+  t.after(() => host.close());
+  await host.setPlace({ place: { placeId: 'gone', destination: 'unreachable', folder: '/data' }, use: { python: 'gone' } }, 'browser:local');
+  const { check } = await host.check('gone', 'agent:a');
+  assert.equal(check.ok, false);
+  assert.match(check.problem, /Could not resolve hostname/);
+  const run = await host.run({ language: 'python', code: '1', changeId: 'p1', by: 'agent:a', waitMs: 30000 });
+  assert.equal(run.cell.state, 'not-run');
+  assert.equal(run.session.ending, 'not-started');
+  assert.match(run.session.problem, /Could not resolve hostname/);
+  await assert.rejects(host.setPlace({ use: { r: 'nowhere' } }, 'agent:a'), { kind: 'not_found' });
+});

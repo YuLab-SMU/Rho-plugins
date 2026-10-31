@@ -13,7 +13,7 @@ if (!requireNamespace("jsonlite", quietly = TRUE)) {
   quit(save = "no", status = 2)
 }
 setwd(commandArgs(trailingOnly = TRUE)[[1]])
-answers <- file("/dev/fd/3", open = "w")
+answers <- file("/dev/fd/3", open = "w", raw = TRUE)
 emit <- function(x) { writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, null = "null", digits = NA, force = TRUE), answers); flush(answers) }
 marks <- 0L
 # An answer about the running cell, after a mark that follows everything printed before it.
@@ -185,14 +185,17 @@ run <- function(msg) {
       if (!went) break
     }
   }, interrupt = function(e) { interrupted <<- TRUE; ok <<- FALSE; cat("\n") })
+  # A session on a server draws in its own temporary folder and sends each plot with its answer.
   shown <- final_plots(plots); plots <<- list()
   for (i in seq_along(shown)) {
     if (i > msg$maxPlots) break
-    file <- file.path(msg$plots, paste0(id, "-", i, ".png"))
+    file <- file.path(if (is.null(msg$plots)) tempdir() else msg$plots, paste0(id, "-", i, ".png"))
     grDevices::png(file, width = 7, height = 5, units = "in", res = 144)
     tryCatch(grDevices::replayPlot(shown[[i]]), error = function(e) NULL)
     grDevices::dev.off()
-    say(list(id = id, kind = "plot", file = file, width = 1008, height = 720))
+    plot <- list(id = id, kind = "plot", file = file, width = 1008, height = 720)
+    if (isTRUE(msg$inline)) { plot$data <- jsonlite::base64_enc(readBin(file, "raw", file.info(file)$size)); unlink(file) }
+    say(plot)
   }
   say(list(id = id, kind = "done", ok = ok, interrupted = interrupted, variables = variables(msg$maxVariables),
     used = I(intersect(seen$mentioned, known)), assigned = I(seen$assigned), files = touched(files)))
@@ -367,7 +370,7 @@ inspect <- function(msg) {
      error = function(e) reply(list(state = "failed", problem = conditionMessage(e))))
 }
 
-emit(list(kind = "ready", version = R.version.string, pid = Sys.getpid(), variables = variables(200)))
+emit(list(kind = "ready", version = R.version.string, pid = Sys.getpid(), host = Sys.info()[["nodename"]], folder = getwd(), variables = variables(200)))
 repeat {
   line <- tryCatch(readLines(input, n = 1), interrupt = function(e) NA)
   if (identical(line, NA)) next
