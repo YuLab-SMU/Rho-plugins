@@ -238,3 +238,11 @@ test('Codex MCP spelling retains its operation and names a permission from the o
  assert.ok(t.events.some(e=>e.step?.operation==='context.read'&&e.step?.tool==='mcp.rho.rho_call'));
  }finally{await f.close();}
 });
+test('ACP adapters drive the selected or installed client, not a bundled native one', async () => {
+  const { acpEnvironment } = await import('../plugins/agent/dist/acp-command.js');
+  assert.equal(acpEnvironment('claude', {}).CLAUDE_CODE_EXECUTABLE, 'claude');
+  assert.equal(acpEnvironment('codex', {}).CODEX_PATH, 'codex');
+  assert.equal(acpEnvironment('codex', { CODEX_PATH: '/opt/codex' }).CODEX_PATH, '/opt/codex');
+  assert.equal(acpEnvironment('claude', { CLAUDE_CODE_EXECUTABLE: '/opt/claude' }, '/selected/claude').CLAUDE_CODE_EXECUTABLE, '/selected/claude');
+  assert.equal(acpEnvironment('codex', { HOME: '/home/x' }).HOME, '/home/x');
+});

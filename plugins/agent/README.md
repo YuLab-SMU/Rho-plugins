@@ -32,8 +32,11 @@ Only this plugin depends on the MCP and ACP SDKs. Native Agents retain their mod
 `./conversation` exports `ClaudeAcpConversation`, `CodexAcpConversation`, `ClaudeCliConversation` and their
 shared types. The ACP entry pins `@agentclientprotocol/sdk` 2.0.2 and
 `@agentclientprotocol/claude-agent-acp` 0.97.0 (Claude Agent SDK 0.3.310).
-Codex uses the official `@agentclientprotocol/codex-acp` 2.3.0 (native Codex 0.164.0).
-`codex` / `CODEX_PATH` selects an optional native executable; `CODEX_CONFIG` keeps
+Codex uses the official `@agentclientprotocol/codex-acp` 2.3.0 (written against Codex 0.164.0).
+Both adapters drive the person's installed client: `claude` / `CLAUDE_CODE_EXECUTABLE`
+and `codex` / `CODEX_PATH` select an executable, otherwise `claude` or `codex` on
+`PATH`. The adapters' bundled native clients are optional platform packages an
+application can omit (`npm install --omit=optional`). `CODEX_CONFIG` keeps
 the adapter's native provider settings. An explicit `model` merges into that config.
 No Claude-specific session metadata or permissions are sent to Codex.
 It uses stable ACP v1 over an owned stdio process. One connection carries multiple

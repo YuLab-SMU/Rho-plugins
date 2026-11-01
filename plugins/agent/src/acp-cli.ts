@@ -4,13 +4,13 @@ import { Transform } from 'node:stream';
 import { parseArgs } from 'node:util';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { acpCommand, type AcpAgent } from './acp-command.js';
+import { acpCommand, acpEnvironment, type AcpAgent } from './acp-command.js';
 import { ExternalAcpObserver } from './external-acp.js';
 import { stopAcpProcess } from './acp-process.js';
 export function runExternalAcp(project: string, agent: AcpAgent) {
   const observer = new ExternalAcpObserver(project, agent, () => process.stderr.write('Rho external observation is unavailable; the original ACP connection continues.\n'));
   const command = acpCommand(agent);
-  const child = spawn(command.file, command.args, { cwd: project, env: { CLAUDE_CODE_ENABLE_TODO_TOOLS: '1', ...process.env }, detached: true, stdio: ['pipe', 'pipe', 'inherit'] });
+  const child = spawn(command.file, command.args, { cwd: project, env: acpEnvironment(agent, { CLAUDE_CODE_ENABLE_TODO_TOOLS: '1', ...process.env }), detached: true, stdio: ['pipe', 'pipe', 'inherit'] });
   let closing = false;
   const stop = () => { if (closing) return; closing = true; observer.close(); child.stdin.end(); if (child.pid) void stopAcpProcess(child.pid, 5000); };
   const tap = (observe: (message: any) => void) => {

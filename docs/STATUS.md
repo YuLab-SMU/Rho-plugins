@@ -35,7 +35,11 @@ statement, load-code and data-flow functions that moved from Rho. Notebook 0.5.0
 the shared event shape (`timelineContract`) and a descriptor's `timeline` names a plugin's events read. Markdown 0.2.0 ticks to-dos in place, edits with a formatting toolbar
 and hides comment-only lines; its view contract stays 0.1.0. The earlier
 code/highlight/command-output work is retained.
-The owner suite passes 163/163; application composition and installation are checked
+Agent 0.4.24 has both ACP adapters drive the person's installed `claude` and `codex`
+(selected path, `CLAUDE_CODE_EXECUTABLE`/`CODEX_PATH`, else `PATH`), so an application
+can omit the adapters' optional native clients; the pack script adds Notebook and
+Skills, with Notebook's two runners as its only non-`dist` files.
+The owner suite passes 164/164; application composition and installation are checked
 by Rho, separately from component checks.
 
 | Owner | Implemented boundary | Material limit |

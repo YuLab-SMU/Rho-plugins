@@ -5,7 +5,9 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const root = fileURLToPath(new URL('..', import.meta.url));
-const ids = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'markdown', 'console'];
+const ids = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'markdown', 'console', 'kernel', 'skills'];
+// The live session's own runners are runtime inputs, not project recipes.
+const runners = { kernel: ['runners/runner.R', 'runners/runner.py'] };
 const { values } = parseArgs({ options: { destination: { type: 'string' }, plugins: { type: 'string' } } });
 const selected = values.plugins === undefined ? ids : values.plugins.split(',').filter(Boolean);
 if (new Set(selected).size !== selected.length || selected.some(id => !ids.includes(id))) throw new Error('Select unique known plugin IDs.');
@@ -22,8 +24,8 @@ for (const id of ['contracts', ...selected]) {
   const folder = id === 'contracts' ? 'packages/contracts' : 'plugins/' + id;
   const manifest = JSON.parse(await fs.readFile(path.join(root, folder, 'package.json'), 'utf8'));
   const result = JSON.parse(run(['pack', '--workspace', folder, '--ignore-scripts', '--json', '--pack-destination', destination]))[0];
-  if (result.files.some(f => !/^(dist\/|package.json$|README.md$|LICENSE$)/.test(f.path) || /\.R$/.test(f.path))) throw new Error('Unexpected packaged input: ' + id);
-  for (const file of result.files.filter(f => /^dist\/.*\.(js|json)$/.test(f.path))) {
+  if (result.files.some(f => !runners[id]?.includes(f.path) && (!/^(dist\/|package.json$|README.md$|LICENSE$)/.test(f.path) || /\.R$/.test(f.path)))) throw new Error('Unexpected packaged input: ' + id);
+  for (const file of result.files.filter(f => /^dist\/.*\.(js|json)$/.test(f.path) || runners[id]?.includes(f.path))) {
     const code = await fs.readFile(path.join(root, folder, file.path), 'utf8');
     if (/DESeq2|airway|apeglm|dexamethasone|real-r-analysis|agent-eval/i.test(code)) throw new Error('Project/evaluation code leaked into ' + id + ': ' + file.path);
   }
