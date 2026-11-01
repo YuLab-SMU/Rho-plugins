@@ -13,7 +13,10 @@ if (!requireNamespace("jsonlite", quietly = TRUE)) {
   quit(save = "no", status = 2)
 }
 setwd(commandArgs(trailingOnly = TRUE)[[1]])
-answers <- file("/dev/fd/3", open = "w", raw = TRUE)
+# Node hands over descriptor 3 as a socket. macOS opens it as /dev/fd/3; Linux refuses that
+# (ENXIO), so there a cat that ignores the interrupts sent to this process group relays to it.
+answers <- tryCatch(suppressWarnings(file("/dev/fd/3", open = "w", raw = TRUE)),
+  error = function(e) pipe("trap '' INT; exec cat >&3", open = "w"))
 emit <- function(x) { writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, null = "null", digits = NA, force = TRUE), answers); flush(answers) }
 marks <- 0L
 # An answer about the running cell, after a mark that follows everything printed before it.

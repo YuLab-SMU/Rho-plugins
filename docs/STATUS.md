@@ -41,6 +41,14 @@ can omit the adapters' optional native clients. A missing client fails the messa
 before the adapter starts, with a reason naming it ("Codex was not found on PATH"),
 where the adapters reported only a closed connection. The pack script adds Notebook and
 Skills, with Notebook's two runners as its only non-`dist` files.
+Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
+as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
+the session's interrupts relays the answers. Printed text after a mark now waits up to a
+second for that mark's answer, and joins the answers' queue instead of landing at once, so
+output keeps its order whichever stream arrives first (the relay, ssh, or a held answer
+released by its mark: on macOS a warning sometimes landed after the value printed below it).
+On Debian 12 arm64 the local Notebook tests went from 7 passed and 5 R failures to 12 passed
+(Matrix absent, one skipped).
 The owner suite passes 165/165; application composition and installation are checked
 by Rho, separately from component checks.
 

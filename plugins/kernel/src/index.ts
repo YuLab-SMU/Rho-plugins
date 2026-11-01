@@ -68,6 +68,8 @@ interface Live {
   record: SessionRecord; child: ChildProcess; place: Place | null; remotePid: number | null; answers: string; early: string; order: Promise<void>; queue: CellRecord[]; current: CellRecord | null; stopping: boolean; timer?: NodeJS.Timeout;
   // Printed text not yet placed, the highest mark seen on standard output, and answers waiting for theirs.
   printed: string; mark: number; held: Array<{ seq: number; msg: unknown }>; release?: NodeJS.Timeout;
+  // The highest answer taken, and the mark whose answer the text after it waits for.
+  answered: number; awaiting?: { seq: number; place: (text: string) => void; timer: NodeJS.Timeout };
   // The value being read now, and the readings waiting their turn.
   looking: { id: string; done: (msg: any) => void } | null; lookups: Promise<unknown>;
 }
@@ -223,7 +225,7 @@ export class KernelHost {
     const runner = source && `.cache/rho/kernel/runner-${digest(source).slice(0, 16)}${language === 'r' ? '.R' : '.py'}`;
     const child = place ? await this.transport(place).spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
       : spawn(program, [runners[language], root], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1' } });
-    const live: Live = { record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], looking: null, lookups: Promise.resolve() };
+    const live: Live = { record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve() };
     this.live.set(language, live);
     record.pid = place ? null : child.pid ?? null;
     const startMs = place ? this.limits.remoteStartTimeoutMs : this.limits.startTimeoutMs;
@@ -262,11 +264,17 @@ export class KernelHost {
       record.problem = (error as NodeJS.ErrnoException).code === 'ENOENT' ? `${place ? this.transport(place).program : program} was not found. Install ${place ? place.via === 'serverctl' ? 'serverctl' : 'OpenSSH' : language === 'r' ? 'R' : 'Python'}, or name the program where the application is started.` : error.message;
     });
     // All it printed has been read by now; answers still waiting go first.
-    child.on('close', code => { this.marked(live, Number.MAX_SAFE_INTEGER); live.order = live.order.then(() => this.end(live, code)); });
+    child.on('close', code => { live.answered = Number.MAX_SAFE_INTEGER; this.marked(live, Number.MAX_SAFE_INTEGER); live.order = live.order.then(() => this.resume(live)).then(() => this.end(live, code)); });
     this.changed();
     return live;
   }
-  private take(live: Live, msg: unknown) { live.order = live.order.then(() => this.answer(live, msg)).catch(() => {}); }
+  private take(live: Live, msg: unknown) {
+    live.order = live.order.then(() => this.answer(live, msg)).catch(() => {});
+    const seq = (msg as any)?.seq;
+    if (!Number.isInteger(seq)) return;
+    live.answered = Math.max(live.answered, seq);
+    if (live.awaiting && live.answered >= live.awaiting.seq) live.order = live.order.then(() => this.resume(live));
+  }
   private hold(live: Live, seq: number, msg: unknown) {
     live.held.push({ seq, msg });
     // A mark that never comes (the code redirected its output) lets the answers through after a second.
@@ -279,25 +287,38 @@ export class KernelHost {
     for (const h of ready) this.take(live, h.msg);
     if (!live.held.length) { clearTimeout(live.release); live.release = undefined; }
   }
-  // Standard output in order: text before a mark belongs before the answer that mark names.
+  // Standard output in order: text before a mark belongs before the answer that mark names, and
+  // text after it after that answer, which may come later on its own stream (a relay, ssh).
   private printed(live: Live, chunk: string, place: (text: string) => void) {
     live.printed += chunk;
+    if (live.awaiting) return;
+    // Printed text joins the answers' queue, so it lands after an answer taken before it.
+    const put = (text: string) => { if (text) live.order = live.order.then(() => place(text)).catch(() => {}); };
     for (;;) {
       const at = live.printed.indexOf(markStart);
       if (at < 0) {
         // Keep a tail that may be the start of a mark split across reads.
         let keep = 0;
         for (let k = Math.min(markStart.length - 1, live.printed.length); k > 0; k--) if (live.printed.endsWith(markStart.slice(0, k))) { keep = k; break; }
-        place(live.printed.slice(0, live.printed.length - keep)); live.printed = live.printed.slice(live.printed.length - keep);
+        put(live.printed.slice(0, live.printed.length - keep)); live.printed = live.printed.slice(live.printed.length - keep);
         return;
       }
-      place(live.printed.slice(0, at));
+      put(live.printed.slice(0, at));
       const end = live.printed.indexOf('\x1e', at + markStart.length);
       if (end < 0) { live.printed = live.printed.slice(at); return; }
       const mark = Number(live.printed.slice(at + markStart.length, end));
       live.printed = live.printed.slice(end + 1);
-      if (Number.isInteger(mark)) this.marked(live, mark);
+      if (!Number.isInteger(mark)) continue;
+      this.marked(live, mark);
+      // An answer that never comes (the session died writing it) lets the text through after a second.
+      if (live.answered < mark) { live.awaiting = { seq: mark, place, timer: setTimeout(() => this.resume(live), 1000) }; return; }
     }
+  }
+  private resume(live: Live) {
+    if (!live.awaiting) return;
+    const { place, timer } = live.awaiting;
+    clearTimeout(timer); live.awaiting = undefined;
+    this.printed(live, '', place);
   }
   // A session on a server is signalled there, through the shared connection; until it has said
   // which process it is, and when it is killed, its ssh ends here too. Once its ssh has ended
@@ -614,7 +635,7 @@ const viewProps: Record<keyof typeof viewPresentations, Record<string, unknown>>
   'rho.notebook': { form: { enum: ['notebook', 'console'] } }, 'rho.variables': {}, 'rho.plots': {}, 'rho.flow': {}, 'rho.servers': {},
   'rho.object': { language: { enum: ['r', 'python'] }, name: { type: 'string', minLength: 1 } },
 };
-export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.5.0', requires: [] as string[], capabilities: ['kernel'], presentation, timeline: 'kernel.events',
+export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.5.1', requires: [] as string[], capabilities: ['kernel'], presentation, timeline: 'kernel.events',
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ id: 'kernel.session', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Live session', description: 'Explains how to run code in the project\'s live R and Python sessions.' },
     intent: 'Run code in the live session and read what it printed.', requires: ['kernel.run', 'kernel.read'],
