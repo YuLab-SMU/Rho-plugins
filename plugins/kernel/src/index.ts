@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
-import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory, timelineLabel, type TimelineEvent } from '@rho-workspace/plugin-contracts';
 import { checkCommand, copyCommand, listCommand, readCheck, readCopy, readList, sessionCommand, signalCommand, Ssh, type Copy, type Place, type PlaceCheck, type Transport } from './places.js';
 import { Serverctl } from './servers.js';
 import { operationContracts } from './operations.js';
@@ -144,6 +144,19 @@ export class KernelHost {
     const sessions = await this.load();
     const cells = cellId ? this.cells.filter(c => c.cellId === cellId) : this.cells.slice(-limit);
     return { sessions: structuredClone([...sessions].reverse()), cells: structuredClone(cells), omitted: cellId ? 0 : Math.max(0, this.cells.length - limit) };
+  }
+
+  // Each cell as a timeline event: who ran it, from when it started (or was queued) to when it
+  // ended, in which session and place, named by its purpose or its first line of code.
+  async events(limit = 200) {
+    const sessions = await this.load(), places = new Map(sessions.map(s => [s.sessionId, s.place?.label ?? null]));
+    const outcome: Record<CellRecord['state'], TimelineEvent['outcome']> = { queued: 'running', running: 'running', done: 'done', error: 'failed', interrupted: 'stopped', 'not-run': 'stopped', unknown: 'unknown' };
+    const events = this.cells.slice(-limit).reverse().map((c): TimelineEvent => {
+      const place = places.get(c.sessionId);
+      return { id: c.cellId, by: c.by, action: 'run', label: timelineLabel(c.purpose ?? c.code, 'A cell'), where: (c.language === 'r' ? 'R' : 'Python') + (place ? ' on ' + place : ''),
+        startedAt: c.startedAt ?? c.queuedAt, endedAt: c.endedAt, outcome: outcome[c.state] };
+    });
+    return { events, omitted: Math.max(0, this.cells.length - limit) };
   }
 
   async run(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; waitMs?: number; place?: string }) {
@@ -601,7 +614,7 @@ const viewProps: Record<keyof typeof viewPresentations, Record<string, unknown>>
   'rho.notebook': { form: { enum: ['notebook', 'console'] } }, 'rho.variables': {}, 'rho.plots': {}, 'rho.flow': {}, 'rho.servers': {},
   'rho.object': { language: { enum: ['r', 'python'] }, name: { type: 'string', minLength: 1 } },
 };
-export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.4.0', requires: [] as string[], capabilities: ['kernel'], presentation,
+export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.5.0', requires: [] as string[], capabilities: ['kernel'], presentation, timeline: 'kernel.events',
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ id: 'kernel.session', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Live session', description: 'Explains how to run code in the project\'s live R and Python sessions.' },
     intent: 'Run code in the live session and read what it printed.', requires: ['kernel.run', 'kernel.read'],

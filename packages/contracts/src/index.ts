@@ -1,6 +1,7 @@
 export * from './common.js';
 export * from './declarations.js';
 export { observeExecutable } from './executable.js';
+export * from './timeline.js';
 export type { EntryPresentation, PluginPresentation } from './presentation.js';
 import type { ResourceRef } from './common.js';
 import type { Declaration } from './declarations.js';
@@ -42,6 +43,8 @@ export interface PluginDescriptor {
   id: string; package: string; version: string; requires: string[]; capabilities: string[];
   presentation?: import('./presentation.js').PluginPresentation;
   actions?: ActionDeclaration[]; components?: ComponentDescriptor[]; agent?: Record<string, unknown>;
+  // The read operation whose events (timelineContract) the application's timeline draws.
+  timeline?: string;
   entryVersion: '1.0';
   operations: import('./common.js').OperationDeclaration[];
   skills: import('./common.js').SkillDeclaration[];

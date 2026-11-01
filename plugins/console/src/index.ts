@@ -3,7 +3,7 @@ import { createWriteStream, type WriteStream } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { atomicJson, confined, digest, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { atomicJson, confined, digest, now, readJson, requireThat, stateDirectory, timelineLabel, type TimelineEvent } from '@rho-workspace/plugin-contracts';
 import { operationContracts } from './operations.js';
 import { operationPresentation, presentation } from './presentation.js';
 import type { commandStates } from './contract.js';
@@ -67,6 +67,17 @@ export class ConsoleRunner {
     const live = (r: ConsoleRecord) => { const run = this.running.get(r.commandId); return run ? { ...r, bytes: run.record.bytes, kept: run.record.kept, cut: run.record.cut } : r; };
     const ordered = [...records].reverse();
     return { commands: ordered.slice(0, limit).map(live), omitted: Math.max(0, ordered.length - limit) };
+  }
+
+  // Each command as a timeline event: who ran it, while it ran, in which folder and how it ended.
+  // A command still going on outside Rho is running; one that never started failed.
+  async events(limit = 200) {
+    const records = await this.load();
+    const outcome = (r: ConsoleRecord): TimelineEvent['outcome'] => r.state === 'running' || r.state === 'continuing' ? 'running' : r.state === 'stopped' ? 'stopped' : r.state === 'unknown' ? 'unknown'
+      : r.state === 'exited' && r.exit?.code === 0 ? 'done' : 'failed';
+    const events = [...records].reverse().slice(0, limit).map((r): TimelineEvent => ({ id: r.commandId, by: r.by, action: 'run', label: timelineLabel(r.command, 'A command'),
+      where: r.cwd ? 'Console in ' + r.cwd : 'Console', startedAt: r.startedAt, endedAt: r.endedAt, outcome: outcome(r) }));
+    return { events, omitted: Math.max(0, records.length - limit) };
   }
 
   async run(input: { command: string; cwd?: string; changeId: string; by: string }) {
@@ -188,7 +199,7 @@ const content = [
   'A command keeps its changeId: repeating it returns the same record and never runs it twice.',
   'How a command ended is what Rho observed: an exit code or signal, a requested stop, or unknown.',
 ].join('\n');
-export const plugin = { entryVersion: '1.0' as const, id: 'console', package: '@rho-workspace/plugin-console', version: '0.2.0', requires: [] as string[], capabilities: ['console'], presentation,
+export const plugin = { entryVersion: '1.0' as const, id: 'console', package: '@rho-workspace/plugin-console', version: '0.3.0', requires: [] as string[], capabilities: ['console'], presentation, timeline: 'console.events',
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ id: 'console.workspace', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Console', description: 'Explains what the console records and that it runs commands only for the person.' },
     intent: 'Read the commands the person ran and how they ended.', requires: ['console.list', 'console.output'],

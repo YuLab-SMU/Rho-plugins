@@ -23,6 +23,7 @@ export const presentation: PluginPresentation = {
 export const operationPresentation = {
   'console.run': { order: 10, displayName: 'Run a command', description: "Runs a command you typed in the project folder and keeps what it prints.", readOnly: false, runsCode: true },
   'console.list': { order: 20, displayName: 'List commands', description: "Lists the commands run here, newest first, with how each ended.", readOnly: true, runsCode: false },
+  'console.events': { order: 25, displayName: 'Read who ran what', description: "Lists the commands run here, newest first: who ran each, when, in which folder and how it ended.", readOnly: true, runsCode: false },
   'console.output': { order: 30, displayName: 'Read output', description: "Reads what a command printed, page by page.", readOnly: true, runsCode: false },
   'console.stop': { order: 40, displayName: 'Stop a command', description: "Asks a running command and the processes it started to stop.", readOnly: false, runsCode: false },
 } satisfies Record<string, EntryPresentation>;

@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.4.0 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.5.0 keeps a live R session and a live Python
 session for a project, which an Agent and the person share, on this machine or on a
 server: one the person manages with serverctl, reached through it, or one reached with
 ssh.
@@ -37,6 +37,12 @@ path is left to that path. These come from the code as written, without running 
 again: a name built at run time, a file named by a variable or one written by a function
 the cell called is not seen. A value of an S4 class that `readRDS` has just loaded is
 listed with its size at once, as printing it would show it.
+
+`events` gives each cell as a timeline event, newest first, without its code or output:
+who ran it, from when it started (or was queued) to when it ended, its language and place,
+its purpose or first line of code, and how it ended (`done`, `failed` for an error,
+`stopped` for an interrupt or a cell that never ran, `running`, `unknown`). The descriptor
+names it as its `timeline` read (`kernel.events`).
 
 `inspect` reads one value of a live session as its session describes it, by name and
 by a path of parts within it (a list's element, a column, a model's component, an

@@ -1,6 +1,6 @@
 # Console
 
-`@rho-workspace/plugin-console` 0.2.0 records the commands a person runs in a
+`@rho-workspace/plugin-console` 0.3.0 records the commands a person runs in a
 project folder and keeps what they print.
 
 `ConsoleRunner` runs a typed command with the person's shell in the project folder
@@ -16,6 +16,11 @@ Limits (`consoleLimits`, each configurable): at most 200 records (the oldest
 finished ones go first), 4 commands at once, the first 1 MiB and the last 64 KiB of
 each command's output (the bytes in between are counted, not kept), and 64 KiB per
 output read. Past a limit a command is refused with the named limit.
+
+`events` gives each command as a timeline event, newest first: who ran it, while it ran, in
+which folder and how it ended (`done`, `failed` for a non-zero exit, a signal or a command that
+never started, `stopped`, `running` while it runs or continues outside Rho, `unknown`). The
+descriptor names it as its `timeline` read (`console.events`).
 
 State lives under `.rho/plugins/console/` in the project. The package grants no
 authority: the application decides who may run commands. Rho lets only the person

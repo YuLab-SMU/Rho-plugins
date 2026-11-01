@@ -1,4 +1,4 @@
-import { objectSchema as obj } from '@rho-workspace/plugin-contracts';
+import { objectSchema as obj, timelineContract } from '@rho-workspace/plugin-contracts';
 import { cellId, cellSchema, changeId, copySchema, inspectStates, language, objectSchema, placeCheckSchema, placeId, placeInput, placeRef, placesSchema, remoteEntrySchema, server, serverSkillTextSchema, serversSchema, sessionId, sessionSchema, sortInput } from './contract.js';
 
 // Owner business contracts. Application project/authentication fields are separate.
@@ -15,6 +15,8 @@ export const operationContracts = {
     outputSchema: obj({ sessions: { type: 'array', items: sessionSchema }, cells: { type: 'array', items: cellSchema }, omitted: { type: 'integer', minimum: 0 } }),
     requires: [] as string[], effect: 'read' as const,
   },
+  // Who ran each cell and when, for a timeline: the newest first, without code or output.
+  'kernel.events': { ...timelineContract },
   'kernel.plot': {
     inputSchema: obj({ cellId, plot: { type: 'integer', minimum: 1, maximum: 64 } }),
     outputSchema: obj({ mediaType: { const: 'image/png' }, data: { type: 'string' }, width: { type: 'integer' }, height: { type: 'integer' } }),

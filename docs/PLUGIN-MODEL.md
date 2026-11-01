@@ -81,6 +81,7 @@ references and invocation rules, rather than one global mutable application mode
 | Selection | Resource or document version plus a declared entity-key space or text coordinate system; no display row/pixel as an entity ID |
 | View contribution | Entry/version, props schema, named binding roles and accepted resource contracts, supported actions/context and release behavior |
 | Check result | Subject and version, checker identity, observed time, outcome/unknown and exact scope; byte integrity and domain validity remain distinct |
+| Timeline event | Who did what and when as the owner recorded it: caller, label, where, start and end, and how it ended (`timelineContract`); a plugin names its events read in `timeline`. Notebook cells and Console commands are its two consumers |
 
 The Rho service validates caller/project authority and resolves an installed
 entry/version. The selected owner validates its input schemas, resource freshness

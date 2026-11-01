@@ -36,6 +36,23 @@ test('a command runs in the project folder, keeps its output and how it ended', 
   await runner.close();
 });
 
+test('each command is a timeline event: who ran it, while it ran, in which folder and how it ended', async () => {
+  const root = await project();
+  await fs.mkdir(path.join(root, 'data'));
+  const runner = new ConsoleRunner(root, { shell: '/bin/sh' });
+  const ok = await runner.run({ command: 'true', changeId: 'ok', by: 'browser:local' });
+  await ended(runner, ok.commandId);
+  const bad = await runner.run({ command: 'exit 2', cwd: 'data', changeId: 'bad', by: 'browser:local' });
+  await ended(runner, bad.commandId);
+  const { events, omitted } = await runner.events();
+  assert.equal(omitted, 0);
+  assert.deepEqual(events.map(e => [e.id, e.by, e.label, e.where, e.outcome]), [[bad.commandId, 'browser:local', 'exit 2', 'Console in data', 'failed'], [ok.commandId, 'browser:local', 'true', 'Console', 'done']]);
+  assert.ok(events.every(e => e.endedAt));
+  const { plugin } = await import('@rho-workspace/plugin-console');
+  assert.equal(plugin.timeline, 'console.events');
+  await runner.close();
+});
+
 test('the same change identity never runs a command twice; a different command under it conflicts', async () => {
   const root = await project();
   const runner = new ConsoleRunner(root, { shell: '/bin/sh' });

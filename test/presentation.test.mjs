@@ -66,7 +66,7 @@ const names = {
   'media.describe': 'Describe an image or PDF and check regions',
   'annotation.decide': 'Record decision', 'annotation.create': 'Create', 'annotation.list': 'List', 'annotation.read': 'Read', 'annotation.reply': 'Reply',
   'context.create': 'Share and read context', 'context.read': 'Share and read context',
-  'console.run': 'Run a command', 'console.list': 'List commands', 'console.output': 'Read output', 'console.stop': 'Stop a command',
+  'console.run': 'Run a command', 'console.list': 'List commands', 'console.events': 'Read who ran what', 'console.output': 'Read output', 'console.stop': 'Stop a command',
   'binding.list': 'Open and close views', 'binding.open': 'Open and close views', 'binding.close': 'Open and close views', 'binding.activity': 'Activity', 'binding.activity.append': 'Activity',
 };
 const views = { 'rho.editor': 'Editor', 'rho.object': 'Object', 'rho.table': 'Table', 'rho.scatter': 'Scatter', 'rho.media': 'Media', 'rho.feedback': 'Feedback', 'rho.agent-note': 'Agent note' };

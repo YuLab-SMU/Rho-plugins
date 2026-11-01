@@ -114,6 +114,21 @@ test('a change identity names one cell; cells run one at a time in the order the
   await host.close();
 });
 
+test('each cell is a timeline event: who ran it, when, where and how it ended, newest first', async () => {
+  const root = await project();
+  const host = new KernelHost(root);
+  await host.run({ language: 'python', code: '# load\nx = 1', changeId: 'a', by: 'browser:local', waitMs: 30000 });
+  await host.run({ language: 'python', code: 'raise ValueError("no")', purpose: 'Check a failure', changeId: 'b', by: 'agent:a', waitMs: 30000 });
+  const { events, omitted } = await host.events();
+  assert.equal(omitted, 0);
+  assert.deepEqual(events.map(e => [e.by, e.action, e.label, e.where, e.outcome]), [['agent:a', 'run', 'Check a failure', 'Python', 'failed'], ['browser:local', 'run', 'x = 1', 'Python', 'done']]);
+  assert.ok(events.every(e => e.startedAt && e.endedAt && e.startedAt <= e.endedAt));
+  const { plugin } = await import('@rho-workspace/plugin-kernel');
+  assert.equal(plugin.timeline, 'kernel.events');
+  assert.equal((await host.events(1)).omitted, 1);
+  await host.close();
+});
+
 test('requests that arrive together queue one cell per identity and lose none', async () => {
   const root = await project();
   const host = new KernelHost(root);
