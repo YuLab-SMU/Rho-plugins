@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-console",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "Rho console plugin: commands a person runs in a project folder, kept with their output",
   "license": "AGPL-3.0-only",

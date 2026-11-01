@@ -21,7 +21,7 @@ export async function inspectActivityArtifacts(project: string, directory: strin
     const handle = await fs.opendir(dir);
     for await (const entry of handle) {
       if (++entries > limits.maxEntries) throw new Error('Output scan exceeded maxEntries; retained activity is unchanged');
-      const name = path.join(dir,entry.name), relative = path.relative(root,name);
+      const name = path.join(dir,entry.name), relative = path.relative(root,name).split(path.sep).join('/');
       if (entry.isSymbolicLink()) {
         if (files.length >= limits.maxFiles) throw new Error('Output scan exceeded maxFiles; retained activity is unchanged');
         files.push({path:relative,state:'symlink-skipped'}); continue;

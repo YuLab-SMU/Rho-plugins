@@ -20,7 +20,7 @@ export class ProjectPaths implements FilePaths {
     if (source) requireThat(!selected.split(/[\\/]/).some(p => ['.rho', '.git'].includes(p)), 'scope', 'Internal state is not a source file.');
     const file = await confined(base, selected, missing);
     // Normalize overlapping source aliases to one logical buffer within a project.
-    if (file === this.root || file.startsWith(this.root + path.sep)) return { file, relative: path.relative(this.root, file) || '.' };
+    if (file === this.root || file.startsWith(this.root + path.sep)) return { file, relative: path.relative(this.root, file).split(path.sep).join('/') || '.' };
     const canonical = this.sources.find(s => file === s.root || file.startsWith(s.root + path.sep));
     requireThat(canonical, 'scope', 'File is outside the selected source folders.');
     return { file, relative: '@' + canonical.id + '/' + (path.relative(canonical.root, file).split(path.sep).join('/') || '.') };

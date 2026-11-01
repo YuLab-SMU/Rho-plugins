@@ -23,9 +23,11 @@ let input = ''; process.stdin.on('data', d => input += d).on('end', () => {
 `, { mode: 0o755 });
   return { bin, dir, call: async () => JSON.parse(await fs.readFile(path.join(dir, 'call.json'), 'utf8')) };
 }
+// Windows starts a script only through a shell, so the stand-in cannot be Claude Code there.
+const script = { skip: process.platform === 'win32' && 'the stand-in for Claude Code is a script' };
 const used = { 'small-model': { inputTokens: 10, outputTokens: 40, cacheReadInputTokens: 0, cacheCreationInputTokens: 1000, costUSD: 0.012, costBasis: 'unknown' } };
 
-test('a file is described in one sentence by Claude Code with no tools, no MCP servers and no kept session', async () => {
+test('a file is described in one sentence by Claude Code with no tools, no MCP servers and no kept session', script, async () => {
   const f = await fake({ type: 'result', is_error: false, result: '  Per-strain means\n and SDs of area. ', duration_ms: 900, total_cost_usd: 0.012, modelUsage: used });
   const said = await describeFile({ binary: f.bin, cwd: f.dir, model: 'small-model', path: 'results/summary.csv', facts: '15 rows × 4 columns: strain, n, mean, sd', excerpt: 'strain,n,mean,sd\n1,3,10,1\n', request: 'Compare the strains.' });
   assert.deepEqual(said, { text: 'Per-strain means and SDs of area.', model: 'small-model', durationMs: 900, costUsd: 0.012, costBasis: 'unknown', tokens: { input: 10, output: 40, cacheRead: 0, cacheWrite: 1000 } });
@@ -38,7 +40,7 @@ test('a file is described in one sentence by Claude Code with no tools, no MCP s
   assert.match(text.text, /The person's request to the Agent: Compare the strains\.\nFirst lines:\nstrain,n,mean,sd/);
 });
 
-test('a figure goes as an image to a model that takes images, and as what made it to one that does not', async () => {
+test('a figure goes as an image to a model that takes images, and as what made it to one that does not', script, async () => {
   const f = await fake({ type: 'result', is_error: false, result: 'Bars of mean area by ratio.', modelUsage: used });
   await describeFile({ binary: f.bin, cwd: f.dir, path: 'plot.png', facts: 'PNG image, 3 × 2 px', strategy: 'image', image: { mediaType: 'image/png', data: Buffer.from('png-bytes') } });
   let call = await f.call();
@@ -53,7 +55,7 @@ test('a figure goes as an image to a model that takes images, and as what made i
   await assert.rejects(describeFile({ binary: f.bin, cwd: f.dir, path: 'big.png', facts: 'x', strategy: 'image', image: { mediaType: 'image/png', data: Buffer.alloc(64) }, limits: { maxImageBytes: 32 } }), /maxImageBytes/);
 });
 
-test('input is bounded, and an error, an empty answer or a call past its time is reported, not retried', async () => {
+test('input is bounded, and an error, an empty answer or a call past its time is reported, not retried', script, async () => {
   assert.ok(Buffer.byteLength(describeInput({ path: 'a.txt', facts: 'x', excerpt: 'é'.repeat(10000) }, 512)) <= 512 + 6);
   const failed = await fake({ type: 'result', is_error: true, result: 'Model not found' });
   await assert.rejects(describeFile({ binary: failed.bin, cwd: failed.dir, path: 'a.txt', facts: 'x', excerpt: '' }), /Model not found/);

@@ -13,7 +13,8 @@ test('MCP caller durably freezes identity and exact input before managed deliver
   const directory = path.join(root, (await fs.readdir(root))[0]);
   assert.equal((await fs.readdir(directory)).length, 1);
   const file = path.join(directory, (await fs.readdir(directory))[0]);
-  assert.equal((await fs.stat(file)).mode & 0o077, 0);
+  // Windows keeps no POSIX mode: the file has its folder's inherited access list.
+  if (process.platform !== 'win32') assert.equal((await fs.stat(file)).mode & 0o077, 0);
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')).input, { ...input, projectId: 'project' });
   await assert.rejects(retainAgentIntent(descriptor, c, 'action.submit', { ...input, input: { count: 2 } }), e => e.kind === 'conflict');
   assert.deepEqual(JSON.parse(await fs.readFile(file, 'utf8')).input.input, { count: 1 });

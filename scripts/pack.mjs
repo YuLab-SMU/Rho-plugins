@@ -13,9 +13,13 @@ const selected = values.plugins === undefined ? ids : values.plugins.split(',').
 if (new Set(selected).size !== selected.length || selected.some(id => !ids.includes(id))) throw new Error('Select unique known plugin IDs.');
 const destination = path.resolve(values.destination ?? path.join(root, 'work/plugins-' + Date.now()));
 await fs.mkdir(destination, { recursive: true });
+// On Windows npm is a .cmd shim that only a shell can start; npm's own CLI runs under this node
+// there: the one npm named when it started this script, else the one installed beside node.
+const cli = /npm-cli\.js$/.test(process.env.npm_execpath ?? '') ? process.env.npm_execpath : process.platform === 'win32' ? path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js') : null;
 function run(args) {
-  const result = spawnSync('npm', args, { cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
-  if (result.status !== 0) throw new Error(result.stderr || result.stdout);
+  const options = { cwd: root, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 };
+  const result = cli ? spawnSync(process.execPath, [cli, ...args], options) : spawnSync('npm', args, options);
+  if (result.status !== 0) throw new Error(result.error?.message || result.stderr || result.stdout);
   return result.stdout;
 }
 run(['run', 'build']);

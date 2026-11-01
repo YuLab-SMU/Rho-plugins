@@ -5,14 +5,18 @@ import path from 'node:path';
 // its version, packages, compatibility or readiness for an action.
 export async function observeExecutable(program: string, searchPath = process.env.PATH ?? '', maxSearchDirectories = 128) {
   const checkedAt = new Date().toISOString();
-  const direct = program.includes(path.sep);
+  const direct = program.includes(path.sep) || program.includes('/');
   const directories = direct ? [] : searchPath.split(path.delimiter);
   if (directories.length > maxSearchDirectories) return { state: 'unknown' as const, checkedAt, scope: 'executable-file', limit: 'maxSearchDirectories', maximum: maxSearchDirectories };
-  const candidates = direct ? [path.resolve(program)] : directories.map(directory => path.resolve(directory, program));
+  // Windows has no executable bit: a program is a file it starts by its extension (Rscript.exe),
+  // and a name without one is looked for with each, as a program is started.
+  const windows = process.platform === 'win32', runnable = ['.exe', '.com'];
+  const named = (file: string) => windows && !path.extname(file) ? runnable.map(extension => file + extension) : [file];
+  const candidates = (direct ? [path.resolve(program)] : directories.map(directory => path.resolve(directory, program))).flatMap(named);
   let unreadable = false;
   for (const candidate of candidates) {
     try {
-      if (!(await fs.stat(candidate)).isFile()) continue;
+      if (!(await fs.stat(candidate)).isFile() || (windows && !runnable.includes(path.extname(candidate).toLowerCase()))) continue;
       try {
         await fs.access(candidate, fs.constants.X_OK);
         return { state: 'present' as const, checkedAt, scope: 'executable-file' };

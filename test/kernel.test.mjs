@@ -206,7 +206,7 @@ test('after Rho closes, its sessions are recorded as ended and nothing runs agai
 
 test('limits: code size, waiting cells, kept output and a program that is missing', async () => {
   const root = await project();
-  const host = new KernelHost(root, { limits: { maxQueued: 1, maxOutputBytes: 64 }, python: 'python3' });
+  const host = new KernelHost(root, { limits: { maxQueued: 1, maxOutputBytes: 64 } });
   await assert.rejects(host.run({ language: 'python', code: 'x'.repeat(kernelLimits.maxCodeBytes + 1), changeId: 'big', by: 'agent:a' }), e => e.kind === 'invalid');
   const loud = await host.run({ language: 'python', code: 'print("é" * 100)', changeId: 'loud', by: 'agent:a', waitMs: 30000 });
   assert.equal(loud.cell.cut, true);
@@ -279,7 +279,7 @@ test('a value is read as its session describes it, without starting, waiting or 
 
 test('Python values: a data frame, an array, a dict, an object and a value that takes too long', async t => {
   const root = await project();
-  const host = new KernelHost(root, { python: process.env.RHO_PYTHON ?? 'python3', limits: { inspectTimeoutMs: 800 } });
+  const host = new KernelHost(root, { python: process.env.RHO_PYTHON, limits: { inspectTimeoutMs: 800 } });
   t.after(() => host.close());
   let pandas = true;
   const probe = await host.run({ language: 'python', code: 'import importlib.util\nimportlib.util.find_spec("pandas") is not None', changeId: 'probe', by: 'agent:a', waitMs: 30000 });
@@ -410,6 +410,9 @@ else if (args[0] === 'skill' && args[1] === 'resolve') {
   child.on('close', code => process.exit(code ?? 255));
 } else process.exit(2);
 `;
+// Windows starts a script only through a shell, and the stand-in server uses Unix signals and
+// process groups; remote places are not exercised there.
+const stand = { skip: process.platform === 'win32' && 'the stand-ins for ssh and serverctl are Unix scripts' };
 async function server() {
   const home = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), 'rho-server-')));
   const ssh = path.join(home, 'ssh'), serverctl = path.join(home, 'serverctl');
@@ -422,7 +425,7 @@ async function server() {
   return { home, ssh, serverctl, log: async () => (await fs.readFile(path.join(home, 'ssh.log'), 'utf8')).trim().split('\n').map(line => line.split('\t')) };
 }
 
-test('a session on a place runs there over ssh, and its files are listed and copied', async t => {
+test('a session on a place runs there over ssh, and its files are listed and copied', stand, async t => {
   const root = await project(), { home, ssh, serverctl } = await server();
   const host = new KernelHost(root, { rscript, ssh, serverctl });
   t.after(() => host.close());
@@ -484,7 +487,7 @@ test('a session on a place runs there over ssh, and its files are listed and cop
   assert.equal((await host.read()).sessions.find(s => s.sessionId === r.sessionId).ending, 'stopped');
 });
 
-test('a lost connection leaves the running cell unknown and runs nothing again', async t => {
+test('a lost connection leaves the running cell unknown and runs nothing again', stand, async t => {
   const root = await project(), { ssh, serverctl, log } = await server();
   const host = new KernelHost(root, { rscript, ssh, serverctl });
   t.after(() => host.close());
@@ -509,7 +512,7 @@ test('a lost connection leaves the running cell unknown and runs nothing again',
 // The pa14-qs case (Rho-cases, 2026-10-31): an Agent put the skill's `mkdir -p` in a place's
 // setup; the check looked for the folder before it ran and reported none, and a session started
 // without that check would not have found it.
-test('a place whose setup lines make its folder is ready for a session and a check alike', async t => {
+test('a place whose setup lines make its folder is ready for a session and a check alike', stand, async t => {
   const root = await project(), { home, ssh, serverctl } = await server();
   const host = new KernelHost(root, { rscript, ssh, serverctl });
   t.after(() => host.close());
@@ -525,7 +528,7 @@ test('a place whose setup lines make its folder is ready for a session and a che
   assert.equal((await host.check('none', 'agent:a')).check.problem, 'The folder is not on the server, or this account cannot open it.');
 });
 
-test('a place that cannot be reached says what ssh said', async t => {
+test('a place that cannot be reached says what ssh said', stand, async t => {
   const root = await project(), { ssh, serverctl } = await server();
   const host = new KernelHost(root, { rscript, ssh, serverctl });
   t.after(() => host.close());
@@ -540,7 +543,7 @@ test('a place that cannot be reached says what ssh said', async t => {
   await assert.rejects(host.setPlace({ use: { r: 'nowhere' } }, 'agent:a'), { kind: 'not_found' });
 });
 
-test('a server managed with serverctl is reached through it, and the skills bound to it are read', async t => {
+test('a server managed with serverctl is reached through it, and the skills bound to it are read', stand, async t => {
   const root = await project(), { home, serverctl } = await server();
   const skill = path.join(home, 'skills', 'lab-r', 'SKILL.md');
   await fs.mkdir(path.dirname(skill), { recursive: true });

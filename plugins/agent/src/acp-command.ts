@@ -20,9 +20,13 @@ export function acpEnvironment(agent: AcpAgent, env: NodeJS.ProcessEnv, executab
  * there. The adapters report a missing client only as a closed connection. */
 export function missingClient(agent: AcpAgent, env: NodeJS.ProcessEnv): string | null {
   const executable = env[executableVariable[agent]] || agent;
-  if (process.platform === 'win32') return null;
-  const named = executable.includes('/');
-  const candidates = named ? [executable] : (env.PATH ?? '').split(path.delimiter).filter(Boolean).map(directory => path.join(directory, executable));
+  // On Windows a copied environment keeps the variable's own case (Path), and a client is a
+  // file with an extension PATHEXT names (claude.exe, an npm codex.cmd), as the shell finds it.
+  const windows = process.platform === 'win32';
+  const variable = (name: string) => windows ? Object.entries(env).find(([key]) => key.toUpperCase() === name)?.[1] : env[name];
+  const named = executable.includes('/') || (windows && executable.includes('\\'));
+  const extensions = windows && !path.extname(executable) ? (variable('PATHEXT') ?? '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean) : [''];
+  const candidates = (named ? [executable] : (variable('PATH') ?? '').split(path.delimiter).filter(Boolean).map(directory => path.join(directory, executable))).flatMap(file => extensions.map(extension => file + extension));
   const runnable = (file: string) => { try { fs.accessSync(file, fs.constants.X_OK); return fs.statSync(file).isFile(); } catch { return false; } };
   if (candidates.some(runnable)) return null;
   return `${clientName[agent]} was not found ${named ? 'at ' + executable : 'on PATH (' + executable + ')'}. Install it, or select its executable.`;

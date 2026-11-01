@@ -1,12 +1,16 @@
 # Console
 
-`@rho-workspace/plugin-console` 0.3.0 records the commands a person runs in a
+`@rho-workspace/plugin-console` 0.3.1 records the commands a person runs in a
 project folder and keeps what they print.
 
 `ConsoleRunner` runs a typed command with the person's shell in the project folder
 (or a folder inside it), in its own process group. A command keeps its `changeId`:
 repeating the same identity returns the same record and never starts it twice.
 Stop sends `SIGTERM` to the group and `SIGKILL` after a grace period.
+On Windows the shell is cmd.exe unless one is named, on a console of its own without a
+window; Stop raises Ctrl+Break on that console and ends the process tree after the grace
+period. The shell there ends with Rho while the programs it started go on, so a command
+running when Rho closed is `unknown` at the next start.
 
 How a command ended is what this process observed: an exit code or signal, a stop
 it was asked for, or `unknown` when Rho closed while it ran. A command still

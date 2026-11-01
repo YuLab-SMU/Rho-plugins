@@ -55,7 +55,7 @@ export class Documents {
     requireThat(!/^@[^/]+\//.test(relative) || this.paths, 'unavailable', 'Source-folder access needs its selected file service.');
     if (this.paths) return this.paths.resolve(relative, missing);
     const file = await confined(this.root, relative, missing);
-    return { file, relative: path.relative(await fs.realpath(this.root), file) };
+    return { file, relative: path.relative(await fs.realpath(this.root), file).split(path.sep).join('/') };
   }
   private async record(id: string) {
     requireThat(/^[a-f0-9]{64}$/.test(id), 'invalid', 'Invalid document identity.');

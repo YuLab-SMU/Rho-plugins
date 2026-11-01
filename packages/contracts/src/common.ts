@@ -19,6 +19,13 @@ export async function readJson<T>(file: string, fallback?: T): Promise<T> {
   try { return JSON.parse(await fs.readFile(file, 'utf8')); }
   catch (e: any) { if (e.code === 'ENOENT' && fallback !== undefined) return fallback; throw e; }
 }
+// Makes a rename or a new name in a directory durable. Windows refuses to flush a
+// directory (EPERM); NTFS journals the change itself.
+async function syncDirectory(directory: string) {
+  if (process.platform === 'win32') return;
+  const d = await fs.open(directory, 'r');
+  try { await d.sync(); } finally { await d.close(); }
+}
 // Acknowledgements follow file fsync, rename and directory fsync. One application
 // writer holds the project lease; this is not a second Core execution journal.
 export async function atomicJson(file: string, value: unknown) { return atomicBytes(file, JSON.stringify(value) + '\n'); }
@@ -28,8 +35,7 @@ export async function atomicBytes(file: string, value: string | Uint8Array) {
   try { await h.writeFile(value); await h.sync(); } finally { await h.close(); }
   try {
     await fs.rename(tmp, file);
-    const d = await fs.open(path.dirname(file), 'r');
-    try { await d.sync(); } finally { await d.close(); }
+    await syncDirectory(path.dirname(file));
   } finally { await fs.rm(tmp, { force: true }); }
 }
 export async function confined(root: string, relative: string, allowMissing = false): Promise<string> {

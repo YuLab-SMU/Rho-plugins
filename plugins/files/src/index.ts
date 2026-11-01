@@ -77,7 +77,7 @@ export class Files {
     const directory = await stateDirectory(this.root, '.rho/plugins/restored/' + metadata.id);
     const target = path.join(directory, metadata.version);
     await atomicBytes(target, data);
-    const relative = path.relative(this.root, target);
+    const relative = path.relative(this.root, target).split(path.sep).join('/');
     const r: Resource = { ...metadata, path: relative, storage: relative, projectId: this.projectId, provenance: { ...metadata.provenance, restoredFrom: { projectId: metadata.projectId, path: metadata.path } } };
     await atomicJson(await this.registryFile(), [...registry, r]);
     return { resource: { id: r.id, version: r.version }, state: 'available' };
@@ -109,7 +109,7 @@ export class Files {
     const old = registry.find(r => r.id === id);
     requireThat(old || registry.length < this.limits.maxResources, 'limit', 'Resource catalog is full; retained artifacts are preserved.', { limit: 'maxResources' });
     const snapshots = await stateDirectory(this.root, '.rho/plugins/snapshots');
-    const storage = path.relative(this.root, path.join(snapshots, sha));
+    const storage = path.relative(this.root, path.join(snapshots, sha)).split(path.sep).join('/');
     try { await fs.access(path.join(snapshots, sha)); } catch (e: any) {
       if (e.code !== 'ENOENT') throw e;
       const remaining = this.limits.maxArtifactBytes - await this.storedBytes();
@@ -150,7 +150,7 @@ export async function collectArtifacts(root: string, projectId: string, run: any
   const manifest = await completion(root, run, resources);
   const collected: Omit<Resource, 'storage'>[] = [], missing: string[] = [], unavailable: { path: string; kind: string; reason: string }[] = [];
   for (const d of run.plan.source.artifacts as Declaration[]) {
-    const relative = path.join(run.plan.output, d.path);
+    const relative = path.posix.join(run.plan.output, d.path);
     try {
       await confined(path.join(root, run.plan.output), d.path);
       collected.push(publicResource(await resources.register(relative, { operationId: run.operationId, core: run.core, action: run.action, actionVersion: run.actionVersion, codeDigest: digest(run.plan.code), source: run.plan.source, inputs: run.plan.source.inputs }, manifest ? 'available' : 'partial', { completionDeclaration: manifest ? 'present' : 'absent', observedAt: now() }, { ...d, path: relative })));

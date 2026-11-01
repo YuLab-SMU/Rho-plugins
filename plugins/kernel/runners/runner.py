@@ -2,13 +2,20 @@
 # descriptor 3, so what the person's code prints never mixes with the answers. Code runs in one
 # namespace kept for the life of this process; a cell whose last statement is an expression shows
 # that value, as a notebook does. Figures made with matplotlib are saved after each cell. An
-# interrupt (SIGINT) stops the cell that is running and leaves the session and its variables.
-import ast, base64, io, json, linecache, os, platform, sys, tempfile, traceback, types
+# interrupt (SIGINT; on Windows a Ctrl+C or Ctrl+Break on the session's console) stops the cell
+# that is running and leaves the session and its variables.
+import ast, base64, io, json, linecache, os, platform, signal, sys, tempfile, traceback, types
 
 root = sys.argv[1]
 os.chdir(root)
 sys.path.insert(0, root)
-answers = os.fdopen(3, 'w', buffering=1, encoding='utf-8')
+answers = os.fdopen(3, 'w', buffering=1, encoding='utf-8', newline='\n')
+if os.name == 'nt':
+    # A session started without a window may inherit Ctrl+C turned off. Only Ctrl+C wakes a wait
+    # such as time.sleep at once; Ctrl+Break is taken as an interrupt too, when the wait ends.
+    import ctypes
+    ctypes.windll.kernel32.SetConsoleCtrlHandler(None, False)
+    signal.signal(signal.SIGBREAK, signal.default_int_handler)
 real_out, real_err = sys.stdout, sys.stderr
 # Requests come on stdin; the person's code reads an empty input instead.
 requests, sys.stdin = sys.stdin, io.StringIO('')
@@ -174,7 +181,7 @@ def project_paths(strings, most=32):
         # The folder may not be there yet: one the cell makes before it writes into it.
         folder = os.path.realpath(os.path.dirname(full))
         full = os.path.normpath(os.path.join(folder, os.path.basename(full)))
-        if full.startswith(root + os.sep): out[full[len(root) + 1:]] = stamp(full)
+        if full.startswith(root + os.sep): out[full[len(root) + 1:].replace(os.sep, '/')] = stamp(full)
     return out
 
 # Each named file the cell left in place is one it read; one it made or changed is one it wrote.

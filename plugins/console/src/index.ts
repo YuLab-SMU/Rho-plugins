@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { atomicJson, confined, digest, now, readJson, requireThat, stateDirectory, timelineLabel, type TimelineEvent } from '@rho-workspace/plugin-contracts';
+import { ownGroup, signalGroup } from './process-group.js';
 import { operationContracts } from './operations.js';
 import { operationPresentation, presentation } from './presentation.js';
 import type { commandStates } from './contract.js';
@@ -30,6 +31,8 @@ interface Running { child: ChildProcess; out: WriteStream; record: ConsoleRecord
 // keeps its identity: the same changeId returns the same record and never starts it twice. It
 // runs in its own process group so Stop reaches what it started. When Rho closes, commands keep
 // running; the next start records each as continuing outside Rho or, if it is gone, unknown.
+// On Windows the shell is cmd.exe unless one is named; it runs on a console of its own without a
+// window, and ends with Rho, while the programs it started keep running.
 export class ConsoleRunner {
   private records: ConsoleRecord[] | null = null;
   private running = new Map<string, Running>();
@@ -58,6 +61,8 @@ export class ConsoleRunner {
   }
   private changed() { this.options.onChange?.(); }
   private shell() {
+    // A Unix shell named in SHELL (/usr/bin/bash under Git Bash) is not a Windows path.
+    if (process.platform === 'win32') return this.options.shell ?? process.env.ComSpec ?? path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'cmd.exe');
     const chosen = this.options.shell ?? process.env.SHELL ?? '/bin/sh';
     return path.isAbsolute(chosen) ? chosen : '/bin/sh';
   }
@@ -103,10 +108,12 @@ export class ConsoleRunner {
     records.push(record);
     const log = path.join(await this.folder(), record.commandId + '.log');
     const out = createWriteStream(log, { flags: 'wx', mode: 0o600 });
-    const shell = this.shell(), login = /\/(?:zsh|bash)$/.test(shell);
+    const shell = this.shell(), name = path.basename(shell).toLowerCase().replace(/\.exe$/, ''), login = name === 'zsh' || name === 'bash';
+    // cmd.exe takes the command as Node's own exec gives it: unquoted once by /s, as typed.
+    const cmd = name === 'cmd', args = cmd ? ['/d', '/s', '/c', `"${input.command}"`] : [login ? '-lc' : '-c', input.command];
     let child: ChildProcess;
     try {
-      child = spawn(shell, [login ? '-lc' : '-c', input.command], { cwd: folder, detached: true, stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
+      child = spawn(shell, args, { cwd: folder, ...ownGroup, windowsVerbatimArguments: cmd, stdio: ['ignore', 'pipe', 'pipe'], env: process.env });
     } catch (error) {
       record.state = 'not-started'; record.endedAt = now(); record.problem = error instanceof Error ? error.message : 'The command could not be started.';
       out.end(); await this.save(); this.changed(); return { ...record };
@@ -177,7 +184,10 @@ export class ConsoleRunner {
     const running = this.running.get(commandId);
     if (!running || record.stop) return { ...record };
     record.stop = { requestedAt: now(), by };
-    const signal = (name: NodeJS.Signals) => { try { if (record.pid) process.kill(-record.pid, name); } catch { /* it has ended */ } };
+    // Windows reuses a process id soon, so a shell that has ended is not signalled there.
+    const signal = (name: 'SIGTERM' | 'SIGKILL') => {
+      if (record.pid && !(process.platform === 'win32' && (running.child.exitCode !== null || running.child.signalCode !== null))) void signalGroup(record.pid, name);
+    };
     signal('SIGTERM');
     running.stopTimer = setTimeout(() => signal('SIGKILL'), this.limits.stopGraceMs);
     await this.save(); this.changed();

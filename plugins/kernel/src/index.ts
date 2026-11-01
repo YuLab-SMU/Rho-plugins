@@ -1,9 +1,11 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomBytes } from 'node:crypto';
 import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory, timelineLabel, type TimelineEvent } from '@rho-workspace/plugin-contracts';
+import { ownGroup, signalGroup, type GroupSignal } from './process-group.js';
 import { checkCommand, copyCommand, listCommand, readCheck, readCopy, readList, sessionCommand, signalCommand, Ssh, type Copy, type Place, type PlaceCheck, type Transport } from './places.js';
 import { Serverctl } from './servers.js';
 import { operationContracts } from './operations.js';
@@ -72,8 +74,34 @@ interface Live {
   answered: number; awaiting?: { seq: number; place: (text: string) => void; timer: NodeJS.Timeout };
   // The value being read now, and the readings waiting their turn.
   looking: { id: string; done: (msg: any) => void } | null; lookups: Promise<unknown>;
+  // On Windows an R session answers on a named pipe of its own (answerPipe), closed once it has.
+  pipe?: net.Server; answering?: net.Socket; answersClosed?: Promise<void>;
 }
 const markStart = '\x1eRHO:';
+// On Windows a session's descriptor 3 reaches a program built on Microsoft's C runtime (Python),
+// but R has no way to name it. There R opens a named pipe served here, by the name it is given in
+// RHO_KERNEL_ANSWERS; the first connection is the session's and no other is taken.
+function answerPipe() {
+  const name = `\\\\.\\pipe\\rho-kernel-${randomBytes(16).toString('hex')}`;
+  const server = net.createServer();
+  const connected = new Promise<net.Socket>(resolve => {
+    server.on('connection', socket => { if (server.listening) { server.close(); resolve(socket); } else socket.destroy(); });
+  });
+  return new Promise<{ name: string; server: net.Server; connected: Promise<net.Socket> }>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(name, () => resolve({ name, server, connected }));
+  });
+}
+// R and Python on Windows end printed lines with \r\n; a cell keeps \n, as elsewhere. A \r that ends
+// one piece waits for the next, which may begin with its \n.
+function newlines() {
+  let carry = '';
+  return (chunk: string, end = false) => {
+    const text = carry + chunk;
+    carry = !end && text.endsWith('\r') ? '\r' : '';
+    return (carry ? text.slice(0, -1) : text).replace(/\r\n/g, '\n');
+  };
+}
 const runners: Record<Language, string> = {
   r: fileURLToPath(new URL('../runners/runner.R', import.meta.url)),
   python: fileURLToPath(new URL('../runners/runner.py', import.meta.url)),
@@ -217,37 +245,43 @@ export class KernelHost {
     this.sessions!.push(record);
     const old = this.sessions!.filter(s => s.state === 'ended');
     if (old.length > this.limits.maxEndedSessions) this.sessions!.splice(this.sessions!.indexOf(old[0]!), 1);
-    const program = place ? 'ssh' : language === 'r' ? this.options.rscript ?? 'Rscript' : this.options.python ?? 'python3';
+    const windows = !place && process.platform === 'win32';
+    const program = place ? 'ssh' : language === 'r' ? this.options.rscript ?? 'Rscript' : this.options.python ?? (windows ? 'python' : 'python3');
     const root = await fs.realpath(this.root);
     // On a server the runner is sent first on the session's own input, named by its digest, so
     // the session needs nothing installed there but R or Python.
     const source = place ? await fs.readFile(runners[language]) : null;
     const runner = source && `.cache/rho/kernel/runner-${digest(source).slice(0, 16)}${language === 'r' ? '.R' : '.py'}`;
+    const pipe = windows && language === 'r' ? await answerPipe() : null;
     const child = place ? await this.transport(place).spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
-      : spawn(program, [runners[language], root], { cwd: root, detached: true, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1' } });
-    const live: Live = { record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve() };
+      : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}) } });
+    const live: Live = { record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve(), pipe: pipe?.server };
     this.live.set(language, live);
     record.pid = place ? null : child.pid ?? null;
     const startMs = place ? this.limits.remoteStartTimeoutMs : this.limits.startTimeoutMs;
     live.timer = setTimeout(() => { if (record.state === 'starting') { record.problem = `The session did not start within ${Math.round(startMs / 1000)} s.`; this.signal(live, 'SIGKILL'); } }, startMs);
+    const listen = (answers: NodeJS.ReadableStream) => {
+      answers.setEncoding('utf8');
+      answers.on('data', (chunk: string) => {
+        live.answers += chunk;
+        for (let at = live.answers.indexOf('\n'); at >= 0; at = live.answers.indexOf('\n')) {
+          const line = live.answers.slice(0, at); live.answers = live.answers.slice(at + 1);
+          // Answers are taken in the order they came: a cell ends only after its plots are kept.
+          // What a server's login shell printed first is not an answer.
+          let msg: any;
+          try { msg = JSON.parse(line); } catch { continue; }
+          if (!msg || typeof msg !== 'object') continue;
+          // An answer that follows printed text waits for its mark, so it lands after that text.
+          if (Number.isInteger(msg?.seq) && msg.seq > live.mark) this.hold(live, msg.seq, msg);
+          else this.take(live, msg);
+        }
+      });
+    };
     // ssh carries two streams: the answers come on its standard output and what the session
     // prints on its standard error, standard output and error together.
-    const answers = (place ? child.stdout : child.stdio[3]) as NodeJS.ReadableStream, printed = (place ? child.stderr : child.stdout) as NodeJS.ReadableStream;
-    answers.setEncoding('utf8');
-    answers.on('data', (chunk: string) => {
-      live.answers += chunk;
-      for (let at = live.answers.indexOf('\n'); at >= 0; at = live.answers.indexOf('\n')) {
-        const line = live.answers.slice(0, at); live.answers = live.answers.slice(at + 1);
-        // Answers are taken in the order they came: a cell ends only after its plots are kept.
-        // What a server's login shell printed first is not an answer.
-        let msg: any;
-        try { msg = JSON.parse(line); } catch { continue; }
-        if (!msg || typeof msg !== 'object') continue;
-        // An answer that follows printed text waits for its mark, so it lands after that text.
-        if (Number.isInteger(msg?.seq) && msg.seq > live.mark) this.hold(live, msg.seq, msg);
-        else this.take(live, msg);
-      }
-    });
+    const printed = (place ? child.stderr : child.stdout) as NodeJS.ReadableStream;
+    if (pipe) void pipe.connected.then(socket => { live.answering = socket; live.answersClosed = new Promise(resolve => socket.once('close', () => resolve())); listen(socket); });
+    else listen((place ? child.stdout : child.stdio[3]) as NodeJS.ReadableStream);
     // What the session's process writes itself, past the code's own output (a program it ran,
     // a library's C code), belongs to the cell running then.
     // Before the session is ready, what it writes says why it could not start.
@@ -256,15 +290,21 @@ export class KernelHost {
       if (live.current) { this.append(live.current, kind, text); this.soon(); }
       else if (record.version === null && live.early.length < 2048) live.early += text;
     };
-    printed.setEncoding('utf8'); printed.on('data', (chunk: string) => this.printed(live, chunk, raw('stdout')));
-    if (!place) { child.stderr!.setEncoding('utf8'); child.stderr!.on('data', raw('stderr')); }
+    const out = windows ? newlines() : (text: string) => text, err = windows ? newlines() : (text: string) => text;
+    printed.setEncoding('utf8'); printed.on('data', (chunk: string) => this.printed(live, out(chunk), raw('stdout')));
+    printed.on('end', () => { const rest = out('', true); if (rest) this.printed(live, rest, raw('stdout')); });
+    if (!place) { child.stderr!.setEncoding('utf8'); child.stderr!.on('data', (chunk: string) => raw('stderr')(err(chunk))); child.stderr!.on('end', () => raw('stderr')(err('', true))); }
     child.stdin!.on('error', () => {});
     if (source) child.stdin!.write(source);
     child.on('error', error => {
       record.problem = (error as NodeJS.ErrnoException).code === 'ENOENT' ? `${place ? this.transport(place).program : program} was not found. Install ${place ? place.via === 'serverctl' ? 'serverctl' : 'OpenSSH' : language === 'r' ? 'R' : 'Python'}, or name the program where the application is started.` : error.message;
     });
-    // All it printed has been read by now; answers still waiting go first.
-    child.on('close', code => { live.answered = Number.MAX_SAFE_INTEGER; this.marked(live, Number.MAX_SAFE_INTEGER); live.order = live.order.then(() => this.resume(live)).then(() => this.end(live, code)); });
+    // All it printed has been read by now, and on a pipe of its own once that has closed too;
+    // answers still waiting go first.
+    child.on('close', code => {
+      live.pipe?.close();
+      void (live.answersClosed ?? Promise.resolve()).then(() => { live.answered = Number.MAX_SAFE_INTEGER; this.marked(live, Number.MAX_SAFE_INTEGER); live.order = live.order.then(() => this.resume(live)).then(() => this.end(live, code)); });
+    });
     this.changed();
     return live;
   }
@@ -322,12 +362,15 @@ export class KernelHost {
   }
   // A session on a server is signalled there, through the shared connection; until it has said
   // which process it is, and when it is killed, its ssh ends here too. Once its ssh has ended
-  // nothing is sent there: the id may since name another process.
-  private signal(live: Live, name: NodeJS.Signals) {
-    if (!live.place) { try { if (live.record.pid) process.kill(-live.record.pid, name); } catch { /* it has ended */ } return; }
-    if (live.child.exitCode !== null || live.child.signalCode !== null) return;
+  // nothing is sent there: the id may since name another process. Windows reuses a process id
+  // soon, so a session here that has ended is not signalled there either. There a Python session
+  // is interrupted with Ctrl+C, which wakes it from a wait as SIGINT does; R takes Ctrl+Break.
+  private signal(live: Live, name: GroupSignal) {
+    const exited = live.child.exitCode !== null || live.child.signalCode !== null;
+    if (!live.place) { if (live.record.pid && !(exited && process.platform === 'win32')) void signalGroup(live.record.pid, name, { ctrlC: live.record.language === 'python' }); return; }
+    if (exited) return;
     if (live.remotePid) void this.transport(live.place).run(live.place, signalCommand(live.remotePid, name), { timeoutMs: this.limits.remoteSignalTimeoutMs, maxBytes: 4096 });
-    if (!live.remotePid || name === 'SIGKILL') { try { if (live.child.pid) process.kill(-live.child.pid, 'SIGKILL'); } catch { /* it has ended */ } }
+    if (!live.remotePid || name === 'SIGKILL') { if (live.child.pid) void signalGroup(live.child.pid, 'SIGKILL'); }
   }
 
   private async pump(live: Live) {
@@ -611,6 +654,7 @@ export class KernelHost {
       for (const cell of live.queue) Object.assign(cell, { state: 'not-run', endedAt: now(), problem: 'Rho closed before this cell ran.' });
       clearTimeout(live.timer); clearTimeout(live.release);
       for (const stream of live.child.stdio) { stream?.removeAllListeners('data'); }
+      live.answering?.removeAllListeners('data'); live.answering?.destroy(); live.pipe?.close();
       live.child.removeAllListeners('close');
     }
     this.live.clear();

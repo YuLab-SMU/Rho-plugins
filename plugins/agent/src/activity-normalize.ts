@@ -69,6 +69,8 @@ function chained(items: { kind: string; data: any }[], options: CaptureOptions):
   });
 }
 
+// Windows names one folder with either case of its letters (C: and c:).
+const samePath = (a: string, b: string) => process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b);
 export function normalizeClaude(records: any[], sessionId: string, project: string, options: CaptureOptions = {}): ObservedEvent[] {
   const events: { kind: string; data: any }[] = [], calls = new Map<string, string>();
   const seen = new Map<string, string>();
@@ -78,7 +80,7 @@ export function normalizeClaude(records: any[], sessionId: string, project: stri
     if (!Array.isArray(blocks)) continue;
     const selected = blocks.filter((b: any) => ['tool_use', 'tool_result'].includes(b?.type));
     if (!selected.length) continue;
-    if (r.sessionId !== sessionId || typeof r.cwd !== 'string' || path.resolve(r.cwd) !== project || typeof r.uuid !== 'string') throw new Error('Claude observation does not match the selected project/session or lacks native identity');
+    if (r.sessionId !== sessionId || typeof r.cwd !== 'string' || !samePath(r.cwd, project) || typeof r.uuid !== 'string') throw new Error('Claude observation does not match the selected project/session or lacks native identity');
     for (let index = 0; index < selected.length; index++) {
       const b = selected[index], native_id = `${r.uuid}:${index}`;
       const fingerprint = canonicalActivity({block:b,parent:r.parentUuid,time:r.timestamp,denial:r.toolDenialKind});

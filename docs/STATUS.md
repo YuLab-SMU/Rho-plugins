@@ -1,6 +1,6 @@
 # Current component status
 
-Updated: 2026-11-01.
+Updated: 2026-11-02.
 
 Files 0.5.0, Annotations 0.5.2 and Tables 0.5.0 supply immutable captures,
 version-bound human decisions and explicit multi-field comparison. Documents
@@ -49,7 +49,22 @@ output keeps its order whichever stream arrives first (the relay, ssh, or a held
 released by its mark: on macOS a warning sometimes landed after the value printed below it).
 On Debian 12 arm64 the local Notebook tests went from 7 passed and 5 R failures to 12 passed
 (Matrix absent, one skipped).
-The owner suite passes 165/165; application composition and installation are checked
+On Windows a process an owner starts and stops as a group (a Notebook session, a Console
+command, an Agent client) gets a console of its own without a window, which what it starts
+shares, so no window opens. Interrupt and Stop raise Ctrl+Break on that console, or Ctrl+C for
+a Python session, which turns its Ctrl+C handling back on so that a wait ends at once; a stop
+that is not obeyed ends the process tree (`taskkill /T /F`). A process id Windows may since
+have reused is not signalled. Notebook 0.5.2: R there cannot open descriptor 3, so the host
+serves a named pipe the runner opens, and printed `\r\n` becomes `\n`. Console 0.3.1 runs
+cmd.exe unless a shell is named. Agent 0.4.25 looks for `claude` and `codex` with PATHEXT's
+extensions (`claude.exe`, an npm `codex.cmd`) and compares Windows paths in either case.
+Files 0.5.1, Documents 0.4.10 and R 0.4.2 name project paths with `/`, and skip directory
+flushes, which Windows refuses (EPERM). Annotations, Markdown and HTML accept Documents
+0.4.10; Markdown named only 0.4.7 before.
+The owner suite passes 165/165 on macOS. On Windows 11 x64 (Node 22.23.4, R 4.5.1, Python
+3.13.9) it passes 158 of 166 and skips 8 that use Unix shell scripts as stand-ins: three for
+Claude Code (file descriptions) and five for ssh and serverctl (remote places). Real Claude
+Code and Codex were not run on Windows. Application composition and installation are checked
 by Rho, separately from component checks.
 
 | Owner | Implemented boundary | Material limit |

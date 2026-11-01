@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tmpdir } from 'node:os';
 import { ClaudeAcpConversation, CodexAcpConversation } from '../plugins/agent/dist/conversation.js';
 const fixture = fileURLToPath(new URL('./fixtures/acp-agent.mjs', import.meta.url));
+// Short paths under /tmp; Windows has none.
+const temporary = process.platform === 'win32' ? tmpdir() : '/tmp';
 async function setup(extra = {}) {
-  const root = await fs.mkdtemp('/tmp/rho-acp-owner-'), log = path.join(root, 'calls.jsonl');
+  const root = await fs.mkdtemp(path.join(temporary, 'rho-acp-owner-')), log = path.join(root, 'calls.jsonl');
   const options = { cwd: root, mcpServers: [], command: { file: process.execPath, args: [fixture] }, env: { ACP_TEST_LOG: log, ...extra }, limits: { maxAgentTurns: 8, maxOutputBytes: 32768, maxLineBytes: 4096, stopGraceMs: 100, connectTimeoutMs: 3000 } };
   const drivers = [];
   return { options, create(sessionId, overrides = {}) { const driver = new ClaudeAcpConversation({ ...options, sessionId, ...overrides }); drivers.push(driver); return driver; },
@@ -248,11 +251,13 @@ test('ACP adapters drive the selected or installed client, not a bundled native 
 });
 test('a missing client fails the message with its name before the adapter starts', async () => {
   const { missingClient } = await import('../plugins/agent/dist/acp-command.js');
-  const root = await fs.mkdtemp('/tmp/rho-acp-client-'), bin = path.join(root, 'bin'); await fs.mkdir(bin);
+  const root = await fs.mkdtemp(path.join(temporary, 'rho-acp-client-')), bin = path.join(root, 'bin'); await fs.mkdir(bin);
+  // A Windows program is named by its extension, and a file without one is none.
+  const program = name => process.platform === 'win32' ? name + '.cmd' : name;
   try {
     assert.match(missingClient('codex', { PATH: bin }), /^Codex was not found on PATH \(codex\)\./);
-    assert.match(missingClient('claude', { PATH: bin, CLAUDE_CODE_EXECUTABLE: path.join(bin, 'claude') }), /^Claude Code was not found at .*\/bin\/claude\./);
-    await fs.writeFile(path.join(bin, 'codex'), '#!/bin/sh\n', { mode: 0o755 });
+    assert.match(missingClient('claude', { PATH: bin, CLAUDE_CODE_EXECUTABLE: path.join(bin, 'claude') }), /^Claude Code was not found at .*[\\/]bin[\\/]claude\./);
+    await fs.writeFile(path.join(bin, program('codex')), '#!/bin/sh\n', { mode: 0o755 });
     assert.equal(missingClient('codex', { PATH: bin }), null);
     await fs.writeFile(path.join(bin, 'claude'), 'not executable', { mode: 0o644 });
     assert.notEqual(missingClient('claude', { PATH: bin }), null);

@@ -52,7 +52,7 @@ export async function planExecution(root: string, input: any, operationId: strin
     if (typeof arg === 'string') args.push(arg);
     else { const r = await resources.resolve(arg.resource); inputs.push(arg.resource); args.push(await confined(root, r.storage)); }
   }
-  return { code: ('.libPaths(c(c(' + environment.libraryPaths.map(x => JSON.stringify(x)).join(',') + '), .libPaths()))\n') + snapshot.code, args, source: { ...snapshot.source, sha256: snapshot.sha256, inputs, artifacts: input.artifacts, completion: input.completion, requirements: input.requirements }, output: path.relative(root, output), completion: completionPath && path.relative(root, completionPath) };
+  return { code: ('.libPaths(c(c(' + environment.libraryPaths.map(x => JSON.stringify(x)).join(',') + '), .libPaths()))\n') + snapshot.code, args, source: { ...snapshot.source, sha256: snapshot.sha256, inputs, artifacts: input.artifacts, completion: input.completion, requirements: input.requirements }, output: path.relative(root, output).split(path.sep).join('/'), completion: completionPath && path.relative(root, completionPath).split(path.sep).join('/') };
 }
 import { createExecutionInputSchema } from './contract.js';
 

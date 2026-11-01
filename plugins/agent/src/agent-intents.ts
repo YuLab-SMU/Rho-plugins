@@ -11,7 +11,8 @@ export async function retainAgentIntent(descriptor: string, connection: { projec
   const owner = await fs.realpath(path.dirname(descriptor));
   const directory = await stateDirectory(owner, 'mcp-intents-' + digest(canonical([connection.projectId, connection.externalSessionId])));
   const intent = { method, input: { ...input, projectId: connection.projectId } };
-  async function confirmed() { const d = await fs.open(directory, 'r'); try { await d.sync(); } finally { await d.close(); } }
+  // Windows refuses to flush a directory (EPERM); NTFS journals the new name itself.
+  async function confirmed() { if (process.platform === 'win32') return; const d = await fs.open(directory, 'r'); try { await d.sync(); } finally { await d.close(); } }
   function same(existing: any) {
     if (existing?.input?.operationId !== input.operationId) return false;
     requireThat(canonical(existing) === canonical(intent), 'conflict', 'This operationId already names a different retained Agent intent.');

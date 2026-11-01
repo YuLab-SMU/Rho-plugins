@@ -70,8 +70,11 @@ export async function snapshotFile(source: string, directory: string, maximum: n
     requireThat(value.digest === expected && fingerprint(await from.handle.stat({ bigint: true })) === from.fingerprint, 'stale', 'Source changed while the artifact snapshot was written.');
     await target.sync(); await target.close(); target = undefined;
     await fs.rename(temporary, path.join(directory, expected));
-    const durableDirectory = await fs.open(directory, 'r');
-    try { await durableDirectory.sync(); } finally { await durableDirectory.close(); }
+    // Windows refuses to flush a directory (EPERM); NTFS journals the rename itself.
+    if (process.platform !== 'win32') {
+      const durableDirectory = await fs.open(directory, 'r');
+      try { await durableDirectory.sync(); } finally { await durableDirectory.close(); }
+    }
   } finally { await target?.close(); await from.handle.close(); await fs.rm(temporary, { force: true }); }
 }
 

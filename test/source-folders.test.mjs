@@ -2,13 +2,14 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
+import { tmpdir } from 'node:os';
 import { Documents } from '@rho-workspace/plugin-documents';
 import { Files, ProjectPaths } from '@rho-workspace/plugin-files';
 import { planExecution } from '@rho-workspace/plugin-r';
 import { digest } from '@rho-workspace/plugin-contracts';
 
 test('selected source folders retain distinct files, shared alias buffers and actual conditional saves', async () => {
-  const root = await fs.mkdtemp('/private/tmp/rho-sources-');
+  const root = await fs.mkdtemp(process.platform === 'win32' ? path.join(await fs.realpath(tmpdir()), 'rho-sources-') : '/private/tmp/rho-sources-');
   try {
     const workspace = path.join(root, 'workspace'), a = path.join(root, 'a'), b = path.join(root, 'b');
     for (const folder of [workspace, a, b]) await fs.mkdir(folder);

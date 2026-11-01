@@ -4,7 +4,8 @@
 # preceded on standard output by a numbered mark, so the reader can put it in its place among
 # the printed lines. Code runs in the global environment of this one process, top-level
 # expression by top-level expression, and the first error stops the rest of the cell. An
-# interrupt (SIGINT) stops the cell that is running and leaves the session and its variables.
+# interrupt (SIGINT; on Windows a Ctrl+Break on the session's console) stops the cell that is
+# running and leaves the session and its variables.
 # The runner's own names live in a local environment, so the global one holds only what the
 # code defines.
 local({
@@ -15,8 +16,11 @@ if (!requireNamespace("jsonlite", quietly = TRUE)) {
 setwd(commandArgs(trailingOnly = TRUE)[[1]])
 # Node hands over descriptor 3 as a socket. macOS opens it as /dev/fd/3; Linux refuses that
 # (ENXIO), so there a cat that ignores the interrupts sent to this process group relays to it.
-answers <- tryCatch(suppressWarnings(file("/dev/fd/3", open = "w", raw = TRUE)),
-  error = function(e) pipe("trap '' INT; exec cat >&3", open = "w"))
+# R on Windows cannot name descriptor 3; there the host serves a named pipe and names it.
+pipe_name <- Sys.getenv("RHO_KERNEL_ANSWERS")
+answers <- if (nzchar(pipe_name)) file(pipe_name, open = "wb") else
+  tryCatch(suppressWarnings(file("/dev/fd/3", open = "w", raw = TRUE)),
+    error = function(e) pipe("trap '' INT; exec cat >&3", open = "w"))
 emit <- function(x) { writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, null = "null", digits = NA, force = TRUE), answers); flush(answers) }
 marks <- 0L
 # An answer about the running cell, after a mark that follows everything printed before it.
@@ -96,12 +100,13 @@ lineage_of <- function(code) {
 # The strings that name a place in the project, each as its project path, with the file's or
 # folder's size and time before the cell. A path outside the project is not followed.
 project_paths <- function(strings, most = 32L) {
-  root <- normalizePath(getwd())
+  # Paths are compared with / as their separator, which Windows also takes (C:/data/x.csv).
+  root <- normalizePath(getwd(), winslash = "/")
   s <- utils::head(strings[nchar(strings) > 0 & nchar(strings) < 512 & !grepl("[\n\r\t]", strings)], most)
   out <- list()
   for (p in s) {
-    full <- if (grepl("^(/|~)", p)) path.expand(p) else file.path(root, p)
-    dir <- suppressWarnings(normalizePath(dirname(full), mustWork = FALSE))
+    full <- if (grepl("^(/|~|[A-Za-z]:[/\\\\])", p)) path.expand(p) else file.path(root, p)
+    dir <- suppressWarnings(normalizePath(dirname(full), winslash = "/", mustWork = FALSE))
     # The folder may not be there yet: one the cell makes before it writes into it.
     if (basename(full) %in% c(".", "..") || (!dir.exists(dir) && grepl("(^|/)[.][.](/|$)", p))) next
     full <- file.path(dir, basename(full))

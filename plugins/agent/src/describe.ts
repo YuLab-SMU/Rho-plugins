@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { visibleError } from './conversation.js';
+import { ownGroup, signalGroup } from './process-group.js';
 import type { Tokens } from './models.js';
 
 // One sentence on what a file holds, written by the person's own Claude Code with every tool
@@ -54,8 +55,9 @@ export async function describeFile(o: DescribeFile): Promise<FileSentence> {
   ];
   const args = ['-p', '--tools', '', '--strict-mcp-config', '--no-session-persistence', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
     '--system-prompt', describeInstructions[strategy], ...(o.model ? ['--model', o.model] : [])];
-  const child = spawn(o.binary, args, { cwd: o.cwd, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: process.env });
-  const kill = (name: NodeJS.Signals) => { try { if (child.pid) process.kill(-child.pid, name); } catch { /* ended */ } };
+  const child = spawn(o.binary, args, { cwd: o.cwd, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe'], env: process.env });
+  // Windows reuses a process id soon, so a client that has ended is not signalled there.
+  const kill = (name: 'SIGTERM' | 'SIGKILL') => { if (child.pid && !(process.platform === 'win32' && (child.exitCode !== null || child.signalCode !== null))) void signalGroup(child.pid, name); };
   let reason: string | null = null, out = Buffer.alloc(0);
   const stop = (why: string) => { reason ??= why; kill('SIGTERM'); setTimeout(() => kill('SIGKILL'), limits.stopGraceMs).unref(); };
   const timer = setTimeout(() => stop(`The description took longer than ${Math.round(limits.timeoutMs / 1000)} s and was stopped.`), limits.timeoutMs);

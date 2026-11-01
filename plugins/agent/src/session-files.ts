@@ -16,8 +16,8 @@ export async function observeSessionFiles(root: string, references: Array<{ path
   root = await fs.realpath(root);
   const selected = new Map<string, SessionFile['references']>(); let omitted = 0;
   for (const ref of references) {
-    const relative = path.relative(root, path.resolve(root, ref.path));
-    if (!relative || relative.startsWith('..' + path.sep) || path.isAbsolute(relative) || relative.split(path.sep).some(p => ['..', '.rho', '.git'].includes(p))) { omitted++; continue; }
+    const relative = path.relative(root, path.resolve(root, ref.path)).split(path.sep).join('/');
+    if (!relative || relative.startsWith('../') || path.isAbsolute(relative) || relative.split('/').some(p => ['..', '.rho', '.git'].includes(p))) { omitted++; continue; }
     if (!selected.has(relative)) {
       if (selected.size >= limits.maxFiles) { omitted++; continue; }
       selected.set(relative, []);

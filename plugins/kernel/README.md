@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.5.0 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.5.2 keeps a live R session and a live Python
 session for a project, which an Agent and the person share, on this machine or on a
 server: one the person manages with serverctl, reached through it, or one reached with
 ssh.
@@ -63,6 +63,13 @@ they came. Running the first cell of a language starts that session; reading nev
 starts one. Interrupt sends `SIGINT` and stops the running cell while the session and
 its values remain. Stop ends the session (`SIGTERM`, then `SIGKILL` after a grace
 period); the running cell ends with an error and waiting cells are not run.
+
+On Windows a session on this machine runs `Rscript` or `python` on a console of its own
+without a window. Windows has no signals: interrupt raises Ctrl+Break on that console for R
+and Ctrl+C for Python, whose runner turns its Ctrl+C handling back on so that a wait ends at
+once; Stop raises Ctrl+Break and then ends the process tree. R there cannot open descriptor 3,
+so its answers come on a named pipe the host serves and names in `RHO_KERNEL_ANSWERS`. R and
+Python end printed lines with `\r\n` there; a cell keeps them as `\n`, as elsewhere.
 
 A session can run on a server. A place names the server, a folder there (absolute
 or `~/…`) and setup lines run in that folder before a session starts (`module load R`,
