@@ -188,7 +188,7 @@ const content = [
   'A command keeps its changeId: repeating it returns the same record and never runs it twice.',
   'How a command ended is what Rho observed: an exit code or signal, a requested stop, or unknown.',
 ].join('\n');
-export const plugin = { entryVersion: '1.0' as const, id: 'console', package: '@rho-workspace/plugin-console', version: '0.1.0', requires: [] as string[], capabilities: ['console'], presentation,
+export const plugin = { entryVersion: '1.0' as const, id: 'console', package: '@rho-workspace/plugin-console', version: '0.2.0', requires: [] as string[], capabilities: ['console'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ id: 'console.workspace', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Console', description: 'Explains what the console records and that it runs commands only for the person.' },
     intent: 'Read the commands the person ran and how they ended.', requires: ['console.list', 'console.output'],

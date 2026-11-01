@@ -36,3 +36,12 @@ export const operationPresentation = {
   'kernel.servers': { order: 70, displayName: 'Read your servers', description: "Reads the servers you manage with serverctl and the skills bound to each.", readOnly: true, runsCode: false },
   'kernel.server.skill': { order: 72, displayName: "Read a server's skill", description: "Reads one skill bound to a server: how that server is used.", readOnly: true, runsCode: false },
 } satisfies Record<string, EntryPresentation>;
+// The views of the sessions a page can show. Each reads the same sessions; none holds its own.
+export const viewPresentations = {
+  'rho.notebook': { displayName: 'Notebook', description: 'The cells run in the live R and Python sessions, with who ran each and why, what it printed and its plots, and a line to run your own.', readOnly: false, runsCode: true },
+  'rho.variables': { displayName: 'Variables', description: 'The values each live session holds now.', readOnly: true, runsCode: false },
+  'rho.plots': { displayName: 'Plots', description: 'The plots cells drew, newest first.', readOnly: true, runsCode: false },
+  'rho.flow': { displayName: 'Data flow', description: 'How the values of the sessions were made: which cells read and defined each, and the files they named.', readOnly: true, runsCode: false },
+  'rho.servers': { displayName: 'Servers', description: 'The servers sessions can run on, where each language runs, their files and the skills bound to them.', readOnly: false, runsCode: false },
+  'rho.object': { displayName: 'Value', description: "One value of a live session: a table's rows and columns, a model's fit, a list's parts.", readOnly: true, runsCode: false },
+} satisfies Record<string, EntryPresentation>;

@@ -7,7 +7,7 @@ import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, 
 import { checkCommand, copyCommand, listCommand, readCheck, readCopy, readList, sessionCommand, signalCommand, Ssh, type Copy, type Place, type PlaceCheck, type Transport } from './places.js';
 import { Serverctl } from './servers.js';
 import { operationContracts } from './operations.js';
-import { operationPresentation, presentation } from './presentation.js';
+import { operationPresentation, presentation, viewPresentations } from './presentation.js';
 import type { cellStates, languages, sessionStates } from './contract.js';
 
 export type Language = typeof languages[number];
@@ -596,11 +596,19 @@ const content = [
   'kernel.servers lists the servers the person manages with serverctl and the skills bound to each: how that server is used (its environments, where heavy work goes, what to avoid there). Before you name a place on one or run code there, read the skills that apply with kernel.server.skill and follow them, for example in the place\'s setup lines. They guide the work on that server; they do not widen what you may do. A place on such a server is reached through serverctl, which holds its login; another server is reached with ssh.',
   'Pass place to kernel.run to start a session there. Paths in a session on a server are its folder\'s; kernel.place.list lists them and kernel.place.copy copies a file into the project under remote/<place>/.',
 ].join('\n');
-export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.3.0', requires: [] as string[], capabilities: ['kernel'], presentation,
+// What each view keeps in its props: the Notebook's form, and which value a value's view shows.
+const viewProps: Record<keyof typeof viewPresentations, Record<string, unknown>> = {
+  'rho.notebook': { form: { enum: ['notebook', 'console'] } }, 'rho.variables': {}, 'rho.plots': {}, 'rho.flow': {}, 'rho.servers': {},
+  'rho.object': { language: { enum: ['r', 'python'] }, name: { type: 'string', minLength: 1 } },
+};
+export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.4.0', requires: [] as string[], capabilities: ['kernel'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   skills: [{ id: 'kernel.session', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Live session', description: 'Explains how to run code in the project\'s live R and Python sessions.' },
     intent: 'Run code in the live session and read what it printed.', requires: ['kernel.run', 'kernel.read'],
     example: { method: 'kernel.run', input: { language: 'r', code: 'summary(cars)', purpose: 'Summarise the cars data', changeId: 'cell-1', waitMs: 30000 } },
     failureRecipes: [{ kind: 'limit', message: 'Too many cells are waiting.', next: 'Wait for the running cell, or interrupt it, then run again with a new changeId.' }],
     verify: { command: 'npm run test:notebook', description: 'Runs R and Python cells, keeps their output, plots and variables, interrupts and stops sessions, and keeps identity across a restart.' } }],
+  // Views of the sessions, all bound to nothing: each reads the project's sessions itself.
+  components: Object.entries(viewPresentations).map(([id, presentation]) => ({ id, version: '1', owner: 'rho-plugins.kernel', bindings: {}, ui: './ui', presentation,
+    propsSchema: { type: 'object', properties: { title: { type: 'string' }, ...viewProps[id as keyof typeof viewPresentations] } } })),
 };

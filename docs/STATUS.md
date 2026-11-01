@@ -1,6 +1,6 @@
 # Current component status
 
-Updated: 2026-10-31.
+Updated: 2026-11-01.
 
 Files 0.5.0, Annotations 0.5.2 and Tables 0.5.0 supply immutable captures,
 version-bound human decisions and explicit multi-field comparison. Documents
@@ -19,17 +19,20 @@ from facts and its first lines, the image itself, or the code that made it
 (`describeLimits`); `./models` reads models.dev for image input and prices and
 estimates a call's cost when Claude Code does not know it (`modelCatalogLimits`). Console 0.1.0 runs a person's
 shell commands in the project folder and retains each one's identity, ending and
-bounded output. Notebook 0.1.0 (`plugins/kernel`) keeps a live R and a live Python
+bounded output; 0.2.0 adds `./ui`, the person's command line and records for a page to place
+among its own. Notebook 0.1.0 (`plugins/kernel`) keeps a live R and a live Python
 session per project that an Agent and the person share: cells keep their identity,
 order, output as it is printed, plots and the session's variables; interrupt names a
 cell and stop names a session; sessions end with their host and are recorded so. Its
 `kernel.inspect` reads one value as its session describes it (table, model, vector,
 list, function) with a page of it and the code that reaches each part, without
 starting, waiting for or changing a session, and each cell names the values it made,
-changed and removed. Markdown 0.2.0 ticks to-dos in place, edits with a formatting toolbar
+changed and removed. Notebook 0.4.0 draws its own views: `./ui` holds the Notebook, Variables,
+Plots, Data flow, Servers and a value's view, registered as six components, and `./code` the
+statement, load-code and data-flow functions that moved from Rho. Markdown 0.2.0 ticks to-dos in place, edits with a formatting toolbar
 and hides comment-only lines; its view contract stays 0.1.0. The earlier
 code/highlight/command-output work is retained.
-The owner suite passes 134/134; application composition and installation are checked
+The owner suite passes 161/161; application composition and installation are checked
 by Rho, separately from component checks.
 
 | Owner | Implemented boundary | Material limit |

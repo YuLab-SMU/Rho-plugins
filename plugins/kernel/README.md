@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.3.0 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.4.0 keeps a live R session and a live Python
 session for a project, which an Agent and the person share, on this machine or on a
 server: one the person manages with serverctl, reached through it, or one reached with
 ssh.
@@ -139,6 +139,34 @@ The R session needs R with the `jsonlite` package; the Python session needs Pyth
 manages). State lives under
 `.rho/plugins/kernel/` in the project. The package grants no authority: the
 application decides who may run, interrupt or stop.
+
+## Views
+
+The optional browser entry `./ui` draws the sessions for a page that shows them; React is
+an optional peer. The descriptor registers six views, each version `1` and bound to
+nothing, since each reads the project's sessions itself: the Notebook (`rho.notebook`,
+with its `form`, notebook or console), Variables, Plots, Data flow, Servers and one value
+(`rho.object`, with its `language` and `name`). `kernelEntries` gives a page each view's
+identity and the operations it needs to be readable; running a cell, stopping a session
+or naming a place are checked when the person does them.
+
+The page supplies the scoped client and the project's facts (`UiSnapshot`: the project,
+the page's cursor and the conversations, so a cell names the Agent that ran it), and
+callbacks to open a value, a server's file or a conversation as it places them. Inside a
+conversation's record it passes a `SessionScope`: the cells that conversation's Agent and
+the person ran since it began, up to the moment shown. `KernelShell` takes the page's code
+highlighting and Markdown; without them code stays plain and a server's skill shows as
+written. The views add their own styles once, in the page's color and type variables, and
+use its base controls (`text-button`, `primary`, `secondary`, `inline-error`).
+
+`NotebookPage` is the Notebook as a page, `NotebookWorkSection` the newest cells for an
+overview, `useLiveValues` the sessions' values, and `askCell` and `showOnServer` bring the
+Notebook to a cell and Servers to a file. The pure `./code` entry finds the statement a
+script line belongs to (`statementAt`, `statements`, `unfinished`), writes the code that
+loads a project table or runs a script (`loadCode`, `sourceCode`), and makes Data flow's
+steps and lanes from each cell's `defined`, `used` and `files` (`lineage`, `lanes`).
+The views read at most 300 cells, show 14 lines of code and 12 of output before a click,
+keep 64 plots read, and list the 24 newest plots in Plots.
 
 ```sh
 npm run build

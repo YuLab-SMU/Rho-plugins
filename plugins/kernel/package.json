@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-kernel",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "type": "module",
   "description": "Rho live session plugin: an R and a Python session the Agent and the person run code in, kept with each cell's output, plots and the session's variables",
   "license": "AGPL-3.0-only",
@@ -10,7 +10,9 @@
   "exports": {
     ".": "./dist/index.js",
     "./operations": "./dist/operations.js",
-    "./contract": "./dist/contract.js"
+    "./contract": "./dist/contract.js",
+    "./code": "./dist/code.js",
+    "./ui": "./dist/ui.js"
   },
   "files": [
     "dist",
@@ -24,5 +26,13 @@
   },
   "dependencies": {
     "@rho-workspace/plugin-contracts": "0.4.0"
+  },
+  "peerDependencies": {
+    "react": "19.3.1"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
   }
 }

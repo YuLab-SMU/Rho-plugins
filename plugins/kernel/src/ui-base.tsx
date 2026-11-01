@@ -1,0 +1,75 @@
+// What the Notebook and the views beside it share: the calls they make, the facts they read from
+// the page that shows them, and the few services that page can offer. Each service is optional:
+// code stays plain without highlighting, and a skill's text shows as written without Markdown.
+import { createContext, useContext, type ReactNode } from 'react';
+import type { KernelHost } from './index.js';
+
+export interface UiClient { call(method: string, input: any, signal?: AbortSignal): Promise<any> }
+type Out<K extends keyof KernelHost> = KernelHost[K] extends (...args: any[]) => infer R ? Awaited<R> : never;
+// What each operation the views call returns, as the session host returns it.
+export interface KernelOutputs {
+  'kernel.run': Out<'run'>; 'kernel.read': Out<'read'>; 'kernel.inspect': Inspected; 'kernel.plot': Out<'plot'>;
+  'kernel.interrupt': Out<'interrupt'>; 'kernel.stop': Out<'stop'>; 'kernel.places': Out<'places'>; 'kernel.place.set': Out<'setPlace'>;
+  'kernel.place.check': Out<'check'>; 'kernel.place.list': Out<'list'>; 'kernel.place.copy': Out<'copy'>;
+  'kernel.servers': Out<'servers'>; 'kernel.server.skill': Out<'serverSkill'>;
+}
+// One value as the session describes it (objectSchema in contract.ts): its kind, size and facts,
+// and the part of it asked for: a table's page of rows, a list's children, a vector's values.
+export interface Inspected {
+  state: 'shown' | 'busy' | 'none' | 'missing' | 'timeout' | 'failed' | 'ended';
+  sessionId: string | null; afterCell: number; readAt: string; problem: string | null;
+  object: {
+    name: string; expression: string; kind: 'table' | 'model' | 'vector' | 'list' | 'function' | 'value' | 'other';
+    type: string; size: string; bytes: number; facts: { label: string; value: string }[]; trail: { index: number; name: string }[];
+    children?: { items: { expression: string; index: number; name: string; size: string; summary: string; type: string }[]; offset: number; total: number };
+    table?: {
+      columns: { missing: number; name: string; numeric: boolean; summary: string; type: string; values: string[] }[];
+      columnsTotal: number; offset: number; rowLabels: string[]; rows: number;
+      sort?: { column: number; descending: boolean } | null; sortRefused?: string | null;
+    };
+    text?: { cut: boolean; label: string; text: string };
+    values?: { items: { name: string | null; value: string }[]; offset: number; total: number };
+  } | null;
+}
+export const call = <M extends keyof KernelOutputs>(client: UiClient, method: M, input: object, signal?: AbortSignal) => client.call(method, input, signal) as Promise<KernelOutputs[M]>;
+// The sessions are off for this project, or this page may not use them.
+export const refused = (error: unknown) => ['unavailable', 'unauthorized'].includes((error as { error?: { kind?: string } } | null)?.error?.kind ?? '');
+
+// The facts of the page these views read: the project, the page's place in its event stream, and
+// the conversations whose Agents ran cells, so a cell can name who ran it.
+export interface UiSnapshot {
+  project: { id: string; root: string };
+  cursor: number;
+  conversations?: ReadonlyArray<{ conversationId: string; principal?: string | null; client?: string | null; title?: string | null }>;
+}
+// One conversation's share of the sessions, as its Studio shows them: the cells its Agent and the
+// person ran since it began, up to `at` during a replay (null for now).
+export interface SessionScope { principal: string | null; since: number | null; at: number | null }
+
+export interface KernelShell {
+  highlight?(code: string, language: string): Promise<DocumentFragment | null>;
+  markdown?(text: string): ReactNode;
+}
+const Shell = createContext<KernelShell>({});
+export const ShellProvider = Shell.Provider;
+export const useShell = () => useContext(Shell);
+export const withShell = (shell: KernelShell | undefined, node: ReactNode) => shell ? <ShellProvider value={shell}>{node}</ShellProvider> : node;
+
+export const clock = (ms: number, seconds = false) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' });
+export function durationText(ms: number) {
+  if (ms < 10_000) return (Math.max(ms, 100) / 1000).toFixed(1) + ' s';
+  if (ms < 60_000) return Math.round(ms / 1000) + ' s';
+  const minutes = Math.floor(ms / 60_000), seconds = Math.round((ms % 60_000) / 1000);
+  return minutes + ' min' + (seconds ? ' ' + seconds + ' s' : '');
+}
+export const agentName = (client?: string | null) => client === 'codex' ? 'Codex' : client === 'claude-code' ? 'Claude Code' : 'Agent';
+export function when(iso: string, now = new Date()) {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return { text: '', full: '' };
+  const day = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const days = Math.round((day(now) - day(at)) / 86400000);
+  const text = days === 0 ? 'Today at ' + at.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+    : days === 1 ? 'Yesterday'
+    : at.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(at.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }) });
+  return { text, full: at.toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' }) };
+}
