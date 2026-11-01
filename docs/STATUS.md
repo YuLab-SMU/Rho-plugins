@@ -37,9 +37,11 @@ and hides comment-only lines; its view contract stays 0.1.0. The earlier
 code/highlight/command-output work is retained.
 Agent 0.4.24 has both ACP adapters drive the person's installed `claude` and `codex`
 (selected path, `CLAUDE_CODE_EXECUTABLE`/`CODEX_PATH`, else `PATH`), so an application
-can omit the adapters' optional native clients; the pack script adds Notebook and
+can omit the adapters' optional native clients. A missing client fails the message
+before the adapter starts, with a reason naming it ("Codex was not found on PATH"),
+where the adapters reported only a closed connection. The pack script adds Notebook and
 Skills, with Notebook's two runners as its only non-`dist` files.
-The owner suite passes 164/164; application composition and installation are checked
+The owner suite passes 165/165; application composition and installation are checked
 by Rho, separately from component checks.
 
 | Owner | Implemented boundary | Material limit |

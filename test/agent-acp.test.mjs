@@ -246,3 +246,20 @@ test('ACP adapters drive the selected or installed client, not a bundled native 
   assert.equal(acpEnvironment('claude', { CLAUDE_CODE_EXECUTABLE: '/opt/claude' }, '/selected/claude').CLAUDE_CODE_EXECUTABLE, '/selected/claude');
   assert.equal(acpEnvironment('codex', { HOME: '/home/x' }).HOME, '/home/x');
 });
+test('a missing client fails the message with its name before the adapter starts', async () => {
+  const { missingClient } = await import('../plugins/agent/dist/acp-command.js');
+  const root = await fs.mkdtemp('/tmp/rho-acp-client-'), bin = path.join(root, 'bin'); await fs.mkdir(bin);
+  try {
+    assert.match(missingClient('codex', { PATH: bin }), /^Codex was not found on PATH \(codex\)\./);
+    assert.match(missingClient('claude', { PATH: bin, CLAUDE_CODE_EXECUTABLE: path.join(bin, 'claude') }), /^Claude Code was not found at .*\/bin\/claude\./);
+    await fs.writeFile(path.join(bin, 'codex'), '#!/bin/sh\n', { mode: 0o755 });
+    assert.equal(missingClient('codex', { PATH: bin }), null);
+    await fs.writeFile(path.join(bin, 'claude'), 'not executable', { mode: 0o644 });
+    assert.notEqual(missingClient('claude', { PATH: bin }), null);
+    const driver = new CodexAcpConversation({ cwd: root, mcpServers: [], env: { PATH: path.join(root, 'empty'), CODEX_PATH: '' }, limits: { maxAgentTurns: 8, maxOutputBytes: 32768, maxLineBytes: 4096, stopGraceMs: 100, connectTimeoutMs: 3000 } });
+    const t = turn('hello'), done = await driver.run(t.request);
+    assert.equal(done.state, 'failed'); assert.match(done.problem, /^Codex was not found on PATH/);
+    assert.equal(t.events.some(e => e.type === 'started'), false, 'no adapter process was started');
+    await driver.close();
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
