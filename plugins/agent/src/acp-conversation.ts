@@ -186,9 +186,19 @@ export class AcpConversation implements AgentConversation {
       let model: string | undefined;
       this.observationOrigin = this.sessionId ? 'history' : 'initial';
       if (this.sessionId) {
-        if (!initialized.agentCapabilities?.loadSession) throw new Error('This Agent cannot load the original session. Nothing was resent.');
-        const loaded = await connection.agent.request(acp.methods.agent.session.load, { ...params, sessionId: this.sessionId });
-        this.settings = (loaded as { configOptions?: acp.SessionConfigOption[] | null }).configOptions ?? [];
+        const caps: any = initialized.agentCapabilities;
+        if (caps?.loadSession) {
+          const loaded = await connection.agent.request(acp.methods.agent.session.load, { ...params, sessionId: this.sessionId });
+          this.settings = (loaded as { configOptions?: acp.SessionConfigOption[] | null }).configOptions ?? [];
+        } else if (caps?.sessionCapabilities?.resume) {
+          // ACP session/resume (e.g. dsh): restore the persisted session on a fresh process. It composes
+          // the request's MCP connections and validates only the workspace, so the non-standard
+          // systemPrompt is omitted; history is restored from the Agent's own persistence, not replayed.
+          const resumed: any = await connection.agent.request(acp.methods.agent.session.resume, { cwd: o.cwd, mcpServers: o.mcpServers, sessionId: this.sessionId } as any);
+          this.settings = resumed?.configOptions ?? [];
+        } else {
+          throw new Error('This Agent cannot load the original session. Nothing was resent.');
+        }
       } else {
         const created = await connection.agent.request(acp.methods.agent.session.new, params);
         this.sessionId = created.sessionId; this.settings = created.configOptions ?? [];
