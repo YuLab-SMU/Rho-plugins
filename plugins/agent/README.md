@@ -339,8 +339,11 @@ authorization; explicit release remains possible after an operation is disabled.
 Defaults: 16 KiB reply/page (64 KiB maximum); `RHO_MAX_RESULT_BYTES` 16 MiB,
 `RHO_MAX_RETAINED_RESULT_BYTES` 64 MiB, `RHO_MAX_RESULTS` 64. Capacity is reserved
 before invoking an operation; exhaustion refuses dispatch and preserves existing
-results. Results survive MCP restart. A transport overrun keeps the outcome
-uncertain and directs observation of the original identity, never replacement work.
+results. Results survive MCP restart. One call to the service may take
+`RHO_TRANSPORT_MS` (30 s), plus the `waitMs` it asks the service to wait (at most ten
+minutes, as for a Notebook cell); the call uses `node:http`, whose wait for a reply has
+no limit of its own. A transport overrun keeps the outcome uncertain and directs
+observation of the original identity, never replacement work.
 
 The pure `./layered-contract` entry defines the four tool inputs and Agent note
 props. `./layered` provides the bounded complete-object cache and caller checks;

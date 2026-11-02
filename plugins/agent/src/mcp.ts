@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as fs from 'node:fs/promises';
+import http from 'node:http';
 import path from 'node:path';
 import { retainAgentIntent } from './agent-intents.js';
 import { layeredSchemas } from './layered-contract.js';
@@ -21,20 +22,29 @@ const limits = { ...resultLimits,
   maxRetainedBytes: Number(process.env.RHO_MAX_RETAINED_RESULT_BYTES ?? resultLimits.maxRetainedBytes),
   maxResults: Number(process.env.RHO_MAX_RESULTS ?? resultLimits.maxResults) };
 requireThat(Object.values(limits).every(n => Number.isSafeInteger(n) && n > 0) && limits.maxResultBytes > 2048 && limits.maxRetainedBytes >= limits.maxResultBytes, 'invalid', 'Invalid result retention budget.');
+// The transport's own allowance for one call. An operation asked to wait for its work (kernel.run's
+// waitMs, at most ten minutes) gets that long on top; otherwise a cell still running within the
+// wait it was given ended the call at 30 s with an unknown outcome, and the Agent left the session.
+const transportMs = Number(process.env.RHO_TRANSPORT_MS ?? 30000);
+requireThat(Number.isSafeInteger(transportMs) && transportMs > 0, 'invalid', 'Invalid transport allowance.');
+const allowance = (input: Record<string, unknown>) => transportMs + (Number.isSafeInteger(input.waitMs) && (input.waitMs as number) > 0 ? Math.min(input.waitMs as number, 600000) : 0);
+// node:http rather than fetch: fetch stops waiting for a response's headers after 300 s whatever
+// the signal allows, and the service answers a waited cell only when the cell ends (P3, run 2).
 async function invoke(method: string, input: Record<string, unknown> = {}, contractRef?: string) {
-  const response = await fetch(new URL('/api/v2/' + method, endpoint), {
-    method: 'POST', headers: { authorization: 'Bearer ' + c.token, 'content-type': 'application/json', ...(contractRef ? { 'x-rho-contract-ref': contractRef } : {}) },
-    body: JSON.stringify({ ...input, projectId: c.projectId }), signal: AbortSignal.timeout(30000)
+  const body = JSON.stringify({ ...input, projectId: c.projectId });
+  const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
+    const request = http.request(new URL('/api/v2/' + method, endpoint), { method: 'POST', signal: AbortSignal.timeout(allowance(input)),
+      headers: { authorization: 'Bearer ' + c.token, 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...(contractRef ? { 'x-rho-contract-ref': contractRef } : {}) } }, resolve);
+    request.once('error', reject); request.end(body);
   });
-  const reader = response.body!.getReader(), chunks: Uint8Array[] = []; let size = 0;
-  for (;;) {
-    const part = await reader.read(); if (part.done) break;
-    size += part.value.byteLength;
+  const chunks: Buffer[] = []; let size = 0;
+  for await (const part of response as AsyncIterable<Buffer>) {
+    size += part.byteLength;
     if (size > limits.maxResultBytes - 2048) {
-      await reader.cancel();
+      response.destroy();
       throw new Fault('limit', 'The response exceeded the transport budget. The operation may have completed; observe its original identity, never submit replacement work.', { limit: 'maxResultBytes', maximum: limits.maxResultBytes, outcomeUnknown: true });
     }
-    chunks.push(part.value);
+    chunks.push(part);
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }

@@ -44,7 +44,9 @@ Skills, with Notebook's two runners as its only non-`dist` files.
 Agent 0.4.26 passes Claude Code a step cap only when the application sets one, and takes
 `preferred` settings for a new session: each applies only where the person chose nothing,
 the Agent offers the value and the session opened with a value it replaces (Rho prefers Auto
-over Manual).
+over Manual). Agent 0.4.27's MCP bridge waits for a call as long as the `waitMs` it asked
+for plus 30 s, over `node:http`: a 30 s cut-off, and fetch's 300 s one, had ended Notebook
+cells still running within their wait with an unknown outcome.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a
