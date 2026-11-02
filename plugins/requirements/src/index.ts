@@ -19,14 +19,16 @@ export function libraryPrefix(e: Environment) { return '.libPaths(c(c(' + e.libr
 export async function checkRequirements(root: string, requirements: Requirement[], rscript: string) {
   requireThat(Array.isArray(requirements) && requirements.length <= 64 && new Set(requirements.map(x => x.package)).size === requirements.length && requirements.every(x => /^[A-Za-z][A-Za-z0-9.]*$/.test(x.package) && ['cran', 'bioconductor'].includes(x.source) && (!x.minimumVersion || /^[0-9]+([.-][0-9]+)*$/.test(x.minimumVersion))), 'invalid', 'Select explicit unique R package requirements.');
   const environment = { rscript, libraryPaths: [path.join(root, '.rho/plugins/R-library')] };
-  // Base R only: a probe never requires a scientific package or a Core Host. The code is one line:
-  // Rscript 4.6.2 on Windows ran only the first line of a multi-line -e and exited 0.
-  const code = [libraryPrefix(environment).trimEnd(), `cat("R\\t", R.version.string, "\\n", sep="")`,
+  // Base R only: a probe never requires a scientific package or a Core Host. The code is one line of
+  // fixed text and checked package names; the library path arrives in the environment. On a Windows
+  // runner, Rscript 4.6.2 ran only the first line of a multi-line -e, and nothing of one that named a
+  // project path with characters cmd treats specially, and exited 0 both times.
+  const code = ['.libPaths(c(Sys.getenv("RHO_R_LIBRARY"), .libPaths()))', `cat("R\\t", R.version.string, "\\n", sep="")`,
     `pkgs <- c(${requirements.map(x => JSON.stringify(x.package)).join(',')})`,
     `minimum <- c(${requirements.map(x => JSON.stringify(x.minimumVersion ?? '0')).join(',')})`,
     `for (i in seq_along(pkgs)) { p <- pkgs[[i]]; found <- find.package(p, quiet=TRUE); v <- if(length(found)) as.character(utils::packageVersion(p)) else ""; ok <- length(found) && utils::compareVersion(v, minimum[[i]]) >= 0L; cat(p, if(ok) "present" else "missing", v, sep="\\t"); cat("\\n") }`].join('; ');
   const native = await new Promise<any>(resolve => {
-    const child = spawn(rscript, ['--vanilla', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(rscript, ['--vanilla', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, RHO_R_LIBRARY: environment.libraryPaths[0] } });
     let output = ''; let exceeded = false;
     const timer = setTimeout(() => { exceeded = true; child.kill('SIGKILL'); }, 20000);
     child.stdout.on('data', b => { if (Buffer.byteLength(output) + b.length > 1024 * 1024) { exceeded = true; child.kill('SIGKILL'); } else output += b.toString(); }); child.stderr.resume();

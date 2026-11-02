@@ -60,9 +60,11 @@ cmd.exe unless a shell is named. Agent 0.4.25 looks for `claude` and `codex` wit
 extensions (`claude.exe`, an npm `codex.cmd`) and compares Windows paths in either case.
 Files 0.5.1, Documents 0.4.10 and R 0.4.2 name project paths with `/`, and skip directory
 flushes, which Windows refuses (EPERM). Annotations, Markdown and HTML accept Documents
-0.4.10; Markdown named only 0.4.7 before. Requirements 0.4.1 sends its dependency probe as one
-line: on Rho's Windows CI runner, Rscript 4.6.2 ran only the first line of the multi-line `-e`
-and exited 0, so every managed R run there was refused as unknown. Its output is split on CRLF too.
+0.4.10; Markdown named only 0.4.7 before. Requirements 0.4.2 sends its dependency probe as one
+line of fixed text, with the project library path in the environment: on Rho's Windows CI runner,
+Rscript 4.6.2 ran only the first line of a multi-line `-e`, and nothing of one naming a path with
+characters cmd treats specially, exiting 0 both times, so managed R runs there were refused as
+unknown. Its output is split on CRLF too.
 The owner suite passes 165/165 on macOS. On Windows 11 x64 (Node 22.23.4, R 4.5.1, Python
 3.13.9) it passes 158 of 166 and skips 8 that use Unix shell scripts as stand-ins: three for
 Claude Code (file descriptions) and five for ssh and serverctl (remote places). Real Claude
