@@ -19,16 +19,12 @@ export function libraryPrefix(e: Environment) { return '.libPaths(c(c(' + e.libr
 export async function checkRequirements(root: string, requirements: Requirement[], rscript: string) {
   requireThat(Array.isArray(requirements) && requirements.length <= 64 && new Set(requirements.map(x => x.package)).size === requirements.length && requirements.every(x => /^[A-Za-z][A-Za-z0-9.]*$/.test(x.package) && ['cran', 'bioconductor'].includes(x.source) && (!x.minimumVersion || /^[0-9]+([.-][0-9]+)*$/.test(x.minimumVersion))), 'invalid', 'Select explicit unique R package requirements.');
   const environment = { rscript, libraryPaths: [path.join(root, '.rho/plugins/R-library')] };
-  // Base R only: a probe never requires a scientific package or a Core Host.
-  const code = libraryPrefix(environment) + `cat("R\\t", R.version.string, "\\n", sep="")
-pkgs <- c(${requirements.map(x => JSON.stringify(x.package)).join(',')})
-minimum <- c(${requirements.map(x => JSON.stringify(x.minimumVersion ?? '0')).join(',')})
-for (i in seq_along(pkgs)) {
- p <- pkgs[[i]]; found <- find.package(p, quiet=TRUE)
- v <- if(length(found)) as.character(utils::packageVersion(p)) else ""
- ok <- length(found) && utils::compareVersion(v, minimum[[i]]) >= 0L
- cat(p, if(ok) "present" else "missing", v, sep="\\t"); cat("\\n")
-}`;
+  // Base R only: a probe never requires a scientific package or a Core Host. The code is one line:
+  // Rscript 4.6.2 on Windows ran only the first line of a multi-line -e and exited 0.
+  const code = [libraryPrefix(environment).trimEnd(), `cat("R\\t", R.version.string, "\\n", sep="")`,
+    `pkgs <- c(${requirements.map(x => JSON.stringify(x.package)).join(',')})`,
+    `minimum <- c(${requirements.map(x => JSON.stringify(x.minimumVersion ?? '0')).join(',')})`,
+    `for (i in seq_along(pkgs)) { p <- pkgs[[i]]; found <- find.package(p, quiet=TRUE); v <- if(length(found)) as.character(utils::packageVersion(p)) else ""; ok <- length(found) && utils::compareVersion(v, minimum[[i]]) >= 0L; cat(p, if(ok) "present" else "missing", v, sep="\\t"); cat("\\n") }`].join('; ');
   const native = await new Promise<any>(resolve => {
     const child = spawn(rscript, ['--vanilla', '-e', code], { stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; let exceeded = false;
@@ -37,7 +33,7 @@ for (i in seq_along(pkgs)) {
     child.on('error', () => { clearTimeout(timer); resolve({ probe: 'unknown', reason: 'Selected Rscript is unavailable.' }); });
     child.on('close', exit => {
       clearTimeout(timer);
-      const lines = output.trimEnd().split('\n');
+      const lines = output.trimEnd().split(/\r?\n/);
       if (exit !== 0 || exceeded || !lines[0]?.startsWith('R\t') || lines.length !== requirements.length + 1) return resolve({ probe: 'unknown', reason: 'Dependency probe did not return complete bounded facts.' });
       const packages = lines.slice(1).map(line => { const [pkg, status, version] = line.split('\t'); return { package: pkg, status, version: version || null }; });
       resolve({ probe: 'checked', R: lines[0].slice(2), packages });
