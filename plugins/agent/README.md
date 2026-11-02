@@ -117,7 +117,11 @@ embedding configuration, never values supplied by model output.
 Session settings are the Agent's own ACP `configOptions` (model, effort, mode and the
 like). `config` holds a person's choices by setting id; they are set once the session
 opens and before any prompt, and a setting or value the Agent does not offer fails that
-message with nothing sent. `configure(id, value)` changes one between messages on a
+message with nothing sent. `preferred` holds the embedding application's defaults for a
+new session, such as `{ mode: { value: 'auto', replaces: ['default'] } }`: each applies only
+when `config` names nothing for that setting, the Agent offers the value and the session
+opened with a value it replaces, and is skipped otherwise; a loaded session keeps its own.
+`configure(id, value)` changes one between messages on a
 connected session; `configuration` returns what the session offers now. `inspect()`
 opens a new session only to read its settings, deletes it when the Agent supports
 `session/delete`, and ends the process; it sends no prompt and is an explicit action,
@@ -125,8 +129,9 @@ never a read.
 
 Required process limits protect stdout/stderr bytes per prompt (`maxOutputBytes`),
 one NDJSON line before decoding (`maxLineBytes`), session setup time
-(`connectTimeoutMs`), cancellation wait (`stopGraceMs`) and native step count
-(`maxAgentTurns`, Claude only). Codex uses the embedding application's wall/output
+(`connectTimeoutMs`) and cancellation wait (`stopGraceMs`). An optional native step
+count (`maxAgentTurns`, Claude only) is passed to Claude Code; without it Claude Code
+applies no step cap of its own. Codex uses the embedding application's wall/output
 limits, without a fabricated native step cap. Exceeding output/line/setup limits closes the connection and keeps
 received output; a dispatched prompt without a result stays unknown. The embedding
 application also bounds retained content and connections. Stderr is drained but not

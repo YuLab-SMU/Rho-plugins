@@ -12,12 +12,14 @@ let settings = process.env.ACP_CONFIG ? [
   { id: 'effort', name: 'Effort', category: 'thought_level', type: 'select', currentValue: 'high', options: [{ value: 'low', name: 'Low' }, { value: 'high', name: 'High' }, { value: 'max', name: 'Max' }] },
   { id: 'fast', name: 'Fast mode', category: 'model_config', type: 'boolean', currentValue: false },
 ] : undefined;
+// A permission mode, as Claude's adapter offers it, opened in the mode a test names.
+if (process.env.ACP_MODE) (settings ??= []).push({ id: 'mode', name: 'Mode', category: 'mode', type: 'select', currentValue: process.env.ACP_MODE, options: [{ value: 'default', name: 'Manual' }, { value: 'acceptEdits', name: 'Accept edits' }, { value: 'plan', name: 'Plan' }, { value: 'auto', name: 'Auto' }] });
 log({ kind: 'spawn', pid: process.pid });
 createInterface({ input: process.stdin }).on('line', line => {
   const r = JSON.parse(line), p = r.params;
   const reply = result => send({ id: r.id, result });
   if (!r.method) { if (permission) { log({ kind: 'choice', result: r.result }); permission(); permission = null; } return; }
-  log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text, ...(r.method === 'session/new' ? { claudeMetadata: !!p?._meta?.claudeCode, plugins: p?._meta?.claudeCode?.options?.plugins } : {}), ...(r.method === 'session/new' || r.method === 'session/load' ? { systemPrompt: p?.systemPrompt } : {}) });
+  log({ kind: r.method, session: p?.sessionId, text: p?.prompt?.[0]?.text, ...(r.method === 'session/new' ? { claudeMetadata: !!p?._meta?.claudeCode, plugins: p?._meta?.claudeCode?.options?.plugins, maxTurns: p?._meta?.claudeCode?.options?.maxTurns } : {}), ...(r.method === 'session/new' || r.method === 'session/load' ? { systemPrompt: p?.systemPrompt } : {}) });
   if (r.method === 'initialize') r_terminal = p?.clientCapabilities?._meta?.terminal_output === true;
   if (r.method === 'initialize') return reply({ protocolVersion: 1, agentInfo: { name: 'fault-fixture', version: '1' }, agentCapabilities: { loadSession: !process.env.ACP_NO_LOAD, ...(process.env.ACP_CAN_CLOSE ? { sessionCapabilities: { close: {}, delete: {} } } : {}) } });
   if (r.method === 'session/close' || r.method === 'session/delete') return reply({});

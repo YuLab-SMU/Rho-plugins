@@ -71,7 +71,8 @@ export interface AgentConversation {
   close(): Promise<void>;
 }
 export interface AgentProcessLimits {
-  maxAgentTurns: number; maxOutputBytes: number; maxLineBytes: number;
+  // Claude Code's own step cap for one message; absent, Claude Code applies none.
+  maxAgentTurns?: number; maxOutputBytes: number; maxLineBytes: number;
   stopGraceMs: number; connectTimeoutMs: number;
 }
 export interface AgentMcpServer { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> }

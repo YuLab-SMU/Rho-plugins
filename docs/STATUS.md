@@ -41,6 +41,10 @@ can omit the adapters' optional native clients. A missing client fails the messa
 before the adapter starts, with a reason naming it ("Codex was not found on PATH"),
 where the adapters reported only a closed connection. The pack script adds Notebook and
 Skills, with Notebook's two runners as its only non-`dist` files.
+Agent 0.4.26 passes Claude Code a step cap only when the application sets one, and takes
+`preferred` settings for a new session: each applies only where the person chose nothing,
+the Agent offers the value and the session opened with a value it replaces (Rho prefers Auto
+over Manual).
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

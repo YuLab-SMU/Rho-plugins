@@ -48,6 +48,11 @@ export interface AcpConversationOptions {
   // ACP setting id. Applied once the session exists and before any message is sent; a
   // setting or value the Agent does not offer fails the message instead of being dropped.
   config?: Record<string, string | boolean>;
+  // Settings the embedding application prefers for a new session, by ACP setting id. Each
+  // applies only when the person chose nothing for it in `config`, the Agent offers its value
+  // and the session opened with a value it replaces, so a choice made in the Agent's own
+  // settings stays. A loaded session keeps what it had.
+  preferred?: Record<string, { value: string | boolean; replaces: Array<string | boolean> }>;
   observation?: SessionObservation; observe?: (observation: SessionObservation) => void;
   observationLimits?: Partial<typeof sessionObservationLimits>;
   // The person's installed client the selected adapter starts; a missing one fails the
@@ -55,6 +60,9 @@ export interface AcpConversationOptions {
   client?: AcpAgent;
 }
 
+// Whether a setting the Agent offers accepts this value.
+const offers = (option: acp.SessionConfigOption, value: string | boolean) => option.type === 'boolean' ? typeof value === 'boolean'
+  : typeof value === 'string' && option.options.some(entry => 'group' in entry ? entry.options.some(v => v.value === value) : entry.value === value);
 /** One selected ACP connection, independent of views and prompt turns. */
 export class AcpConversation implements AgentConversation {
   private child: ChildProcessWithoutNullStreams | null = null;
@@ -184,6 +192,10 @@ export class AcpConversation implements AgentConversation {
       } else {
         const created = await connection.agent.request(acp.methods.agent.session.new, params);
         this.sessionId = created.sessionId; this.settings = created.configOptions ?? [];
+        for (const [id, preferred] of Object.entries(o.preferred ?? {})) {
+          const option = this.settings.find(x => x.id === id);
+          if (option && !(id in (o.config ?? {})) && preferred.replaces.includes(option.currentValue) && offers(option, preferred.value)) await this.set(id, preferred.value);
+        }
       }
       for (const [id, value] of Object.entries(o.config ?? {})) await this.set(id, value);
       model = this.currentModel() ?? o.model;
@@ -203,7 +215,7 @@ export class AcpConversation implements AgentConversation {
     const option = this.settings.find(x => x.id === configId);
     if (!option) throw new Error(`The Agent does not offer the setting ${configId}. Nothing was sent.`);
     if (option.currentValue === value) return;
-    if (option.type === 'boolean' ? typeof value !== 'boolean' : typeof value !== 'string' || !option.options.some(entry => 'group' in entry ? entry.options.some(v => v.value === value) : entry.value === value))
+    if (!offers(option, value))
       throw new Error(`The Agent does not offer ${String(value)} for ${option.name}. Nothing was sent.`);
     const changed = await this.connection!.agent.request(acp.methods.agent.session.setConfigOption, option.type === 'boolean'
       ? { sessionId: this.sessionId!, configId, type: 'boolean', value: value as boolean } : { sessionId: this.sessionId!, configId, value: value as string });

@@ -115,6 +115,32 @@ test('a Claude session loads the plugin directories it is given, without their M
     assert.deepEqual((await f.calls()).find(x => x.kind === 'session/new').plugins, [{ type: 'local', path: '/tmp/rho-plugin-a', skipMcpDiscovery: true }]);
   } finally { await f.close(); }
 });
+
+test('a preferred setting applies to a new session over the value it replaces, never over a choice or a loaded session', async () => {
+  const preferred = { mode: { value: 'auto', replaces: ['default'] }, effort: { value: 'max', replaces: ['high'] } };
+  const sets = async (env, sessionId, overrides = {}) => {
+    const f = await setup(env);
+    try {
+      assert.equal((await f.create(sessionId, { preferred, ...overrides }).run(turn('hello').request)).state, 'completed');
+      return (await f.calls()).filter(c => c.kind === 'set').map(c => [c.configId, c.value]);
+    } finally { await f.close(); }
+  };
+  assert.deepEqual(await sets({ ACP_MODE: 'default' }), [['mode', 'auto']], 'Manual becomes Auto; an unoffered setting is skipped');
+  assert.deepEqual(await sets({ ACP_MODE: 'plan' }), [], 'a mode chosen in the Agent\'s own settings stays');
+  assert.deepEqual(await sets({ ACP_MODE: 'default' }, undefined, { config: { mode: 'acceptEdits' } }), [['mode', 'acceptEdits']], 'the person\'s choice wins');
+  assert.deepEqual(await sets({ ACP_MODE: 'default' }, undefined, { preferred: { mode: { value: 'bypass', replaces: ['default'] } } }), [], 'a value the Agent does not offer is skipped');
+  assert.deepEqual(await sets({ ACP_MODE: 'default' }, 'original-session'), [], 'a loaded session keeps its mode');
+});
+
+test('Claude Code receives a step cap only when the embedding application sets one', async () => {
+  const f = await setup();
+  try {
+    assert.equal((await f.create().run(turn('capped').request)).state, 'completed');
+    const { maxAgentTurns, ...uncapped } = f.options.limits;
+    assert.equal((await f.create(undefined, { limits: uncapped }).run(turn('uncapped').request)).state, 'completed');
+    assert.deepEqual((await f.calls()).filter(x => x.kind === 'session/new').map(x => x.maxTurns), [maxAgentTurns, undefined]);
+  } finally { await f.close(); }
+});
 test('a command step keeps its exit code and the last lines it printed, without terminal codes', async () => {
   const f = await setup();
   try {

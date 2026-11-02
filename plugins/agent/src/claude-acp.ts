@@ -11,7 +11,7 @@ export class ClaudeAcpConversation extends AcpConversation {
     super({ ...o, command: o.command ?? acpCommand('claude'), ...(o.command ? {} : { client: 'claude' as const }),
       // Expose native task tools on custom models; retain native permission policy.
       env: acpEnvironment('claude', { CLAUDE_CODE_ENABLE_TODO_TOOLS: '1', ...process.env, ...o.env }, o.claude),
-      sessionMeta: { claudeCode: { options: { maxTurns: o.limits.maxAgentTurns, promptSuggestions: false,
+      sessionMeta: { claudeCode: { options: { ...(o.limits.maxAgentTurns !== undefined ? { maxTurns: o.limits.maxAgentTurns } : {}), promptSuggestions: false,
         ...(o.model ? { model: o.model } : {}), ...(o.settingSources ? { settingSources: o.settingSources } : {}),
         ...(o.plugins?.length ? { plugins: o.plugins.map(p => ({ type: 'local', path: p, skipMcpDiscovery: true })) } : {}),
         allowedTools: [...new Set([...['rho_index', 'rho_resolve', 'rho_call', 'rho_read'].map(x => 'mcp__rho__' + x), ...(o.allowedTools ?? [])])]
