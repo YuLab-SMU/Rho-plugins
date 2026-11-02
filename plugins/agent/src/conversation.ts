@@ -84,5 +84,6 @@ export function visibleError(error: unknown, env: NodeJS.ProcessEnv = process.en
 export { ClaudeAcpConversation, type ClaudeAcpOptions } from './claude-acp.js';
 export { writeClaudePlugin, claudePluginLimits, type ClaudePlugin, type ClaudePluginSkill, type ClaudePluginHook } from './claude-plugin.js';
 export { CodexAcpConversation, type CodexAcpOptions } from './codex-acp.js';
+export { GenericAcpConversation, type GenericAcpOptions } from './generic-acp.js';
 export { ClaudeCliConversation } from './claude-cli.js';
 export type { SessionObservation, SessionTool, ConfigOption, ConfigValue } from './session-observation.js';
