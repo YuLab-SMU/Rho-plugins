@@ -343,7 +343,9 @@ results. Results survive MCP restart. One call to the service may take
 `RHO_TRANSPORT_MS` (30 s), plus the `waitMs` it asks the service to wait (at most ten
 minutes, as for a Notebook cell); the call uses `node:http`, whose wait for a reply has
 no limit of its own. A transport overrun keeps the outcome uncertain and directs
-observation of the original identity, never replacement work.
+observation of the original identity, never replacement work. A refused connection is the one
+transport failure whose outcome is known: nothing reached the service, so the call
+returns `unavailable` naming the address and saying nothing ran (`delivered: false`).
 
 The pure `./layered-contract` entry defines the four tool inputs and Agent note
 props. `./layered` provides the bounded complete-object cache and caller checks;

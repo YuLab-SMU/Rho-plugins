@@ -35,7 +35,12 @@ async function invoke(method: string, input: Record<string, unknown> = {}, contr
   const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
     const request = http.request(new URL('/api/v2/' + method, endpoint), { method: 'POST', signal: AbortSignal.timeout(allowance(input)),
       headers: { authorization: 'Bearer ' + c.token, 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...(contractRef ? { 'x-rho-contract-ref': contractRef } : {}) } }, resolve);
-    request.once('error', reject); request.end(body);
+    // A refused connection is the one failure whose outcome is known: nothing reached the
+    // service, so nothing ran. It is usually Rho not running, and the person can start it.
+    request.once('error', error => reject((error as NodeJS.ErrnoException).code === 'ECONNREFUSED'
+      ? new Fault('unavailable', `Rho is not running at ${c.url}, so this call did not reach it and nothing ran. Ask the person to start Rho, then call again.`, { url: c.url, delivered: false })
+      : error));
+    request.end(body);
   });
   const chunks: Buffer[] = []; let size = 0;
   for await (const part of response as AsyncIterable<Buffer>) {
