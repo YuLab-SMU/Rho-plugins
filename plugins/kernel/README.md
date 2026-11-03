@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.5.2 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.5.3 keeps a live R session and a live Python
 session for a project, which an Agent and the person share, on this machine or on a
 server: one the person manages with serverctl, reached through it, or one reached with
 ssh.
@@ -70,6 +70,24 @@ and Ctrl+C for Python, whose runner turns its Ctrl+C handling back on so that a 
 once; Stop raises Ctrl+Break and then ends the process tree. R there cannot open descriptor 3,
 so its answers come on a named pipe the host serves and names in `RHO_KERNEL_ANSWERS`. R and
 Python end printed lines with `\r\n` there; a cell keeps them as `\n`, as elsewhere.
+
+A session on this machine runs `Rscript` or `python3` from PATH until the project names
+another program. `kernel.run` takes `interpreter`, a program in a folder of the project
+such as the python of a virtual environment made there (`.venv/bin/python`): its folder
+must resolve inside the project, while the file may be the link a virtual environment makes
+to the Python it was made from, and it is started by that name so the environment is the
+one that runs. A path outside the project is refused (`scope`), as is one that is not a
+program (`not_found`) and one named for a session on a server. The project keeps the last
+program named for each language, so later sessions, the person's too, start with it; one
+that is gone is forgotten and the default runs. A cell naming another program than the live
+session's is refused while anyone else ran cells in that session; a session in which only
+the caller ran cells, none of them running, is stopped (recorded as stopped by that caller)
+and started again with the program named. Each session records the program it ran as it
+reported it (`sys.executable`, R's `Rscript`), relative to the project when it is in it, and
+each cell keeps the program and version that ran it, since a cell outlasts its session's
+record. The Notebook and the Overview name such a session by its environment's folder
+(`Python 3.13.5 · .venv`). Where one session ends as the next starts, at the same instant,
+the Notebook lists the end first.
 
 A session can run on a server. A place names the server, a folder there (absolute
 or `~/…`) and setup lines run in that folder before a session starts (`module load R`,

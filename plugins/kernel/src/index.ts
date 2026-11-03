@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs/promises';
+import { constants as fsConstants } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -22,6 +23,10 @@ export interface SessionRecord {
   // Where it ran, as the place was named when it started (null: this machine), and the machine's
   // own name as the session reported it. Sessions recorded before have neither.
   place?: SessionPlace | null; host?: string | null;
+  // The program the session ran, as the session reported it (a Python's sys.executable, so a
+  // virtual environment's own python), relative to the project when it is in it. Sessions
+  // recorded before have none.
+  program?: string | null;
 }
 export interface SessionPlace { placeId: string; label: string; destination: string; folder: string }
 export type { Copy, Place, PlaceCheck, RemoteEntry } from './places.js';
@@ -36,6 +41,9 @@ export interface CellRecord {
   defined?: string[]; removed?: string[];
   // The session's values the code read, and the project files its strings name, read or written.
   used?: string[]; files?: Array<{ path: string; how: 'read' | 'wrote' }>;
+  // The program and version that ran it, kept with the cell because a cell outlasts its session's
+  // record. Cells recorded before have neither.
+  program?: string | null; version?: string | null;
 }
 export type InspectInput = { language: Language; name: string; path?: number[]; offset?: number; limit?: number; sort?: { column: number; descending: boolean } };
 // The protected resources are this machine's processes and memory, and the project's state
@@ -66,6 +74,11 @@ export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536,
 export type KernelLimits = typeof kernelLimits;
 
 interface Live {
+  // The program a local session was started with when the project named one (null: the default),
+  // and the project folder it runs in.
+  started: string | null; root: string;
+  // Settled once the session has ended and left the live sessions.
+  ended: Promise<void>; settle: () => void;
   // A session on a server runs under ssh: its process there has the id it reported.
   record: SessionRecord; child: ChildProcess; place: Place | null; remotePid: number | null; answers: string; early: string; order: Promise<void>; queue: CellRecord[]; current: CellRecord | null; stopping: boolean; timer?: NodeJS.Timeout;
   // Printed text not yet placed, the highest mark seen on standard output, and answers waiting for theirs.
@@ -132,6 +145,9 @@ export class KernelHost {
     this.turn = next.catch(() => {});
     return next;
   }
+  // The program each language's sessions start with when the project has named one (a path in
+  // the project, as named): the last one a cell named, until another is named.
+  private programs: Partial<Record<Language, string>> = {};
   private placesRead?: Promise<Places>;
   private placesWriting: Promise<void> = Promise.resolve();
   private ssh: Ssh;
@@ -141,13 +157,32 @@ export class KernelHost {
     const limits = this.limits;
     this.serverctl = new Serverctl(options.serverctl ?? 'serverctl', { reuseS: 60, sessionS: limits.serverctlSessionS, readMs: limits.serverctlReadMs, skillBytes: limits.serverSkillBytes });
   }
+  // A program named for a session: one in a folder of the project, such as the python of a
+  // virtual environment made there (.venv/bin/python). Its folder must be the project's own; the
+  // file itself may be the link a virtual environment makes to the Python it was made from, and
+  // it is started by that name so the environment is the one that runs.
+  private async program(named: string) {
+    const root = await fs.realpath(this.root), file = path.resolve(root, named);
+    const folder = await fs.realpath(path.dirname(file)).catch(() => null);
+    requireThat(folder && (folder === root || folder.startsWith(root + path.sep)), 'scope', `Name a program in a folder of this project, such as .venv/bin/python; ${named} is not.`, { interpreter: named });
+    const program = path.join(folder, path.basename(file));
+    const runs = await fs.stat(program).then(s => s.isFile(), () => false) && await fs.access(program, fsConstants.X_OK).then(() => true, () => false);
+    requireThat(runs, 'not_found', `${named} is not a program that can run here.`, { interpreter: named });
+    return program;
+  }
+  // A program in the project is named relative to it (.venv/bin/python), so the record stays true
+  // when the project moves; any other keeps the path the session reported.
+  private named(live: Live, program: string) {
+    return !live.place && program.startsWith(live.root + path.sep) ? path.relative(live.root, program) : program;
+  }
   private transport(place: Place): Transport { return place.via === 'serverctl' ? this.serverctl : this.ssh; }
   private get limits(): KernelLimits { return { ...kernelLimits, ...this.options.limits }; }
   private async folder() { return stateDirectory(this.root, '.rho/plugins/kernel'); }
   private async plots() { const folder = path.join(await this.folder(), 'plots'); await fs.mkdir(folder, { recursive: true, mode: 0o700 }); return folder; }
   private load() { return this.loading ??= this.readRecord(); }
   private async readRecord() {
-    const state = await readJson<{ sessions: SessionRecord[]; cells: CellRecord[] }>(path.join(await this.folder(), 'state.json'), { sessions: [], cells: [] });
+    const state = await readJson<{ sessions: SessionRecord[]; cells: CellRecord[]; programs?: Partial<Record<Language, string>> }>(path.join(await this.folder(), 'state.json'), { sessions: [], cells: [] });
+    this.programs = state.programs ?? {};
     let changed = false;
     for (const s of state.sessions) if (s.state !== 'ended') {
       Object.assign(s, { state: 'ended', endedAt: s.endedAt ?? now(), ending: 'rho-closed', problem: 'Rho closed while this session ran; its variables are gone.' });
@@ -163,7 +198,7 @@ export class KernelHost {
   }
   private save() {
     clearTimeout(this.saveTimer); this.saveTimer = undefined;
-    this.writing = this.writing.then(async () => atomicJson(path.join(await this.folder(), 'state.json'), { sessions: this.sessions ?? [], cells: this.cells }));
+    this.writing = this.writing.then(async () => atomicJson(path.join(await this.folder(), 'state.json'), { sessions: this.sessions ?? [], cells: this.cells, programs: this.programs }));
     return this.writing;
   }
   // Output arrives in many small pieces; it is written at most twice a second.
@@ -189,7 +224,7 @@ export class KernelHost {
     return { events, omitted: Math.max(0, this.cells.length - limit) };
   }
 
-  async run(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; waitMs?: number; place?: string }) {
+  async run(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; waitMs?: number; place?: string; interpreter?: string }) {
     await this.load();
     const cell = await this.exclusive(() => this.queue(input));
     // Waiting for the cell holds nothing: other requests, an interrupt among them, go on.
@@ -201,13 +236,13 @@ export class KernelHost {
     return { cell: structuredClone(cell), session: structuredClone(this.sessions!.find(s => s.sessionId === cell.sessionId)!) };
   }
 
-  private async queue(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; place?: string }) {
+  private async queue(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; place?: string; interpreter?: string }) {
     const known = this.cells.find(c => c.changeId === input.changeId && c.by === input.by);
     if (known) {
       requireThat(known.code === input.code && known.language === input.language, 'conflict', 'This change identity already names a different cell.');
     } else {
       requireThat(input.code.trim().length > 0 && Buffer.byteLength(input.code) <= this.limits.maxCodeBytes, 'invalid', `Write code of at most ${this.limits.maxCodeBytes} bytes.`, { limit: 'maxCodeBytes' });
-      const live = await this.ensure(input.language, input.by, input.place);
+      const live = await this.ensure(input.language, input.by, input.place, input.interpreter);
       requireThat(live.queue.length < this.limits.maxQueued, 'limit', `At most ${this.limits.maxQueued} cells wait in a session. Wait for some to run or interrupt the one running.`, { limit: 'maxQueued', maximum: this.limits.maxQueued });
       // The oldest finished cells make room, with their plots.
       while (this.cells.length >= this.limits.maxCells) {
@@ -229,14 +264,23 @@ export class KernelHost {
   // The language's live session, started for this caller when there is none: where the cell
   // names, else where the project runs that language (this machine unless chosen). A cell that
   // names another place than where the live session runs is refused; its values stay there.
-  private async ensure(language: Language, by: string, placeId?: string) {
+  private async ensure(language: Language, by: string, placeId?: string, interpreter?: string) {
     const running = this.live.get(language), name = language === 'r' ? 'R' : 'Python';
     const where = (live: Live) => live.place ? `on ${live.place.label}` : 'on this machine';
+    requireThat(!interpreter || !placeId || placeId === 'local', 'invalid', 'An interpreter names a program in the project on this machine; a session on a server runs that server\'s.');
+    const named = interpreter ? await this.program(interpreter) : null;
     if (running && !running.stopping) {
       requireThat(!placeId || placeId === (running.place?.placeId ?? 'local'), 'conflict', `The ${name} session runs ${where(running)}. Run the cell there, or stop that session first; its values stay until then.`, { place: running.place?.placeId ?? 'local' });
-      return running;
+      if (!named || !running.place && running.started === named) return running;
+      // A session in which only this caller ran cells, none of them now, is its own to start
+      // again with the program it names. Once anyone else ran a cell there, the values are shared
+      // and only the person stops it.
+      const own = !running.place && !running.current && !running.queue.length && this.cells.filter(c => c.sessionId === running.record.sessionId).every(c => c.by === by);
+      requireThat(own, 'conflict', `The ${name} session runs ${running.record.program ?? 'another program'}${running.current || running.queue.length ? ' and has a cell running' : ', and others ran cells in it'}. Ask the person to stop it in the Notebook, then run this cell again to start one with ${interpreter}; its values stay until then.`, { program: running.started ?? running.record.program ?? null });
+      this.stopping(this.sessions!, running.record.sessionId, by);
+      await running.ended;
     }
-    requireThat(!running, 'conflict', 'The session is stopping. Run the cell again when it has ended.');
+    requireThat(!this.live.get(language), 'conflict', 'The session is stopping. Run the cell again when it has ended.');
     const chosen = placeId ?? (await this.placeState()).use[language] ?? 'local';
     const place = chosen === 'local' ? null : (await this.placeState()).places.find(p => p.placeId === chosen) ?? null;
     requireThat(chosen === 'local' || place, 'not_found', `No place is named ${chosen}. Read kernel.places for the places there are.`);
@@ -246,7 +290,13 @@ export class KernelHost {
     const old = this.sessions!.filter(s => s.state === 'ended');
     if (old.length > this.limits.maxEndedSessions) this.sessions!.splice(this.sessions!.indexOf(old[0]!), 1);
     const windows = !place && process.platform === 'win32';
-    const program = place ? 'ssh' : language === 'r' ? this.options.rscript ?? 'Rscript' : this.options.python ?? (windows ? 'python' : 'python3');
+    // A program the cell named, else the one the project named last while it is still there.
+    requireThat(!named || !place, 'invalid', `${name} runs on ${place?.label} in this project; an interpreter names a program in the project on this machine.`);
+    const kept = !named && !place && this.programs[language] ? await this.program(this.programs[language]!).catch(() => null) : null;
+    if (named) this.programs[language] = path.relative(await fs.realpath(this.root), named);
+    else if (!kept && this.programs[language]) delete this.programs[language];
+    const selected = named ?? kept;
+    const program = place ? 'ssh' : selected ?? (language === 'r' ? this.options.rscript ?? 'Rscript' : this.options.python ?? (windows ? 'python' : 'python3'));
     const root = await fs.realpath(this.root);
     // On a server the runner is sent first on the session's own input, named by its digest, so
     // the session needs nothing installed there but R or Python.
@@ -255,7 +305,9 @@ export class KernelHost {
     const pipe = windows && language === 'r' ? await answerPipe() : null;
     const child = place ? await this.transport(place).spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
       : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}) } });
-    const live: Live = { record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve(), pipe: pipe?.server };
+    let settle = () => {};
+    const ended = new Promise<void>(resolve => { settle = resolve; });
+    const live: Live = { started: selected, root, ended, settle, record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve(), pipe: pipe?.server };
     this.live.set(language, live);
     record.pid = place ? null : child.pid ?? null;
     const startMs = place ? this.limits.remoteStartTimeoutMs : this.limits.startTimeoutMs;
@@ -377,6 +429,7 @@ export class KernelHost {
     if (live.current || live.looking || live.record.state !== 'idle' || !live.queue.length) return;
     const cell = live.queue.shift()!;
     live.current = cell; cell.state = 'running'; cell.startedAt = now(); live.record.state = 'busy';
+    cell.program = live.record.program ?? null; cell.version = live.record.version;
     // A session on a server draws in its own temporary folder and sends each plot with its answer.
     live.child.stdin!.write(JSON.stringify({ op: 'run', id: cell.cellId, number: cell.number, code: cell.code, plots: live.place ? null : await this.plots(), inline: !!live.place, maxPlots: this.limits.maxPlots, maxVariables: this.limits.maxVariables }) + '\n');
     this.changed();
@@ -398,7 +451,7 @@ export class KernelHost {
     const record = live.record, cell = live.current;
     if (msg.kind === 'ready') {
       clearTimeout(live.timer);
-      Object.assign(record, { state: 'idle', version: String(msg.version ?? ''), variables: msg.variables?.items ?? [], variablesOmitted: msg.variables?.omitted ?? 0, variablesAt: now(), host: typeof msg.host === 'string' ? msg.host.slice(0, 256) : null });
+      Object.assign(record, { state: 'idle', version: String(msg.version ?? ''), program: typeof msg.executable === 'string' && msg.executable ? this.named(live, msg.executable.slice(0, 1024)) : record.program ?? null, variables: msg.variables?.items ?? [], variablesOmitted: msg.variables?.omitted ?? 0, variablesAt: now(), host: typeof msg.host === 'string' ? msg.host.slice(0, 256) : null });
       if (live.place) {
         live.remotePid = Number.isInteger(msg.pid) && msg.pid > 1 ? msg.pid : null; record.pid = live.remotePid;
         if (typeof msg.folder === 'string' && record.place) record.place.folder = msg.folder.slice(0, 1024);
@@ -463,6 +516,7 @@ export class KernelHost {
     }
     for (const cell of live.queue) { Object.assign(cell, { state: 'not-run', endedAt: now(), problem: record.version === null ? record.problem ?? 'The session did not start.' : 'The session ended before this cell ran.' }); this.finish(cell); }
     if (this.live.get(record.language) === live) this.live.delete(record.language);
+    live.settle();
     this.changed();
   }
 
@@ -672,6 +726,7 @@ const content = [
   'Results meant to last still go to files from a script, so they can be run again without the session.',
   'Sessions can also run on a server. kernel.places lists the places and where each language runs; kernel.place.set names one (the server, its folder there, and setup lines run there before a session starts) or chooses it for R or Python; kernel.place.check connects and reports R and Python there.',
   'kernel.servers lists the servers the person manages with serverctl and the skills bound to each: how that server is used (its environments, where heavy work goes, what to avoid there). Before you name a place on one or run code there, read the skills that apply with kernel.server.skill and follow them, for example in the place\'s setup lines. They guide the work on that server; they do not widen what you may do. A place on such a server is reached through serverctl, which holds its login; another server is reached with ssh.',
+  'The project\'s Python is the machine\'s python3 until you name another. When the work needs packages it lacks, make an environment in the project (python3 -m venv .venv or uv venv, then install into it) and pass interpreter: ".venv/bin/python" to kernel.run; later sessions of that language start with it too, and each cell records the program that ran it. A live session in which only you ran cells starts again with the program you name; once the person ran a cell in it, ask them to stop it first. Do not add another environment\'s packages to a running session\'s path.',
   'Pass place to kernel.run to start a session there. Paths in a session on a server are its folder\'s; kernel.place.list lists them and kernel.place.copy copies a file into the project under remote/<place>/.',
 ].join('\n');
 // What each view keeps in its props: the Notebook's form, and which value a value's view shows.

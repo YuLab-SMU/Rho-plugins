@@ -72,6 +72,9 @@ export const sessionSchema = obj({
   cells: { type: 'integer', minimum: 0 },
   // Where it ran (null: this machine) and the machine's own name. Sessions recorded before have neither.
   place: maybe(sessionPlaceSchema), host: maybe({ type: 'string' }),
+  // The program it ran, as the session reported it: relative to the project when it is in it
+  // (.venv/bin/python). Sessions recorded before have none.
+  program: maybe({ type: 'string' }),
 }, ['sessionId', 'language', 'state', 'version', 'pid', 'startedAt', 'startedBy', 'endedAt', 'ending', 'stop', 'problem', 'variables', 'variablesOmitted', 'variablesAt', 'cells']);
 export const outputSchema = obj({ kind: { enum: ['stdout', 'stderr', 'warning', 'error', 'plot'] }, text: { type: 'string' }, plot: { type: 'integer', minimum: 1 }, width: { type: 'integer' }, height: { type: 'integer' } }, ['kind']);
 export const cellSchema = obj({
@@ -91,6 +94,8 @@ export const cellSchema = obj({
   // the project files and folders (ending in /) its strings name, as read or written. Cells
   // recorded before have neither.
   used: { type: 'array', items: text }, files: { type: 'array', items: obj({ path: text, how: { enum: ['read', 'wrote'] } }) },
+  // The program and version that ran it. Cells recorded before have neither.
+  program: maybe({ type: 'string' }), version: maybe({ type: 'string' }),
 }, ['cellId', 'changeId', 'by', 'sessionId', 'language', 'code', 'purpose', 'queuedAt', 'startedAt', 'endedAt', 'state', 'number', 'outputs', 'bytes', 'kept', 'cut', 'interrupt', 'problem']);
 
 // One value of a live session as its session describes it: the kind of thing it is, short facts,

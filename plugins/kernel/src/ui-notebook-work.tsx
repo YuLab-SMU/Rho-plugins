@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from './ui-icons.js';
 import { askCell } from './ui-notebook-target.js';
-import { call, agentName, when, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
+import { call, agentName, when, versionOf, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
 
 // What was done in the project's live sessions, for the Overview: where each session with cells
 // runs and what it holds, and the newest cells by their purpose. Work done only in the Notebook,
@@ -10,7 +10,6 @@ import { call, agentName, when, type UiClient, type UiSnapshot, type KernelOutpu
 export const notebookWorkLimits = { cells: 3, sessions: 4 };
 type Read = KernelOutputs['kernel.read'];
 type Cell = Read['cells'][number];
-type Session = Read['sessions'][number];
 const browser = 'browser:local';
 const stateWords: Partial<Record<Cell['state'], string>> = { queued: 'waiting', running: 'running', error: 'ended with an error', interrupted: 'interrupted', 'not-run': 'not run', unknown: 'outcome unknown' };
 
@@ -27,7 +26,6 @@ export function useNotebookWork(client: UiClient, projectId: string, cursor: num
   return { ...state, cells: state.read ? state.read.cells.length + state.read.omitted : 0 };
 }
 
-const versionOf = (s: Session) => s.version?.replace(/^R version (\S+).*$/, 'R $1') ?? (s.language === 'r' ? 'R' : 'Python');
 const firstLine = (code: string) => code.split('\n').map(line => line.trim()).find(line => line && !line.startsWith('#')) ?? 'A cell';
 
 export function NotebookWorkSection({ work, snapshot, onOpen }: { work: NotebookWork; snapshot: UiSnapshot; onOpen: () => void }) {

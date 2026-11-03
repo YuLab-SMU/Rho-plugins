@@ -442,7 +442,7 @@ def inspect_value(msg):
     except Exception as error:
         reply({'state': 'failed', 'problem': f'{type(error).__name__}: {error}'})
 
-emit({'kind': 'ready', 'version': 'Python ' + sys.version.split()[0], 'pid': os.getpid(), 'host': platform.node(), 'folder': os.getcwd(), 'variables': variables(200)})
+emit({'kind': 'ready', 'version': 'Python ' + sys.version.split()[0], 'executable': sys.executable, 'pid': os.getpid(), 'host': platform.node(), 'folder': os.getcwd(), 'variables': variables(200)})
 while True:
     try:
         line = requests.readline()

@@ -378,7 +378,7 @@ inspect <- function(msg) {
      error = function(e) reply(list(state = "failed", problem = conditionMessage(e))))
 }
 
-emit(list(kind = "ready", version = R.version.string, pid = Sys.getpid(), host = Sys.info()[["nodename"]], folder = getwd(), variables = variables(200)))
+emit(list(kind = "ready", version = R.version.string, executable = file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript"), pid = Sys.getpid(), host = Sys.info()[["nodename"]], folder = getwd(), variables = variables(200)))
 repeat {
   line <- tryCatch(readLines(input, n = 1), interrupt = function(e) NA)
   if (identical(line, NA)) next

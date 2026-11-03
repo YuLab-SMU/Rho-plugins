@@ -4,9 +4,12 @@ import { cellId, cellSchema, changeId, copySchema, inspectStates, language, obje
 // Owner business contracts. Application project/authentication fields are separate.
 export const operationContracts = {
   // place names where a session that is not live yet starts ("local" is this machine); a cell
-  // naming another place than the live session's is refused.
+  // naming another place than the live session's is refused. interpreter names the program a
+  // session on this machine starts with, in a folder of the project (.venv/bin/python); the
+  // project keeps it for the language's later sessions. A cell naming another program than the
+  // live session's is refused.
   'kernel.run': {
-    inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 }, place: placeRef }, ['language', 'code', 'changeId']),
+    inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 }, place: placeRef, interpreter: { type: 'string', minLength: 1, maxLength: 1024 } }, ['language', 'code', 'changeId']),
     outputSchema: obj({ cell: cellSchema, session: sessionSchema }),
     requires: [] as string[], effect: 'native' as const,
   },

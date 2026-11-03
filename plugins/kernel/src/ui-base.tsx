@@ -55,6 +55,19 @@ export const ShellProvider = Shell.Provider;
 export const useShell = () => useContext(Shell);
 export const withShell = (shell: KernelShell | undefined, node: ReactNode) => shell ? <ShellProvider value={shell}>{node}</ShellProvider> : node;
 
+// A session run by a program in the project is named by its environment's folder (.venv); one
+// run by a program elsewhere is named by its version alone.
+type Session = KernelOutputs['kernel.read']['sessions'][number];
+export const environmentOf = (session: Pick<Session, 'program'>) => {
+  const program = session.program;
+  if (!program || /^([A-Za-z]:)?[\\/]/.test(program)) return null;
+  return program.match(/^(.+?)[\\/](?:bin|Scripts)[\\/][^\\/]+$/)?.[1] ?? program;
+};
+export const versionOf = (session: Pick<Session, 'program' | 'version' | 'language'>) => {
+  const version = session.version?.replace(/^R version (\S+).*$/, 'R $1') ?? (session.language === 'r' ? 'R' : 'Python'), environment = environmentOf(session);
+  return environment ? version + ' · ' + environment : version;
+};
+
 export const clock = (ms: number, seconds = false) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' });
 export function durationText(ms: number) {
   if (ms < 10_000) return (Math.max(ms, 100) / 1000).toFixed(1) + ' s';

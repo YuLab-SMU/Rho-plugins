@@ -3,7 +3,8 @@ import { statements, unfinished } from './statements.js';
 import { Icon } from './ui-icons.js';
 import { PlaceChip, usePlaces, whereOf } from './ui-servers.js';
 import { takeCell } from './ui-notebook-target.js';
-import { call, refused, agentName, clock, durationText, useShell, withShell, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
+import { call, refused, agentName, clock, durationText, useShell, withShell, versionOf, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
+export { versionOf };
 
 // The project's live R and Python sessions, which the person shares with their Agent. Cells
 // read in the order they were run, each with who ran it and why, its code, what it printed,
@@ -21,7 +22,6 @@ export const languageName: Record<Language, string> = { r: 'R', python: 'Python'
 export const notebookViewLimits = { cells: 300, codeLines: 14, outputLines: 12, railPlots: 12, cachedPlots: 64, wideViewPx: 840 };
 const me = 'browser:local';
 const failure = (error: unknown) => error instanceof Error ? error.message : 'The live session could not be reached.';
-export const versionOf = (session: Session) => session.version?.replace(/^R version (\S+).*$/, 'R $1') ?? languageName[session.language];
 export const at = (iso: string) => clock(Date.parse(iso));
 
 interface Author { name: string; conversationId?: string; title?: string }
@@ -508,15 +508,18 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   const [now, setNow] = useState(Date.now());
   useEffect(() => { if (!running) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [running]);
 
-  // The list in time: each cell, and where a session started or ended among them.
+  // The list in time: each cell, and where a session started or ended among them. At one instant
+  // a session that ended comes first and the one that started next (an Agent starting its own
+  // session again with another program does both at once); one that started and ended then shows
+  // its start before its end.
   const rows = useMemo(() => {
-    const out: Row[] = cells.map(cell => ({ at: Date.parse(cell.queuedAt), order: 1, key: cell.cellId, cell }));
+    const out: Row[] = cells.map(cell => ({ at: Date.parse(cell.queuedAt), order: 2, key: cell.cellId, cell }));
     const first = out[0]?.at ?? Infinity, until = scope?.at ?? Infinity;
     for (const session of read?.sessions ?? []) {
       const has = cells.some(c => c.sessionId === session.sessionId);
       if (scope && !has) continue;
-      if (has || Date.parse(session.startedAt) >= first) out.push({ at: Date.parse(session.startedAt), order: 0, key: session.sessionId + ':start', session, edge: 'start' });
-      if (session.endedAt && Date.parse(session.endedAt) <= until && (has || Date.parse(session.endedAt) >= first)) out.push({ at: Date.parse(session.endedAt), order: 2, key: session.sessionId + ':end', session, edge: 'end' });
+      if (has || Date.parse(session.startedAt) >= first) out.push({ at: Date.parse(session.startedAt), order: 1, key: session.sessionId + ':start', session, edge: 'start' });
+      if (session.endedAt && Date.parse(session.endedAt) <= until && (has || Date.parse(session.endedAt) >= first)) out.push({ at: Date.parse(session.endedAt), order: session.endedAt === session.startedAt ? 3 : 0, key: session.sessionId + ':end', session, edge: 'end' });
     }
     return out.sort((a, b) => a.at - b.at || a.order - b.order);
   }, [cells, read?.sessions, scope?.at]);

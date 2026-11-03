@@ -29,6 +29,8 @@ test('R cells share one session: values stay, output, warnings, errors and plots
   assert.equal(first.cell.purpose, 'Fit y on x');
   assert.equal(first.cell.number, 1);
   assert.match(first.session.version, /^R version/);
+  assert.match(first.session.program, /Rscript(\.exe)?$/, 'the session names the program that ran it');
+  assert.deepEqual([first.cell.program, first.cell.version], [first.session.program, first.session.version], 'and so does each cell');
   assert.deepEqual(first.cell.outputs.map(o => o.kind), ['stderr', 'warning', 'stdout']);
   assert.match(text(first.cell), /read 3\n/);
   assert.match(text(first.cell), /\(Intercept\)\s+x\s*\n\s*-0\.67\s+2\.50/);
@@ -95,6 +97,51 @@ test('Python cells share one session and show the last value and matplotlib figu
     assert.equal(again.cell.outputs.filter(o => o.kind === 'plot').length, 0, 'a figure is shown once, by the cell that made it');
   }
   await host.close();
+});
+
+// A virtual environment the Agent made in the project is the program its Python sessions run.
+test('a cell names a program in the project, later sessions keep it, and every cell records what ran it', async () => {
+  const root = await fs.realpath(await project());
+  const windows = process.platform === 'win32', python = windows ? 'python' : 'python3';
+  const made = spawnSync(python, ['-m', 'venv', '--without-pip', path.join(root, '.venv')], { encoding: 'utf8' });
+  assert.equal(made.status, 0, made.stderr);
+  const own = path.join(root, '.venv', windows ? 'Scripts/python.exe' : 'bin/python'), named = path.relative(root, own);
+  const host = new KernelHost(root);
+  try {
+    await assert.rejects(host.run({ language: 'python', code: '1', changeId: 'outside', by: 'agent:a', interpreter: '../elsewhere/bin/python' }), e => e.kind === 'scope');
+    await assert.rejects(host.run({ language: 'python', code: '1', changeId: 'missing', by: 'agent:a', interpreter: '.venv/bin/nothing' }), e => e.kind === 'not_found');
+    assert.deepEqual((await host.read()).sessions, [], 'a refused program starts no session');
+    // The Agent's first cell ran in the machine's Python; only it ran cells there, so naming the
+    // environment starts that session again with it.
+    const plainFirst = await host.run({ language: 'python', code: 'import pandas', changeId: 'missing-package', by: 'agent:a', waitMs: 30000 });
+    assert.ok(path.isAbsolute(plainFirst.session.program));
+    const first = await host.run({ language: 'python', code: 'import sys\nprint(sys.prefix)', changeId: 'venv', by: 'agent:a', interpreter: named, waitMs: 30000 });
+    assert.equal(first.cell.state, 'done');
+    assert.notEqual(first.session.sessionId, plainFirst.session.sessionId);
+    const replaced = (await host.read()).sessions.find(s => s.sessionId === plainFirst.session.sessionId);
+    assert.deepEqual([replaced.state, replaced.ending, replaced.stop.by], ['ended', 'stopped', 'agent:a'], 'the session it replaced was stopped by the caller that replaced it');
+    assert.equal(text(first.cell).trim(), path.join(root, '.venv'), 'the environment is the one that runs');
+    assert.equal(first.session.program, named, 'a program in the project is named relative to it');
+    assert.deepEqual([first.cell.program, first.cell.version], [named, first.session.version]);
+    assert.match(first.cell.version, /^Python 3\./);
+    assert.equal((await host.run({ language: 'python', code: '2', changeId: 'same', by: 'agent:a', interpreter: named, waitMs: 30000 })).cell.state, 'done', 'naming the same program again is that session');
+    // Once the person ran a cell in it, its values are shared: another program is refused and it runs on.
+    await host.run({ language: 'python', code: 'kept = 1', changeId: 'person-cell', by: 'person', waitMs: 30000 });
+    const other = path.join('.venv', windows ? 'Scripts/pythonw.exe' : 'bin/python3');
+    await assert.rejects(host.run({ language: 'python', code: '1', changeId: 'other', by: 'agent:a', interpreter: other }), e => e.kind === 'conflict' && e.details.program === own && /Ask the person to stop it/.test(e.message));
+    assert.equal((await host.read()).sessions.find(s => s.sessionId === first.session.sessionId).state, 'idle');
+    const ended = async sessionId => { for (let i = 0; i < 400 && (await host.read()).sessions.find(s => s.sessionId === sessionId).state !== 'ended'; i++) await new Promise(r => setTimeout(r, 25)); };
+    await host.stop(first.session.sessionId, 'person'); await ended(first.session.sessionId);
+    // The person's next cell names nothing and starts with the project's program.
+    const later = await host.run({ language: 'python', code: 'import sys\nprint(sys.prefix)', changeId: 'later', by: 'person', waitMs: 30000 });
+    assert.equal(text(later.cell).trim(), path.join(root, '.venv'));
+    assert.equal(later.cell.program, named);
+    // A program that is gone is forgotten: the next session starts with the machine's Python.
+    await host.stop(later.session.sessionId, 'person'); await ended(later.session.sessionId);
+    await fs.rm(path.join(root, '.venv'), { recursive: true, force: true });
+    const plain = await host.run({ language: 'python', code: 'import sys\nprint(sys.prefix == sys.base_prefix)', changeId: 'plain', by: 'person', waitMs: 30000 });
+    assert.ok(path.isAbsolute(plain.cell.program), 'the machine\'s Python is named by the path it ran from');
+  } finally { await host.close(); }
 });
 
 test('a change identity names one cell; cells run one at a time in the order they came', async () => {

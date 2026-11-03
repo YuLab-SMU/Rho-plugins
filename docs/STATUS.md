@@ -48,7 +48,10 @@ over Manual). Agent 0.4.27's MCP bridge waits for a call as long as the `waitMs`
 for plus 30 s, over `node:http`: a 30 s cut-off, and fetch's 300 s one, had ended Notebook
 cells still running within their wait with an unknown outcome. Agent 0.4.28's bridge reports a
 refused connection — Rho not running at the connection's address — as `unavailable`, with
-nothing delivered, instead of an unknown outcome.
+nothing delivered, instead of an unknown outcome. Notebook 0.5.3 starts a session with a program the
+project names (`kernel.run` `interpreter`, such as `.venv/bin/python`, kept for later sessions),
+records each session's and each cell's program and version, and lets a caller start again a
+session only it ran cells in.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a
