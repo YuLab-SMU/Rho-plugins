@@ -1,5 +1,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { statements, unfinished } from './statements.js';
+import { cellRelations, type CellRelations, type LineageCell } from './lineage.js';
+import { CellScriptFlow } from './ui-flow.js';
 import { Icon } from './ui-icons.js';
 import { PlaceChip, usePlaces, whereOf } from './ui-servers.js';
 import { takeCell } from './ui-notebook-target.js';
@@ -135,11 +137,44 @@ function Ending({ cell, now }: { cell: Cell; now: number }) {
   return <span className="nb-ending failed">Outcome unknown</span>;
 }
 
-function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgain, onConversation, onObject }: {
+// A cell named where another reads from it or is read by it; it goes to that cell where the page
+// shows it. A cell lists at most `cells` of the later cells that read a value; the rest are counted.
+export const relationLimits = { cells: 3 };
+function CellLink({ cell, language, onCell, what }: { cell: LineageCell; language: Language; onCell?: (cellId: string) => void; what: string }) {
+  const name = `${languageName[language]} ${cell.number}`;
+  return onCell ? <button className="nb-cell-link" title={`Go to ${name}, which ${what}`} onClick={() => onCell(cell.cellId)}>{name}</button> : <span className="nb-cell-link">{name}</span>;
+}
+// The later cells that read a value, at most `cells` of them; the rest are counted.
+function CellLinks({ cells, language, onCell }: { cells: LineageCell[]; language: Language; onCell?: (cellId: string) => void }) {
+  const shown = cells.slice(0, relationLimits.cells);
+  return <>{shown.map((c, i) => <span key={c.cellId} className="nb-cell-links"><CellLink cell={c} language={language} onCell={onCell} what="read it" />{i < shown.length - 1 && ','}</span>)}{cells.length > shown.length && <span>and {cells.length - shown.length} more</span>}</>;
+}
+// What each session's cells read from each other, by session.
+export function useRelations(cells: Cell[]) {
+  return useMemo(() => {
+    const bySession = new Map<string, Cell[]>();
+    for (const c of cells) bySession.set(c.sessionId, [...bySession.get(c.sessionId) ?? [], c]);
+    const out = new Map<string, CellRelations>(), all: CellRelations = { reads: new Map(), readers: new Map(), maker: new Map() };
+    for (const [id, list] of bySession) {
+      const r = cellRelations(list.map(c => ({ ...c, plots: 0 })));
+      out.set(id, r);
+      for (const [k, v] of r.reads) all.reads.set(k, v);
+      for (const [k, v] of r.readers) all.readers.set(k, v);
+    }
+    return { bySession: out, all };
+  }, [cells]);
+}
+
+function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgain, onConversation, onObject, relations, onCell }: {
   cell: Cell; author: Author; who: (by: string) => Author; client: UiClient; projectId: string; now: number;
   onEdit: (cell: Cell) => void; onRunAgain: (cell: Cell) => void; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void;
+  relations?: CellRelations; onCell?: (cellId: string) => void;
 }) {
   const settled = !['queued', 'running'].includes(cell.state);
+  const reads = relations?.reads.get(cell.cellId) ?? [], readers = relations?.readers.get(cell.cellId);
+  const value = (name: string) => onObject
+    ? <button className="nb-value" title={'Look at ' + name} onClick={() => onObject(cell.language, name)}>{name}</button>
+    : <code className="nb-value">{name}</code>;
   const interrupted = cell.interrupt ? `Interrupted by ${who(cell.interrupt.by).name === 'You' ? 'you' : who(cell.interrupt.by).name} at ${at(cell.interrupt.at)}.` : null;
   return <li className={'nb-cell ' + cell.state + (cell.by === me ? ' mine' : '')} id={'cell-' + cell.cellId}>
     <div className="nb-gutter" aria-hidden="true"><span className={'nb-lang ' + cell.language}>{languageName[cell.language]}</span><span className="nb-number">{cell.number}</span></div>
@@ -153,12 +188,15 @@ function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgai
       </header>
       <Code code={cell.code} language={cell.language} />
       <Outputs cell={cell} client={client} projectId={projectId} />
-      {settled && ((cell.defined?.length ?? 0) > 0 || (cell.removed?.length ?? 0) > 0) && <p className="nb-values">
-        {(cell.defined?.length ?? 0) > 0 && <><span>Made or changed</span>{cell.defined!.map(name => onObject
-          ? <button key={name} className="nb-value" title={'Look at ' + name} onClick={() => onObject(cell.language, name)}>{name}</button>
-          : <code key={name} className="nb-value">{name}</code>)}</>}
+      {settled && (reads.length > 0 || (cell.defined?.length ?? 0) > 0 || (cell.removed?.length ?? 0) > 0) && <p className="nb-values">
+        {reads.length > 0 && <><span>Read</span>{reads.map(({ name, from }) => <span key={name} className="nb-rel">{value(name)}{from && <>from <CellLink cell={from} language={cell.language} onCell={onCell} what="made it" /></>}</span>)}</>}
+        {(cell.defined?.length ?? 0) > 0 && <><span>Made or changed</span>{cell.defined!.map(name => {
+          const by = readers?.get(name) ?? [];
+          return <span key={name} className="nb-rel">{value(name)}{by.length > 0 && <>read in <CellLinks cells={by} language={cell.language} onCell={onCell} /></>}</span>;
+        })}</>}
         {(cell.removed?.length ?? 0) > 0 && <><span>Removed</span>{cell.removed!.map(name => <code key={name} className="nb-value gone">{name}</code>)}</>}
       </p>}
+      {settled && <CellScriptFlow code={cell.code} language={cell.language} />}
       {(interrupted || (cell.problem && cell.state !== 'interrupted')) && <p className="nb-problem">{interrupted ?? cell.problem}</p>}
       {settled && <div className="nb-actions">
         <button className="text-button" onClick={() => onEdit(cell)}><Icon name="pencil" size={13} />Edit and run</button>
@@ -207,7 +245,7 @@ function SessionRow({ language, session, onInterrupt, onStop, asking }: { langua
 }
 
 // The session shown is the person's choice, else the one the newest cell ran in.
-function Variables({ sessions, onObject, pane = false, recent }: { sessions: Partial<Record<Language, Session>>; onObject?: (language: Language, name: string) => void; pane?: boolean; recent?: Language }) {
+function Variables({ sessions, onObject, pane = false, recent, relations, onCell }: { sessions: Partial<Record<Language, Session>>; onObject?: (language: Language, name: string) => void; pane?: boolean; recent?: Language; relations?: Map<string, CellRelations>; onCell?: (cellId: string) => void }) {
   const live = languages.filter(l => sessions[l] && sessions[l]!.state !== 'ended');
   const [chosen, setChosen] = useState<Language | null>(null);
   useEffect(() => setChosen(null), [recent]);
@@ -225,9 +263,20 @@ function Variables({ sessions, onObject, pane = false, recent }: { sessions: Par
       : <ul className="nb-vars">{session.variables.map(v => <li key={v.name} title={v.summary}>
           {onObject ? <button className="nb-var-name" title={'Look at ' + v.name} onClick={() => onObject(session.language, v.name)}>{v.name}</button> : <span className="nb-var-name">{v.name}</span>}<span className="nb-var-type">{v.type}{v.size ? ' · ' + v.size : ''}</span>
           {v.summary && <span className="nb-var-summary">{v.summary}</span>}
+          <Made name={v.name} session={session} relations={relations?.get(session.sessionId)} onCell={onCell} />
         </li>)}</ul>}
     {session && session.variablesOmitted > 0 && <p className="nb-note">{session.variablesOmitted} more not listed.</p>}
   </section>;
+}
+
+// Where a value came from and where it went: the cell that made it as it is now, and the later
+// cells that read that version.
+function Made({ name, session, relations, onCell }: { name: string; session: Session; relations?: CellRelations; onCell?: (cellId: string) => void }) {
+  const maker = relations?.maker.get(name);
+  if (!maker) return null;
+  const by = relations!.readers.get(maker.cellId)?.get(name) ?? [];
+  return <span className="nb-var-made">Made in <CellLink cell={maker} language={session.language} onCell={onCell} what="made it" />
+    {by.length > 0 && <> · read in <CellLinks cells={by} language={session.language} onCell={onCell} /></>}</span>;
 }
 
 function RailPlot({ client, projectId, cell, output, onShow }: { client: UiClient; projectId: string; cell: Cell; output: Output; onShow: () => void }) {
@@ -592,7 +641,14 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   }
   const edit = (cell: Cell) => { setLanguage(cell.language); setDraft(cell.code); requestAnimationFrame(() => { input.current?.focus(); input.current?.scrollIntoView({ block: 'nearest' }); }); };
   const plots = useMemo(() => cells.flatMap(cell => cell.outputs.filter(o => o.kind === 'plot').map(output => ({ cell, output }))).slice(-notebookViewLimits.railPlots).reverse(), [cells]);
-  const show = (cellId: string) => document.getElementById('cell-' + cellId)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  // A cell gone to is brought into view and marked for a moment.
+  const show = (cellId: string) => {
+    const element = document.getElementById('cell-' + cellId);
+    if (!element) return;
+    element.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    element.classList.remove('flash'); void element.offsetWidth; element.classList.add('flash');
+  };
+  const relations = useRelations(cells);
 
   if (off) return <p className="nb-empty-line">{problem}</p>;
   // The line to run waits for now during a replay.
@@ -639,12 +695,12 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {live.length > 0 && !beside.variables && <details className="nb-strip">
         <summary>{live.map(l => <span key={l} className={'nb-strip-session ' + latest[l]!.state}><span className="nb-dot" aria-hidden="true" />{versionOf(latest[l]!)} · {latest[l]!.state === 'busy' ? 'running' : latest[l]!.state} · {latest[l]!.variables.length} {latest[l]!.variables.length === 1 ? 'value' : 'values'}</span>)}</summary>
-        <Variables sessions={Object.fromEntries(live.map(l => [l, latest[l]]))} onObject={onObject} />
+        <Variables sessions={Object.fromEntries(live.map(l => [l, latest[l]]))} onObject={onObject} relations={relations.bySession} onCell={show} />
       </details>}
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
         : !cells.length ? <p className="nb-empty-line">{nothing}</p>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? onObject : undefined} />
+          ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? onObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {composer(true)}
     </div>
@@ -658,7 +714,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
           <p>When the Agent runs R or Python in this project's live sessions, each cell shows here with its purpose, its code, what it printed, its plots and the values it left. Your own cells run in the same sessions, so you can look at what the Agent made.</p>
         </div>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? onObject : undefined} />
+          ? <CellView key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? onObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
       {composer(false)}
@@ -669,7 +725,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
         {languages.map(l => <SessionRow key={l} language={l} session={latest[l]} asking={asking} onInterrupt={() => void interrupt(l)} onStop={session => void stop(session)} />)}
         {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
       </section>
-      {!beside.variables && <Variables sessions={latest} onObject={onObject} />}
+      {!beside.variables && <Variables sessions={latest} onObject={onObject} relations={relations.bySession} onCell={show} />}
       {plots.length > 0 && !beside.plots && <section className="nb-rail-section" aria-labelledby="nb-plots">
         <header><h2 id="nb-plots">Plots</h2></header>
         <div className="nb-thumbs">{plots.map(({ cell, output }) => <RailPlot key={cell.cellId + ':' + output.plot} client={client} projectId={projectId} cell={cell} output={output} onShow={() => show(cell.cellId)} />)}</div>
@@ -687,13 +743,15 @@ export function latestSessions(read: Read | null) {
 
 // The live sessions' variables as a view of their own, beside a script and the Notebook: each
 // with its type, size and summary, read again after every cell. A name opens the value.
+const none: Cell[] = [];
 export function VariablesPane({ client, snapshot, onObject }: { client: UiClient; snapshot: UiSnapshot; onObject?: (language: Language, name: string) => void }) {
   const { read, off, problem } = useKernel(client, snapshot.project.id, snapshot.cursor);
   const latest = useMemo(() => latestSessions(read), [read]);
+  const relations = useRelations(read?.cells ?? none);
   return <div className="nb-pane">
     {off || (problem && !read) ? <p className="nb-empty-line">{problem}</p>
       : !read ? <p className="nb-empty-line">Reading the live sessions…</p>
-      : <Variables pane sessions={latest} onObject={onObject} recent={read.cells.at(-1)?.language} />}
+      : <Variables pane sessions={latest} onObject={onObject} recent={read.cells.at(-1)?.language} relations={relations.bySession} />}
   </div>;
 }
 

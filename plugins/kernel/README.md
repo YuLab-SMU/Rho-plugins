@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.5.3 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.5.4 keeps a live R session and a live Python
 session for a project, which an Agent and the person share, on this machine or on a
 server: one the person manages with serverctl, reached through it, or one reached with
 ssh.
@@ -153,7 +153,9 @@ Limits (`kernelLimits`, each configurable): one session per language, at most 16
 cells waiting in each, cells of at most 64 KiB of code, the first 256 KiB of each
 cell's output (the rest is counted and the cell marked cut), at most 8 plots of at
 most 4 MiB per cell, 500 kept cells (the oldest finished ones go first, with their
-plots), 200 listed variables, 32 files named per cell (`lineageLimits`) and a 10 minute wait for a cell. A session that is not
+plots), 200 listed variables, 32 strings looked at as paths per cell (those that look like a
+file's path first, so a script's labels do not crowd out the file it writes last), 24 files
+named per cell (`lineageLimits`) and a 10 minute wait for a cell. A session that is not
 ready within 30 seconds (90 on a server) is ended. At most 16 places are named; a check
 ends after 60 seconds, a listing after 30 with at most 500 entries from 1 MiB, a signal
 after 15, and a read of serverctl's registry after 15; files larger than 64 MiB are not copied and a copy ends after 10 minutes; the
@@ -190,12 +192,33 @@ highlighting and Markdown; without them code stays plain and a server's skill sh
 written. The views add their own styles once, in the page's color and type variables, and
 use its base controls (`text-button`, `primary`, `secondary`, `inline-error`).
 
+The Notebook names, under each cell, the values it read with the cell that made the version it
+read ("Read co from R 3"), and for each value it made the later cells that read that version
+("ratio read in R 6", at most three, the rest counted); a cell named there goes to that cell and
+marks it for a moment. Variables names the cell that made each value as it is now and the cells
+that read it; on the Notebook's page these go to the cells too. A cell whose code makes its values
+over three or more steps offers how its values were made, step by step, as a script's data flow,
+in the Notebook and in Data flow's opened box. `ScriptFlowView` draws a script's data flow for a
+page: given the line the reader is on it keeps that step's path in view, and given `onStep` a
+chosen step goes to its lines (a script's editor) instead of opening.
+
 `NotebookPage` is the Notebook as a page, `NotebookWorkSection` the newest cells for an
 overview, `useLiveValues` the sessions' values, and `askCell` and `showOnServer` bring the
 Notebook to a cell and Servers to a file. The pure `./code` entry finds the statement a
 script line belongs to (`statementAt`, `statements`, `unfinished`), writes the code that
 loads a project table or runs a script (`loadCode`, `sourceCode`), and makes Data flow's
-steps and lanes from each cell's `defined`, `used` and `files` (`lineage`, `lanes`).
+steps and lanes from each cell's `defined`, `used` and `files` (`lineage`, `lanes`), each step's
+path split into what it comes from and what comes of it (`flowPath`), and what each cell read
+from which cell (`cellRelations`). `scriptFlow` reads a script's values from its text alone, R
+or Python, in the same shape: each top-level statement makes the values it assigns outside its
+functions, reads the script's values it mentions (not what a function keeps for itself, a field
+after `$` or `.`, an argument's name, the columns in `aes()`, `vars()` or a formula, or an
+import) and reads or writes the files its strings name as the call they are given to does
+(`read.csv`, `write.csv`, `ggsave`, `to_csv`, `open(…, "w")`, or a value holding the path). A
+statement that changes only what the step before made, or makes something from nothing after a
+step that did, joins that step; one that makes and writes nothing is counted, not drawn. Nothing
+runs, so names built at run time and paths pasted from parts are not seen. A script over 512 KiB
+is not read and at most 150 steps are drawn (`scriptFlowLimits`).
 The views read at most 300 cells, show 14 lines of code and 12 of output before a click,
 keep 64 plots read, and list the 24 newest plots in Plots.
 

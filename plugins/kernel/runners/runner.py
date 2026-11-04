@@ -4,7 +4,7 @@
 # that value, as a notebook does. Figures made with matplotlib are saved after each cell. An
 # interrupt (SIGINT; on Windows a Ctrl+C or Ctrl+Break on the session's console) stops the cell
 # that is running and leaves the session and its variables.
-import ast, base64, io, json, linecache, os, platform, signal, sys, tempfile, traceback, types
+import ast, base64, io, json, linecache, os, platform, re, signal, sys, tempfile, traceback, types
 
 root = sys.argv[1]
 os.chdir(root)
@@ -174,9 +174,12 @@ def stamp(path):
         return ('folder', info.st_mtime_ns) if os.path.isdir(path) else (info.st_size, info.st_mtime_ns)
     except OSError: return None
 
+# At most `most` strings are looked at; those that look like a file's path (a folder or an
+# extension) come first, so a script's many labels do not crowd out the file it writes at its end.
 def project_paths(strings, most=32):
     root, out = os.path.realpath(os.getcwd()), {}
-    for text in [t for t in strings if 0 < len(t) < 512 and not any(c in t for c in '\n\r\t')][:most]:
+    kept = [t for t in strings if 0 < len(t) < 512 and not any(c in t for c in '\n\r\t')]
+    for text in sorted(kept, key=lambda t: not re.search(r'/|\.[A-Za-z][A-Za-z0-9]{0,7}$', t))[:most]:
         full = os.path.expanduser(text) if text.startswith(('/', '~')) else os.path.join(root, text)
         # The folder may not be there yet: one the cell makes before it writes into it.
         folder = os.path.realpath(os.path.dirname(full))

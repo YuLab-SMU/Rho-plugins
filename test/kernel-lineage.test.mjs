@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { lanes, lineage, related } from '@rho-workspace/plugin-kernel/code';
+import { cellRelations, flowPath, lanes, lineage, related } from '@rho-workspace/plugin-kernel/code';
 
 const cell = (number, code, record = {}) => ({ cellId: 'c' + number, number, state: 'ok', code, purpose: null, plots: 0, defined: [], removed: [], used: [], files: [], ...record });
 // A results object and an annotation table, merged, changed in place, drawn and written; then the
@@ -108,4 +108,27 @@ test('what a changed value came from goes with the value, to the cell that has i
   assert.deepEqual(step('cell:c4').earlier.map(c => c.number), [2, 3]);
   assert.deepEqual(graph.links.map(l => l.from + '>' + l.to).sort(), ['value:own>cell:c4', 'value:raw>cell:c4']);
   assert.deepEqual(step('cell:c4').reads, ['clipkit/'], 'what the change in 3 read goes with lengths');
+});
+
+test('each cell reads the version a cell made, and each value lists the later cells that read it', () => {
+  const r = cellRelations(cells);
+  const reads = id => r.reads.get(id).map(x => x.name + '@' + (x.from?.number ?? '-'));
+  assert.deepEqual(reads('c3'), ['res@1']);
+  assert.deepEqual(reads('c4'), ['df@3', 'ann@2']);
+  // m changed in place: c5 read the merge's m; later cells read c5's.
+  assert.deepEqual(reads('c5'), ['m@4']);
+  assert.deepEqual([...r.readers.get('c5').get('m')].map(c => c.number), [6, 7, 8]);
+  assert.deepEqual(r.readers.get('c4').get('m').map(c => c.number), [5]);
+  // Cutting ann down read the one c2 made; ann is now c9's.
+  assert.deepEqual(r.readers.get('c2').get('ann').map(c => c.number), [4, 9]);
+  assert.equal(r.maker.get('ann').number, 9);
+  assert.equal(r.maker.get('m').number, 5);
+});
+
+test('a step\'s path splits into what it comes from and what comes of it', () => {
+  const graph = lineage(cells, values);
+  const { up, down } = flowPath(graph, 'cell:c5');
+  // The merge read ann before c9 cut it down, so no line runs from today's ann.
+  assert.deepEqual([...up].sort(), ['cell:c1', 'cell:c3', 'cell:c5']);
+  assert.deepEqual([...down].sort(), ['cell:c5', 'cell:c6', 'cell:c7']);
 });

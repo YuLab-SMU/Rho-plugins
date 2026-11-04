@@ -434,5 +434,5 @@ export const plugin = {
       description: 'Change a project file that is open in Rho through its shared buffer (document.read, document.edit, document.save), so a person\'s unsaved text, undo and saves stay intact.' }],
     hooks: [{ id: 'documents.unsaved-text', event: 'PreToolUse' as const, matcher: 'Edit|Write|MultiEdit', entry: './claude-hook', timeoutSeconds: 10 }]
   },
-  components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }]
+  components: [{ id: 'rho.editor', version: '0.2.0', owner: 'rho-plugins.documents', bindings: { document: 'document' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 }, flow: { type: 'boolean' } }, required: ['title'] } }]
 };

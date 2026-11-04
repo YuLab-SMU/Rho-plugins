@@ -98,11 +98,14 @@ lineage_of <- function(code) {
   list(mentioned = unique(words), assigned = unique(assigned), strings = unique(substring(quoted, 2, nchar(quoted) - 1)))
 }
 # The strings that name a place in the project, each as its project path, with the file's or
-# folder's size and time before the cell. A path outside the project is not followed.
+# folder's size and time before the cell. A path outside the project is not followed. At most
+# `most` strings are looked at; those that look like a file's path (a folder or an extension)
+# come first, so a script's many labels do not crowd out the file it writes at its end.
 project_paths <- function(strings, most = 32L) {
   # Paths are compared with / as their separator, which Windows also takes (C:/data/x.csv).
   root <- normalizePath(getwd(), winslash = "/")
-  s <- utils::head(strings[nchar(strings) > 0 & nchar(strings) < 512 & !grepl("[\n\r\t]", strings)], most)
+  s <- strings[nchar(strings) > 0 & nchar(strings) < 512 & !grepl("[\n\r\t]", strings)]
+  s <- utils::head(s[order(!grepl("/|\\.[A-Za-z][A-Za-z0-9]{0,7}$", s))], most)
   out <- list()
   for (p in s) {
     full <- if (grepl("^(/|~|[A-Za-z]:[/\\\\])", p)) path.expand(p) else file.path(root, p)

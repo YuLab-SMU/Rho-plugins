@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { cellLabel, lanes, lineage, related, type Lineage, type LineageNode, type LineageStep } from './lineage.js';
+import { scriptFlow, scriptFlowLimits, scriptStepAt, type ScriptFlow, type ScriptStep } from './script-flow.js';
 import { Icon } from './ui-icons.js';
 import { at, Code, languageName, languages, latestSessions, useAuthors, useKernel, usePlot, versionOf, type Cell, type Session } from './ui-notebook.js';
 import { whereOf } from './ui-servers.js';
@@ -62,10 +63,7 @@ function Flow({ graph, session, cells, client, snapshot, onObject, onPath }: { g
   return <>
     <p className="flow-lede">Each box is a cell, in the order they ran, with what it made. A line joins a value to each cell that read it.</p>
     <div className="flow-canvas" ref={canvas} style={{ paddingLeft: gutter }} onPointerLeave={() => setPointed(null)}>
-      <svg className="flow-links" aria-hidden="true">
-        <defs><marker id="flow-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 8 4 0 8z" /></marker></defs>
-        {lines.map(line => <path key={line.key} d={line.d} markerEnd="url(#flow-arrow)" className={path ? (path.has(stepOfNode.get(line.from)!) && path.has(line.to) ? 'on' : 'off') : ''} />)}
-      </svg>
+      <Links lines={lines} path={path} stepOfNode={stepOfNode} />
       {laid.order.map(s => {
         const cell = s.cell ? byCell.get(s.cell.cellId) : undefined;
         return <StepBox key={s.id} step={s} cell={cell} values={values} faded={!!path && !path.has(s.id)} onPoint={setPointed}
@@ -123,6 +121,7 @@ function StepCell({ step, cell, byCell, client, snapshot }: { step: LineageStep;
   const plots = cell.outputs.filter(o => o.kind === 'plot');
   return <div className="flow-cell">
     {earlier.map(c => <div key={c.cellId} className="flow-cell-earlier"><span className={'nb-lang ' + c.language}>{languageName[c.language]} {c.number}</span><Code code={c.code} language={c.language} /></div>)}
+    <CellScriptFlow code={cell.code} language={cell.language} />
     <Code code={cell.code} language={cell.language} />
     {plots.length > 0 && <div className="flow-cell-plots">{plots.map(o => <CellPlot key={o.plot} client={client} projectId={snapshot.project.id} cellId={cell.cellId} plot={o.plot!} />)}</div>}
     <footer>
@@ -135,6 +134,78 @@ function CellPlot({ client, projectId, cellId, plot }: { client: UiClient; proje
   const { src, problem } = usePlot(client, projectId, cellId, plot);
   if (problem) return <p className="nb-note">This plot could not be read. {problem}</p>;
   return src ? <img src={src} alt={`Plot ${plot + 1}`} /> : <span className="nb-plot-wait" aria-label="Reading the plot" />;
+}
+
+// The lines in the margin, each ending in an arrow; on a path, those along it stand out.
+function Links({ lines, path, stepOfNode }: { lines: Array<{ key: string; from: string; to: string; d: string }>; path: Set<string> | null; stepOfNode: Map<string, string> }) {
+  const arrow = useId().replace(/:/g, '');
+  return <svg className="flow-links" aria-hidden="true">
+    <defs><marker id={arrow} viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0 8 4 0 8z" /></marker></defs>
+    {lines.map(line => <path key={line.key} d={line.d} markerEnd={`url(#${arrow})`} className={path ? (path.has(stepOfNode.get(line.from)!) && path.has(line.to) ? 'on' : 'off') : ''} />)}
+  </svg>;
+}
+
+// A script's values, read from its text as the Data flow reads a session's cells: each step (the
+// statements that make a value, change it or write a file) is a box in script order with what it
+// makes, and a line joins a value to each step that reads it. The step at the reader's line (an
+// editor's cursor) keeps its path in view, as pointing at a box does. Choosing a step goes to its
+// lines where the page can (a script's editor); elsewhere the box opens to show them.
+export function ScriptFlowView({ shell, ...props }: Parameters<typeof ScriptFlowBody>[0] & { shell?: KernelShell }) { return withShell(shell, <ScriptFlowBody {...props} />); }
+function ScriptFlowBody({ flow, language, current = null, onStep, onPath }: { flow: ScriptFlow; language: Language; current?: number | null; onStep?: (step: ScriptStep) => void; onPath?: (path: string) => void }) {
+  const laid = useMemo(() => lanes(flow), [flow]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [pointed, setPointed] = useState<string | null>(null);
+  const here = current === null ? null : scriptStepAt(flow, current)?.id ?? null;
+  const focus = pointed ?? open ?? here, path = useMemo(() => focus && flow.steps.some(s => s.id === focus) ? related(flow, focus) : null, [flow, focus]);
+  const stepOfNode = useMemo(() => new Map(flow.steps.flatMap(s => s.nodes.map(n => [n.id, s.id] as const))), [flow]);
+  const canvas = useRef<HTMLDivElement>(null);
+  const gutter = 12 + Math.min(laid.count, flowLimits.lanes) * lanePx;
+  const lines = useLinks(canvas, flow, laid.lane, gutter);
+  useEffect(() => { if (here) canvas.current?.querySelector(`[data-step="${CSS.escape(here)}"]`)?.scrollIntoView({ block: 'nearest' }); }, [here]);
+  if (flow.tooLong) return <p className="nb-empty-line">This script is larger than {Math.round(scriptFlowLimits.bytes / 1024)} KB, so how its values are made is not read.</p>;
+  if (!flow.steps.length) return <p className="nb-empty-line">Nothing here makes a value or writes a file that can be read from the code.</p>;
+  return <>
+    <div className="flow-canvas" ref={canvas} style={{ paddingLeft: gutter }} onPointerLeave={() => setPointed(null)}>
+      <Links lines={lines} path={path} stepOfNode={stepOfNode} />
+      {laid.order.map(s => {
+        const step = s as ScriptStep, choose = () => onStep ? onStep(step) : setOpen(open === step.id ? null : step.id);
+        return <ScriptStepBox key={step.id} step={step} language={language} here={step.id === here} open={!onStep && step.id === open} faded={!!path && !path.has(step.id)}
+          goes={!!onStep} onPoint={setPointed} onChoose={choose} onPath={onPath} />;
+      })}
+    </div>
+    {flow.quiet > 0 && <p className="nb-note">{flow.quiet} {flow.quiet === 1 ? 'statement makes' : 'statements make'} nothing and {flow.quiet === 1 ? 'is' : 'are'} not drawn: prints, checks and library calls.</p>}
+    {flow.cut > 0 && <p className="nb-note">{flow.cut} more {flow.cut === 1 ? 'step is' : 'steps are'} not drawn.</p>}
+  </>;
+}
+const linesOf = (step: ScriptStep) => step.from === step.to ? String(step.from) : `${step.from}–${step.to}`;
+function ScriptStepBox({ step, language, here, open, faded, goes, onPoint, onChoose, onPath }: { step: ScriptStep; language: Language; here: boolean; open: boolean; faded: boolean; goes: boolean; onPoint: (id: string | null) => void; onChoose: () => void; onPath?: (path: string) => void }) {
+  const first = step.cell.code.split('\n').find(line => line.trim())?.trim() ?? '', reads = step.reads.slice(0, flowLimits.reads);
+  const where = (step.from === step.to ? 'line ' : 'lines ') + linesOf(step);
+  return <section className={'flow-step script' + (here ? ' here' : '') + (open ? ' open' : '') + (faded ? ' faded' : '')} data-step={step.id} onPointerEnter={() => onPoint(step.id)}>
+    <button className="flow-step-head" aria-expanded={goes ? undefined : open} title={goes ? 'Go to ' + where : (open ? 'Hide ' : 'Show ') + where} onClick={onChoose}>
+      <span className="flow-lines">{linesOf(step)}</span><code>{first}</code>{!goes && <Icon name="chevron" size={12} />}
+    </button>
+    {reads.length > 0 && <p className="flow-reads">Reads {reads.map(file => onPath
+      ? <button key={file} className="flow-file" title={'Open ' + file} onClick={() => onPath(file)}><Icon name="file" size={11} stroke={1.8} />{fileName(file)}</button>
+      : <span key={file} className="flow-file" title={file}><Icon name="file" size={11} stroke={1.8} />{fileName(file)}</span>)}{step.reads.length > reads.length && <span>and {step.reads.length - reads.length} more</span>}</p>}
+    <ul className="flow-outs">{step.nodes.map(node => {
+      const file = node.kind === 'file';
+      return <li key={node.id}><button data-node={node.id} className={'flow-out ' + (file ? 'file wrote' : 'value')} disabled={file && !onPath}
+        title={file ? (onPath ? 'Open ' + node.name : node.name) : 'Go to ' + where} onClick={() => file ? onPath?.(node.name) : onChoose()}>
+        <Icon name={file ? 'file' : 'braces'} size={12} stroke={1.8} />
+        <span>{file ? fileName(node.name) : node.name}</span>
+        <small>{file ? 'written' : step.functions.includes(node.name) ? 'function' : step.changed.includes(node.name) ? 'changed' : ''}</small>
+      </button></li>;
+    })}</ul>
+    {open && <div className="flow-cell"><Code code={step.cell.code} language={language} /></div>}
+  </section>;
+}
+// A cell that makes its values over several steps shows them, as its script would.
+export const innerFlowLimits = { steps: 3 };
+export function CellScriptFlow({ code, language }: { code: string; language: Language }) {
+  const flow = useMemo(() => scriptFlow(code, language), [code, language]);
+  if (flow.steps.length < innerFlowLimits.steps) return null;
+  return <details className="flow-inner"><summary>How its values were made, step by step</summary><ScriptFlowBody flow={flow} language={language} /></details>;
 }
 
 // The lines in the margin, measured from where the page put the boxes, again as the view or a box

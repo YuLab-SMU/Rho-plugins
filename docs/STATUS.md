@@ -51,7 +51,12 @@ refused connection — Rho not running at the connection's address — as `unava
 nothing delivered, instead of an unknown outcome. Notebook 0.5.3 starts a session with a program the
 project names (`kernel.run` `interpreter`, such as `.venv/bin/python`, kept for later sessions),
 records each session's and each cell's program and version, and lets a caller start again a
-session only it ran cells in.
+session only it ran cells in. Notebook 0.5.4 names, under each cell and each variable, the cell
+that made what it read and the later cells that read what it made; reads a script's values from
+its text alone (`scriptFlow`, R and Python), drawn as Data flow's boxes for a script beside its
+editor (`ScriptFlowView`) and for a cell that makes its values over three or more steps; and has
+its runners look at path-like strings first, so a script's labels no longer crowd out the figure
+it writes last. Documents 0.4.11 lets a page keep the editor's `flow` switch.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

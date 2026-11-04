@@ -157,3 +157,7 @@ Documents 0.4.7 adds a confirmed-text selection callback for Review and an optio
 excerpt, reads at most 1 MiB per version and previews at most 64 KiB without cutting
 a Unicode sequence. Buffer snapshots continue to identify their version/dirty
 state separately from disk captures. No comparison rewrites a buffer or its undo.
+
+Documents 0.4.11 lets the editor view (`rho.editor`) keep a boolean `flow` beside its
+`title`: an application that shows a script's data flow beside the editor saves the person's
+switch with the page. The buffer, its undo and its saves are unchanged by it.

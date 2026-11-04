@@ -140,8 +140,8 @@ function place(steps: LineageStep[], links: LineageLink[]) {
   return layers;
 }
 
-// The steps a node comes from and leads to, through the links, for showing one path at a time.
-export function related(graph: Lineage, stepId: string) {
+// The steps a step comes from and those that come of it, through the links; each holds the step.
+export function flowPath(graph: Lineage, stepId: string) {
   const stepOfNode = new Map(graph.steps.flatMap(s => s.nodes.map(n => [n.id, s.id] as const)));
   const up = new Map<string, string[]>(), down = new Map<string, string[]>();
   for (const link of graph.links) {
@@ -153,7 +153,39 @@ export function related(graph: Lineage, stepId: string) {
     while (queue.length) for (const id of next.get(queue.pop()!) ?? []) if (!seen.has(id)) { seen.add(id); queue.push(id); }
     return seen;
   };
-  return new Set([...reach(stepId, up), ...reach(stepId, down)]);
+  return { up: reach(stepId, up), down: reach(stepId, down) };
+}
+// The steps a node comes from and leads to, for showing one path at a time.
+export function related(graph: Lineage, stepId: string) {
+  const { up, down } = flowPath(graph, stepId);
+  return new Set([...up, ...down]);
+}
+
+// For a session's cells in the Notebook and its Variables: each cell's reads with the cell that
+// made the version it read, the later cells that read each value a cell made (that version), and
+// the cell that made each value as it is now. A cell kept no record of what it read before Rho
+// kept one; it reads nothing here.
+export interface CellRelations {
+  reads: Map<string, Array<{ name: string; from: LineageCell | null }>>;
+  readers: Map<string, Map<string, LineageCell[]>>;
+  maker: Map<string, LineageCell>;
+}
+export function cellRelations(cells: LineageCell[]): CellRelations {
+  const reads: CellRelations['reads'] = new Map(), readers: CellRelations['readers'] = new Map(), maker = new Map<string, LineageCell>();
+  for (const cell of finished(cells)) {
+    reads.set(cell.cellId, (cell.used ?? []).map(name => {
+      const from = maker.get(name) ?? null;
+      if (from) {
+        let by = readers.get(from.cellId);
+        if (!by) readers.set(from.cellId, by = new Map());
+        by.set(name, [...by.get(name) ?? [], cell]);
+      }
+      return { name, from };
+    }));
+    for (const name of cell.removed ?? []) maker.delete(name);
+    for (const name of cell.defined ?? []) maker.set(name, cell);
+  }
+  return { reads, readers, maker };
 }
 
 // The boxes in the order their cells ran (which is also an order in which each reads only from

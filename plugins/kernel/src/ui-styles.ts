@@ -107,6 +107,18 @@ button.nb-var-name:hover { text-decoration: underline; background: none; }
 button.nb-value:hover { border-color: var(--color-accent); background: var(--color-hover); }
 code.nb-value { border-color: transparent; background: var(--color-well); color: var(--color-ink); font-weight: 500; }
 .nb-value.gone { color: var(--color-meta); text-decoration: line-through; }
+/* What a cell read and from which cell, and which later cells read what it made. */
+.nb-values > .nb-rel + span { margin-left: 8px; }
+.nb-rel { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+.nb-rel + .nb-rel { margin-left: 4px; }
+.nb-cell-link { min-height: 0; padding: 0 2px; border: 0; border-radius: 4px; background: none; box-shadow: none; color: var(--color-meta); font: 500 11.5px var(--font-mono); white-space: nowrap; }
+button.nb-cell-link { color: var(--color-accent-strong); }
+button.nb-cell-link:hover { background: var(--color-hover); text-decoration: underline; }
+.nb-var-made { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 0 3px; color: var(--color-meta); font-size: 11.5px; }
+.nb-var-made .nb-cell-link { font-size: 11px; }
+.nb-cell-links { display: inline-flex; align-items: baseline; }
+@keyframes nb-flash { from { background: var(--color-accent-soft); } to { background: transparent; } }
+.nb-cell.flash { animation: nb-flash 1.6s ease-out; }
 .nb-var-type { overflow: hidden; color: var(--color-meta); font-size: 12px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .nb-var-summary { grid-column: 1 / -1; overflow: hidden; color: var(--color-muted); font: 11.5px/1.4 var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .nb-thumbs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -387,6 +399,14 @@ button.flow-file:hover { background: var(--color-hover); color: var(--color-ink)
 .flow-cell-earlier { display: flex; flex-direction: column; gap: 4px; opacity: .8; }
 .flow-cell-earlier > .nb-lang { align-self: flex-start; }
 .flow-cell-plots { display: flex; flex-wrap: wrap; gap: 8px; }
+/* A script's steps: its lines in place of a cell's number; the step at the reader's line. */
+.flow-lines { flex: none; padding: 0 6px; border-radius: 999px; background: var(--color-well); color: var(--color-muted); font: 600 10.5px var(--font-mono); font-variant-numeric: tabular-nums; }
+.flow-step.script.here { border-color: var(--color-accent); box-shadow: 0 0 0 2px var(--color-accent-soft); }
+.flow-step.script.here .flow-lines { background: var(--color-accent-soft); color: var(--color-accent-strong); }
+.flow-inner { display: flex; flex-direction: column; gap: 8px; }
+.flow-inner > summary { width: fit-content; color: var(--color-accent-strong); font-size: 12px; font-weight: 600; cursor: pointer; }
+.flow-inner[open] > summary { margin-bottom: 6px; }
+.nb-body > .flow-inner { padding-left: 12px; }
 .flow-cell-plots img { max-width: min(100%, 320px); height: auto; border: 1px solid var(--color-hairline); border-radius: 6px; background: #fff; }
 /* A value of a live session: where in it, what it is and when it was read, then its facts and a page of it. */
 .ov { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 16px; container-type: inline-size; }
