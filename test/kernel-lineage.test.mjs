@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cellRelations, flowPath, lanes, lineage, related } from '@rho-workspace/plugin-kernel/code';
+import { cellRelations, lineage } from '@rho-workspace/plugin-kernel/code';
 
 const cell = (number, code, record = {}) => ({ cellId: 'c' + number, number, state: 'ok', code, purpose: null, plots: 0, defined: [], removed: [], used: [], files: [], ...record });
 // A results object and an annotation table, merged, changed in place, drawn and written; then the
@@ -43,13 +43,6 @@ test('each cell that made something still there is a step, linked from what it r
   assert.equal(step('cell:c9').latest, true);
   assert.equal(graph.steps.filter(s => s.latest).length, 1);
   assert.equal(graph.layers, 4);
-  assert.deepEqual([...related(graph, 'cell:c3')].sort(), ['cell:c1', 'cell:c3', 'cell:c5', 'cell:c6', 'cell:c7']);
-  // In the order the cells ran, res runs past the annotation's box in a lane of its own, and m's
-  // lane down to the plot and the file is free again by then for nothing else.
-  const laid = lanes(graph);
-  assert.deepEqual(laid.order.map(s => s.id), ['cell:c1', 'cell:c3', 'cell:c5', 'cell:c6', 'cell:c7', 'cell:c9']);
-  assert.deepEqual(Object.fromEntries(laid.lane), { 'value:res': 0, 'value:df': 0, 'value:m': 0 });
-  assert.equal(laid.count, 1);
 });
 
 test('a file read before a cell wrote it again is named as read in an earlier version', () => {
@@ -81,19 +74,6 @@ test('values made before the kept cells, cells recorded without reads and the li
   assert.deepEqual(lineage([cell(1, 'q <- 1', { state: 'running', defined: ['q'] })], ['q']).steps.map(s => s.id), ['earlier']);
 });
 
-test('lanes that overlap take separate places in the margin', () => {
-  const graph = lineage([
-    cell(1, 'a <- 1', { defined: ['a'] }),
-    cell(2, 'b <- 2', { defined: ['b'] }),
-    cell(3, 'c <- a + b', { defined: ['c'], used: ['a', 'b'] }),
-    cell(4, 'd <- a * c', { defined: ['d'], used: ['a', 'c'] }),
-  ], ['a', 'b', 'c', 'd']);
-  const laid = lanes(graph);
-  assert.deepEqual(laid.order.map(s => s.cell.number), [1, 2, 3, 4]);
-  assert.deepEqual(Object.fromEntries(laid.lane), { 'value:a': 0, 'value:b': 1, 'value:c': 1 });
-  assert.equal(laid.count, 2);
-});
-
 test('what a changed value came from goes with the value, to the cell that has it now', () => {
   const graph = lineage([
     cell(1, 'raw = load("alignments")', { defined: ['raw'], files: [{ path: 'alignments/', how: 'read' }] }),
@@ -123,12 +103,4 @@ test('each cell reads the version a cell made, and each value lists the later ce
   assert.deepEqual(r.readers.get('c2').get('ann').map(c => c.number), [4, 9]);
   assert.equal(r.maker.get('ann').number, 9);
   assert.equal(r.maker.get('m').number, 5);
-});
-
-test('a step\'s path splits into what it comes from and what comes of it', () => {
-  const graph = lineage(cells, values);
-  const { up, down } = flowPath(graph, 'cell:c5');
-  // The merge read ann before c9 cut it down, so no line runs from today's ann.
-  assert.deepEqual([...up].sort(), ['cell:c1', 'cell:c3', 'cell:c5']);
-  assert.deepEqual([...down].sort(), ['cell:c5', 'cell:c6', 'cell:c7']);
 });

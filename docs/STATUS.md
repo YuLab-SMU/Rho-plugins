@@ -1,6 +1,6 @@
 # Current component status
 
-Updated: 2026-11-02.
+Updated: 2026-11-04.
 
 Files 0.5.0, Annotations 0.5.2 and Tables 0.5.0 supply immutable captures,
 version-bound human decisions and explicit multi-field comparison. Documents
@@ -56,7 +56,12 @@ that made what it read and the later cells that read what it made; reads a scrip
 its text alone (`scriptFlow`, R and Python), drawn as Data flow's boxes for a script beside its
 editor (`ScriptFlowView`) and for a cell that makes its values over three or more steps; and has
 its runners look at path-like strings first, so a script's labels no longer crowd out the figure
-it writes last. Documents 0.4.11 lets a page keep the editor's `flow` switch.
+it writes last. Documents 0.4.11 lets a page keep the editor's `flow` switch. Notebook 0.5.5
+redraws Data flow as a graph of values from the files read to the results, with functions and
+constants named on what uses them, a bar to trace one result and the chosen value's path and
+details; each node is titled with the meaning its `# means:` comment gives, with its name beneath (the
+Agent writes these, and `scriptFlow` and each session cell read them from the text: `sessionGraph`,
+`scriptGraph`); `lanes`, `related`, `flowPath` and `scriptStepAt` are gone.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

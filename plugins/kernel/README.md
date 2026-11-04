@@ -196,31 +196,51 @@ The Notebook names, under each cell, the values it read with the cell that made 
 read ("Read co from R 3"), and for each value it made the later cells that read that version
 ("ratio read in R 6", at most three, the rest counted); a cell named there goes to that cell and
 marks it for a moment. Variables names the cell that made each value as it is now and the cells
-that read it; on the Notebook's page these go to the cells too. A cell whose code makes its values
-over three or more steps offers how its values were made, step by step, as a script's data flow,
-in the Notebook and in Data flow's opened box. `ScriptFlowView` draws a script's data flow for a
-page: given the line the reader is on it keeps that step's path in view, and given `onStep` a
-chosen step goes to its lines (a script's editor) instead of opening.
+that read it; on the Notebook's page these go to the cells too.
 
-`NotebookPage` is the Notebook as a page, `NotebookWorkSection` the newest cells for an
-overview, `useLiveValues` the sessions' values, and `askCell` and `showOnServer` bring the
-Notebook to a cell and Servers to a file. The pure `./code` entry finds the statement a
-script line belongs to (`statementAt`, `statements`, `unfinished`), writes the code that
-loads a project table or runs a script (`loadCode`, `sourceCode`), and makes Data flow's
-steps and lanes from each cell's `defined`, `used` and `files` (`lineage`, `lanes`), each step's
-path split into what it comes from and what comes of it (`flowPath`), and what each cell read
-from which cell (`cellRelations`). `scriptFlow` reads a script's values from its text alone, R
-or Python, in the same shape: each top-level statement makes the values it assigns outside its
-functions, reads the script's values it mentions (not what a function keeps for itself, a field
-after `$` or `.`, an argument's name, the columns in `aes()`, `vars()` or a formula, or an
-import) and reads or writes the files its strings name as the call they are given to does
-(`read.csv`, `write.csv`, `ggsave`, `to_csv`, `open(…, "w")`, or a value holding the path). A
-statement that changes only what the step before made, or makes something from nothing after a
-step that did, joins that step; one that makes and writes nothing is counted, not drawn. Nothing
-runs, so names built at run time and paths pasted from parts are not seen. A script over 512 KiB
-is not read and at most 150 steps are drawn (`scriptFlowLimits`).
-The views read at most 300 cells, show 14 lines of code and 12 of output before a click,
-keep 64 plots read, and list the 24 newest plots in Plots.
+Data flow draws how each result came about as a graph of values, one node per value or file: the
+files read at the top, the results at the bottom (the files written and the plots drawn, else the
+values nothing reads), the values between in rows. A node is titled with the meaning its `# means:`
+comment gives, with its name beneath; a value without one shows its name alone. Functions and
+constants are not drawn; each value names those it uses, and so does a value that changes another
+through a helper made from it (a row mask). A bar above names the results. Choosing one draws only
+what leads to it, and when every result at once would put more than six values in a row, the first
+is chosen to begin with. What leads to no result is named below the graph; choosing one draws what
+leads to it. Choosing a value shows what it comes from and what comes of it in two colors, and names
+how it was made, where, what it comes from, uses, leads to and which results it reaches; a session's
+value can be looked at, a file opened, and the cell that made a value shown in the Notebook. In a
+view of its own, or narrower than 640 px, the chosen value sits above the graph and stays in view;
+wider, it sits beside it. A narrow view titles each node in up to three lines of its meaning, a wide
+one in two. A cell that makes at least three values offers how they came about, in the same drawing.
+`ScriptFlowView` draws a script's graph for a page that follows the chosen value (`selected`,
+`onSelect`) and goes to where a value is made (`onGo`), as a script's editor does. At most 80 values
+are drawn at once, those nearest the results first, and the bar names 8 results until asked for the
+rest (`lineageViewLimits`).
+
+`NotebookPage` is the Notebook as a page, `NotebookWorkSection` the newest cells for an overview,
+`useLiveValues` the sessions' values, and `askCell` and `showOnServer` bring the Notebook to a cell
+and Servers to a file. The pure `./code` entry finds the statement a script line belongs to
+(`statementAt`, `statements`, `unfinished`), writes the code that loads a project table or runs a
+script (`loadCode`, `sourceCode`), follows each cell's `defined`, `used` and `files` to the cell
+that made each value it read (`lineage`, `cellRelations`), and makes Data flow's graph from a
+session's cells (`sessionGraph`) or a script read as text (`scriptGraph`; `scriptFlow` gives a
+script's values, files and their `# means:` comments, and `markersAbove` the comments above one
+statement), with a value's path (`graphPath`), its rows (`graphRows`), the lines behind and in front
+of it (`graphMarks`) and the value made at a line (`graphNodeAt`). In a session, a cell that makes
+its values over several statements is read statement by statement, so each value comes from what its
+own statements read, and a plot from what the statement that drew it read. A value made only from
+literals and calls that put literals together (`c()`, `paste0()`, `dict()`, not a `read.csv()` of a
+URL) is a constant. `scriptFlow` reads a script's values from its text alone, R or Python, in the
+same shape: each top-level statement makes the values it assigns outside its functions, reads the
+script's values it mentions (not what a function keeps for itself, a field after `$` or `.`, an
+argument's name, the columns in `aes()`, `vars()` or a formula, or an import) and reads or writes
+the files its strings name as the call they are given to does (`read.csv`, `write.csv`, `ggsave`,
+`to_csv`, `open(…, "w")`, or a value holding the path). A statement that changes only what the step
+before made, or makes something from nothing after a step that did, joins that step; one that makes
+and writes nothing is counted, with the values it reads, and not drawn. Nothing runs, so names built
+at run time and paths pasted from parts are not seen. A script over 512 KiB is not read and at most
+150 steps are drawn (`scriptFlowLimits`). The views read at most 300 cells, show 14 lines of code
+and 12 of output before a click, keep 64 plots read, and list the 24 newest plots in Plots.
 
 ```sh
 npm run build

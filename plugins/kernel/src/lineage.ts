@@ -140,27 +140,6 @@ function place(steps: LineageStep[], links: LineageLink[]) {
   return layers;
 }
 
-// The steps a step comes from and those that come of it, through the links; each holds the step.
-export function flowPath(graph: Lineage, stepId: string) {
-  const stepOfNode = new Map(graph.steps.flatMap(s => s.nodes.map(n => [n.id, s.id] as const)));
-  const up = new Map<string, string[]>(), down = new Map<string, string[]>();
-  for (const link of graph.links) {
-    const from = stepOfNode.get(link.from)!;
-    up.set(link.to, [...up.get(link.to) ?? [], from]); down.set(from, [...down.get(from) ?? [], link.to]);
-  }
-  const reach = (start: string, next: Map<string, string[]>) => {
-    const seen = new Set<string>([start]), queue = [start];
-    while (queue.length) for (const id of next.get(queue.pop()!) ?? []) if (!seen.has(id)) { seen.add(id); queue.push(id); }
-    return seen;
-  };
-  return { up: reach(stepId, up), down: reach(stepId, down) };
-}
-// The steps a node comes from and leads to, for showing one path at a time.
-export function related(graph: Lineage, stepId: string) {
-  const { up, down } = flowPath(graph, stepId);
-  return new Set([...up, ...down]);
-}
-
 // For a session's cells in the Notebook and its Variables: each cell's reads with the cell that
 // made the version it read, the later cells that read each value a cell made (that version), and
 // the cell that made each value as it is now. A cell kept no record of what it read before Rho
@@ -186,27 +165,6 @@ export function cellRelations(cells: LineageCell[]): CellRelations {
     for (const name of cell.defined ?? []) maker.set(name, cell);
   }
   return { reads, readers, maker };
-}
-
-// The boxes in the order their cells ran (which is also an order in which each reads only from
-// boxes above it), and a lane in the margin for each value or file something read: from the line
-// that made it down past the boxes between, to each box that read it. Lanes whose spans do not
-// overlap share a place; lane 0 is nearest the boxes.
-export function lanes(graph: Lineage) {
-  const order = [...graph.steps].sort((a, b) => (a.cell?.number ?? -1) - (b.cell?.number ?? -1));
-  const index = new Map(order.map((s, i) => [s.id, i])), stepOfNode = new Map(order.flatMap(s => s.nodes.map(n => [n.id, s.id] as const)));
-  const spans = new Map<string, { from: number; to: number }>();
-  for (const link of graph.links) {
-    const from = index.get(stepOfNode.get(link.from)!)!, to = index.get(link.to)!, span = spans.get(link.from);
-    spans.set(link.from, { from, to: Math.max(to, span?.to ?? to) });
-  }
-  const ends: number[] = [], lane = new Map<string, number>();
-  for (const [node, span] of [...spans].sort((a, b) => a[1].from - b[1].from || a[1].to - b[1].to)) {
-    let free = ends.findIndex(end => end <= span.from);
-    if (free < 0) free = ends.length;
-    ends[free] = span.to; lane.set(node, free);
-  }
-  return { order, lane, count: ends.length };
 }
 
 // What a cell is called where it is named: its purpose (a script's lines), else its first line.

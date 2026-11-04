@@ -6,3 +6,4 @@ export * from './statements.js';
 export * from './explore-code.js';
 export * from './lineage.js';
 export * from './script-flow.js';
+export * from './value-graph.js';

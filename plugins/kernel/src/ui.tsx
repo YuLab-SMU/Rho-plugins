@@ -10,7 +10,7 @@ export { SessionPane, NotebookPage, VariablesPane, PlotsPane, Code, FormSwitch, 
 export { savedForm, saveForm } from './ui-notebook-form.js';
 export { askCell } from './ui-notebook-target.js';
 export { ServersPane, showOnServer } from './ui-servers.js';
-export { FlowPane, ScriptFlowView, flowLimits, innerFlowLimits } from './ui-flow.js';
+export { FlowPane, ScriptFlowView, lineageViewLimits, innerFlowLimits } from './ui-flow.js';
 export { ObjectView, objectViewLimits } from './ui-object.js';
 export { NotebookWorkSection, useNotebookWork, notebookWorkLimits, type NotebookWork } from './ui-notebook-work.js';
 export { useLiveValues, liveValueLimits, type LiveSession, type LiveValues, type ValueLanguage } from './ui-values.js';

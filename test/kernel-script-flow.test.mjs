@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { lanes, looksLikePath, related, scriptFlow, scriptStepAt } from '@rho-workspace/plugin-kernel/code';
+import { looksLikePath, scriptFlow } from '@rho-workspace/plugin-kernel/code';
 
 // Each step as its lines, what it makes (* changes a value made before, () a function) and what
 // the lines into it come from.
@@ -85,15 +85,15 @@ test('a Python script: imports are not values; comprehensions, functions and loo
   ]);
 });
 
-test('a file read again after a step wrote it comes from that step; a line is in its step', () => {
+test('a file read again after a step wrote it comes from that step; what a statement that makes nothing reads is kept', () => {
   const flow = scriptFlow('x <- 1\nwrite.csv(x, "out/x.csv")\ny <- read.csv("out/x.csv")\nprint(y)\n', 'r');
   assert.deepEqual(shape(flow), ['1-1 x <= ', '2-2 out/x.csv <= x@1', '3-3 y <= out/x.csv@2']);
   assert.equal(flow.quiet, 1);
-  assert.equal(scriptStepAt(flow, 3)?.id, 'lines:3');
-  assert.equal(scriptStepAt(flow, 4), null);
-  // The layout and the path through a step are the Data flow's own.
-  assert.deepEqual(lanes(flow).order.map(s => s.id), ['lines:1', 'lines:2', 'lines:3']);
-  assert.deepEqual([...related(flow, 'lines:3')].sort(), ['lines:1', 'lines:2', 'lines:3']);
+  assert.deepEqual(flow.quietReads, [{ from: 4, to: 4, used: ['y'] }]);
+  // Values there before the script (a cell's session values) are read until it makes its own.
+  const cell = scriptFlow('fit <- lm(y ~ x, data = d)\nd <- d[1:2, ]\nz <- d', 'r', undefined, ['d']);
+  assert.deepEqual(cell.outside, [{ name: 'd', to: 'lines:1' }, { name: 'd', to: 'lines:2' }]);
+  assert.deepEqual(shape(cell), ['1-1 fit <= ', '2-2 d* <= ', '3-3 z <= d@2']);
 });
 
 test('strings name files only when they look like one; limits are counted', () => {

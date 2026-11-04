@@ -18,8 +18,14 @@ export interface ScriptStep extends LineageStep {
 }
 export interface ScriptFlow extends Lineage {
   steps: ScriptStep[];
-  // Statements that make and write nothing, and steps past the limit, are counted.
+  // Statements that make and write nothing, and steps past the limit, are counted; the values
+  // those statements read (a plot drawn, a value printed) are kept by line.
   quiet: number; cut: number;
+  quietReads: Array<{ from: number; to: number; used: string[]; means?: string }>;
+  // What the code says each value and file is (markersAbove), by 'value:' and 'file:' keys.
+  means: Map<string, string>;
+  // Reads of the values named as there before the script (a cell's session values), by step.
+  outside: Array<{ name: string; to: string }>;
   // Past the byte limit the script is not read.
   tooLong: boolean;
 }
@@ -384,26 +390,56 @@ function analyze(toks: Token[], language: Language, lineIndent: number[], paths:
 const rKeywords = new Set(['if', 'else', 'repeat', 'while', 'function', 'for', 'in', 'next', 'break', 'TRUE', 'FALSE', 'NULL', 'Inf', 'NaN', 'NA', 'NA_integer_', 'NA_real_', 'NA_character_', 'NA_complex_', 'library', 'require', 'requireNamespace', 'suppressPackageStartupMessages']);
 const pyKeywords = new Set(['False', 'None', 'True', 'and', 'as', 'assert', 'async', 'await', 'break', 'class', 'continue', 'def', 'del', 'elif', 'else', 'except', 'finally', 'for', 'from', 'global', 'if', 'import', 'in', 'is', 'lambda', 'nonlocal', 'not', 'or', 'pass', 'raise', 'return', 'try', 'while', 'with', 'yield', 'self']);
 
+// What the code says a value or file is: a comment line `# means: …` directly above the statement
+// that first makes the value or names the file, or `# means name: …` for the one value or file
+// `name` in a statement that makes or names several. The words are the code's author's (an Agent's,
+// mostly) and sit beside the code they describe. The first statement that makes or names a key
+// decides its meaning, so a later change does not replace it. Nothing here runs code.
+const meaningLimit = 200;
+const markerLine = /^\s*#\s*means(?:\s+([^\s:#]+))?\s*:\s*(\S.*?)\s*$/i;
+// The markers on the comment lines directly above the statement that starts at `line` (1-based).
+export function markersAbove(lines: string[], line: number): Array<{ name: string | null; text: string }> {
+  const block: string[] = [];
+  for (let i = line - 2; i >= 0 && /^\s*#/.test(lines[i]!); i--) block.unshift(lines[i]!);
+  return block.flatMap(text => { const m = markerLine.exec(text); return m ? [{ name: m[1] ?? null, text: m[2]!.slice(0, meaningLimit) }] : []; });
+}
+// The unnamed marker above a statement, as the field a read carries (none when there is none).
+const unnamedMeaning = (lines: string[], line: number) => { const text = markersAbove(lines, line).find(m => !m.name)?.text; return text ? { means: text } : {}; };
 // The script's steps, in order, with lines from each value (and written file) to the steps that
 // read that version of it.
-export function scriptFlow(text: string, language: Language, limits = scriptFlowLimits): ScriptFlow {
-  const empty: ScriptFlow = { steps: [], links: [], layers: 0, omitted: { values: 0, plots: 0, files: 0 }, quiet: 0, cut: 0, tooLong: false };
+// `outside` names the values there before the script runs (a session's, for a cell's code): the
+// script reads them too, until it makes its own.
+export function scriptFlow(text: string, language: Language, limits = scriptFlowLimits, outside: string[] = []): ScriptFlow {
+  const empty: ScriptFlow = { steps: [], links: [], layers: 0, omitted: { values: 0, plots: 0, files: 0 }, quiet: 0, cut: 0, tooLong: false, outside: [], quietReads: [], means: new Map() };
   if (new TextEncoder().encode(text).length > limits.bytes) return { ...empty, tooLong: true };
   const lines = text.split('\n'), lineIndent = lines.map(l => l.length - l.trimStart().length);
   const toks = tokenize(text, language), paths = new Map<string, string>();
   let quiet = 0, t = 0;
+  // What the code says each value and file is (see markersAbove), and the keys already decided.
+  const means = new Map<string, string>(), claimed = new Set<string>();
+  const quietReads: ScriptFlow['quietReads'] = [];
   interface Group { from: number; to: number; defined: string[]; changed: Set<string>; used: string[]; reads: string[]; wrote: string[]; functions: string[] }
-  const groups: Group[] = [], known = new Set<string>();
+  const groups: Group[] = [], known = new Set<string>(outside);
   for (const statement of statements(text, language)) {
     while (t < toks.length && toks[t]!.line < statement.from) t++;
     const start = t;
     while (t < toks.length && toks[t]!.line <= statement.to) t++;
     const made = analyze(toks.slice(start, t), language, lineIndent, paths);
+    // The first statement that makes a value, or reads or writes a file, decides its meaning. A
+    // named marker goes to that value or file; an unnamed one to the values the statement makes, else
+    // to the files it reads or writes.
+    const marks = markersAbove(lines, statement.from);
+    for (const k of [...made.defined.map(name => ({ key: 'value:' + name, name, value: true })), ...made.files.map(f => ({ key: 'file:' + f.path, name: f.path, value: false }))]) {
+      if (claimed.has(k.key)) continue;
+      claimed.add(k.key);
+      const mark = marks.find(m => m.name === k.name) ?? (k.value === (made.defined.length > 0) ? marks.find(m => !m.name) : undefined);
+      if (mark) means.set(k.key, mark.text);
+    }
     // Only the script's own values are read from it; the rest are the session's or a package's.
     const used = made.used.filter(n => known.has(n));
     const wrote = made.files.filter(f => f.how === 'wrote').map(f => f.path), read = made.files.filter(f => f.how === 'read').map(f => f.path);
     for (const n of made.defined) known.add(n);
-    if (!made.defined.length && !wrote.length) { quiet++; continue; }
+    if (!made.defined.length && !wrote.length) { quiet++; if (used.length) quietReads.push({ from: statement.from, to: statement.to, used, ...unnamedMeaning(lines, statement.from) }); continue; }
     const last = groups.at(-1);
     const continues = last && !wrote.length && !last.wrote.length && (
       // It changes only what the step made, or it makes something from nothing after a step that did.
@@ -421,12 +457,13 @@ export function scriptFlow(text: string, language: Language, limits = scriptFlow
   }
   const kept = groups.slice(0, limits.steps);
   // Who made each value and wrote each file so far, as the steps go.
-  const maker = new Map<string, string>(), writer = new Map<string, string>(), links: LineageLink[] = [];
+  const maker = new Map<string, string>(), writer = new Map<string, string>(), links: LineageLink[] = [], before: ScriptFlow['outside'] = [];
+  for (const n of outside) maker.set(n, '');
   const steps: ScriptStep[] = kept.map(g => {
     const id = 'lines:' + g.from;
     const cell: LineageCell = { cellId: 'L' + g.from, number: g.from, state: 'done', code: lines.slice(g.from - 1, g.to).join('\n'), purpose: null, plots: 0, defined: g.defined, used: g.used, files: [...g.reads.map(path => ({ path, how: 'read' as const })), ...g.wrote.map(path => ({ path, how: 'wrote' as const }))] };
     const reads: string[] = [];
-    for (const n of g.used) { const from = maker.get(n); if (from) links.push({ from, to: id }); }
+    for (const n of g.used) { const from = maker.get(n); if (from) links.push({ from, to: id }); else if (from === '') before.push({ name: n, to: id }); }
     for (const p of g.reads) { const from = writer.get(p); if (from) links.push({ from, to: id }); else reads.push(p); }
     const changed = g.defined.filter(n => maker.has(n) && (g.changed.has(n) || g.used.includes(n)));
     const nodes: LineageNode[] = [...g.defined.map(n => ({ id: `value:${n}@${g.from}`, kind: 'value' as const, name: n, step: id })), ...g.wrote.map(p => ({ id: `wrote:${p}@${g.from}`, kind: 'file' as const, name: p, step: id }))];
@@ -434,8 +471,5 @@ export function scriptFlow(text: string, language: Language, limits = scriptFlow
     for (const p of g.wrote) writer.set(p, `wrote:${p}@${g.from}`);
     return { id, kind: 'cell', cell, earlier: [], nodes, reads, latest: false, unknownInputs: false, stale: [], layer: 0, order: 0, from: g.from, to: g.to, changed, functions: g.functions };
   });
-  return { steps, links, layers: 0, omitted: { values: 0, plots: 0, files: 0 }, quiet, cut: groups.length - kept.length, tooLong: false };
+  return { steps, links, layers: 0, omitted: { values: 0, plots: 0, files: 0 }, quiet, cut: groups.length - kept.length, tooLong: false, outside: before, quietReads, means };
 }
-
-// The step a line is in, if any.
-export const scriptStepAt = (flow: ScriptFlow, line: number) => flow.steps.find(s => s.from <= line && line <= s.to) ?? null;
