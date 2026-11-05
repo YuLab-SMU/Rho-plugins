@@ -1,0 +1,24 @@
+{
+  "name": "@rho-workspace/sclet-plugin",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "description": "State-aware single-cell analysis in the project\u2019s shared R session. Inspect the ledger, validate plans, execute them and read evidence-backed reports.",
+  "rhoPlugin": "rho-plugin.json",
+  "files": [
+    "rho-plugin.json",
+    "host.mjs",
+    "view.html",
+    "SKILL.md",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.22.0 <27"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YuLab-SMU/Rho-plugins.git",
+    "directory": "examples/sclet-plugin"
+  }
+}

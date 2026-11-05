@@ -1,6 +1,14 @@
 # Current component status
 
-Updated: 2026-11-04.
+Updated: 2026-11-05.
+
+The optional [sclet package](../examples/sclet-plugin/README.md) is the first
+consumer of Rho's runtime third-party API 1. It lives outside the base catalog:
+public sclet operations, a driver Skill and prebuilt UI share the project's R
+session. R 4.5.2/sclet 1.1.0 completed a synthetic 200-gene, 60-cell preprocessing
+and PCA trial, result recording and audited report; stale plans were refused.
+The application [episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/THIRD-PARTY-PLUGINS-EPISODE.md)
+keeps failures and limits. No npm publication or biological validity is claimed.
 
 Files 0.5.0, Annotations 0.5.2 and Tables 0.5.0 supply immutable captures,
 version-bound human decisions and explicit multi-field comparison. Documents

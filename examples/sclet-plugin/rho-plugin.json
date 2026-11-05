@@ -1,0 +1,332 @@
+{
+  "apiVersion": 1,
+  "id": "yulab.sclet",
+  "title": "sclet",
+  "description": "State-aware single-cell analysis in the project’s shared R session. Inspect the ledger, validate plans, execute them and read evidence-backed reports.",
+  "host": "host.mjs",
+  "operations": [
+    {
+      "id": "sessions",
+      "title": "Read sessions",
+      "description": "Observe shared R sessions without starting one.",
+      "effect": "read",
+      "methods": [
+        "kernel.read"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "cell",
+      "title": "Read a cell",
+      "description": "Observe the original Notebook cell; never resubmit it.",
+      "effect": "read",
+      "methods": [
+        "kernel.read"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cellId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "cellId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "check",
+      "title": "Check R packages",
+      "description": "Run a small cell to check sclet, SingleCellExperiment and jsonlite in the selected R environment.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "ledger",
+      "title": "Read analysis ledger",
+      "description": "Run GetAnalysisLedger without copying assay matrices; findings are included only when requested.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+            "maxLength": 128
+          },
+          "includeArtifacts": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "registry",
+      "title": "Read action registry",
+      "description": "Describe actions from the installed sclet AIDefaultExecutionRegistry.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "skill",
+      "title": "Read sclet Skill",
+      "description": "Read sclet’s own installed domain Skill.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "enum": [
+              "sclet-driver",
+              "sclet-analysis",
+              "sclet-claims",
+              "sclet-provenance"
+            ]
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "validate",
+      "title": "Validate a plan",
+      "description": "Build a sclet plan from the supplied fingerprint and actions, validate it and keep its one-use validation in this R session.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+            "maxLength": 128
+          },
+          "plan": {
+            "type": "object",
+            "properties": {
+              "task": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "context_fingerprint": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 256
+              },
+              "actions": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 32,
+                "items": {
+                  "type": "object"
+                }
+              },
+              "rationale": {
+                "type": "string",
+                "maxLength": 4096
+              },
+              "assumptions": {
+                "type": "array"
+              },
+              "success_criteria": {
+                "type": "array"
+              },
+              "risks": {
+                "type": "array"
+              },
+              "stop_conditions": {
+                "type": "array"
+              },
+              "metadata": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "task",
+              "context_fingerprint",
+              "actions"
+            ],
+            "additionalProperties": false
+          },
+          "maxPlans": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 128
+          }
+        },
+        "required": [
+          "object",
+          "plan"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "execute",
+      "title": "Execute a validated plan",
+      "description": "Execute the original plan against its current SCE using sclet’s validation token; save its returned object, including partial state. This does not imply scientific success.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "validationId": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "validationId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "record",
+      "title": "Record an analysis result",
+      "description": "Record the caller’s interpretation with RecordAIResult and native claim auditing enabled. Evidence must already exist on the SCE.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+            "maxLength": 128
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "result": {
+            "type": "object",
+            "required": [
+              "task",
+              "answer",
+              "findings",
+              "evidence"
+            ],
+            "properties": {
+              "task": {
+                "type": "string"
+              },
+              "answer": {
+                "type": "string"
+              },
+              "findings": {
+                "type": "array"
+              },
+              "evidence": {
+                "type": "array"
+              }
+            },
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "object",
+          "recordId",
+          "result"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "report",
+      "title": "Render a recorded report",
+      "description": "RenderAIReport reads recorded evidence and prints its own verification results.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+            "maxLength": 128
+          },
+          "recordId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "skills": [
+    {
+      "id": "driver",
+      "title": "Use sclet from Rho",
+      "file": "SKILL.md"
+    }
+  ],
+  "views": [
+    {
+      "id": "workbench",
+      "title": "sclet workbench",
+      "file": "view.html"
+    }
+  ]
+}

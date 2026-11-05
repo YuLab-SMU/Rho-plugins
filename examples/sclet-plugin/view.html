@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>sclet workbench</title>
+<style>
+*{box-sizing:border-box}body{font:14px/1.55 system-ui;color:#25372f;background:#fff;margin:0;padding:22px}h1{font-size:23px;margin:0}p{margin:7px 0 16px;color:#52645a}.row{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin:12px 0}label{display:flex;gap:7px;align-items:center}input,textarea,button{font:inherit;border:1px solid #c6d3ca;border-radius:6px;padding:8px}button{background:#f1f6f2;color:#264333;cursor:pointer}button:disabled{opacity:.5}input{min-width:0;max-width:100%}textarea{width:100%;min-height:150px;font:12px/1.5 ui-monospace,monospace}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#f5f7f5;padding:14px;border-radius:8px;max-height:430px;overflow:auto}summary{cursor:pointer;font-weight:600}#status{margin:10px 0}#output:empty{display:none}.note{font-size:12px}#validation{max-width:100%}@media(max-width:480px){body{padding:14px}label{flex-wrap:wrap}}
+</style></head><body>
+<h1>sclet</h1><p>Work with a SingleCellExperiment in this project’s shared R session.</p>
+<div id="status" role="status">Read sessions to see what is already running.</div>
+<div class="row"><button data-op="sessions">Read sessions</button><button data-op="check">Check R packages</button><button data-op="skill">Read sclet guide</button></div>
+<div class="row"><label>R object <input id="object" value="sce" maxlength="128"></label><button data-op="ledger">Read ledger</button><button data-op="registry">Available actions</button></div>
+<div class="row"><label>Report ID <input id="report-id" placeholder="Active result, or a record ID" maxlength="128"></label><button data-op="report">Read report</button></div>
+<p class="note">Checking packages starts R if needed. Load your data in Notebook first. Reading a ledger runs a small cell; assay matrices stay in R. Missing packages must be installed in the selected R environment.</p>
+<details><summary>Plan and execute</summary><p>Read the current ledger and action registry. Supply its fingerprint and your chosen actions; sclet validates native prerequisites before execution.</p>
+<label for="plan">Plan JSON</label><textarea id="plan" spellcheck="false" placeholder='{"task":"my-analysis","context_fingerprint":"from the current ledger","actions":[{"id":"s1","action":"normalize_data"}]}'></textarea>
+<div class="row"><button data-op="validate">Validate plan</button></div><label>Validation ID <input id="validation" placeholder="Returned by validation" size="38"></label><div class="row"><button data-op="execute">Execute validated plan</button></div><p class="note">Execution updates the selected R object. Execution status and scientific validity are separate; read the report and its evidence checks afterward.</p></details>
+<details><summary>Record an interpretation</summary><p>An execution record is not an analysis report. Supply the result your analysis supports; sclet audits claims and evidence before recording it.</p><label>Record ID <input id="record-id" value="analysis-report" maxlength="128"></label><label for="result">Result JSON</label><textarea id="result" spellcheck="false" placeholder='{"task":"analysis","answer":"Your interpretation","findings":[],"evidence":[]}'></textarea><div class="row"><button data-op="record">Record result</button></div></details>
+<pre id="output" tabindex="0" aria-label="sclet output"></pre><button id="refresh" hidden>Refresh original cell</button>
+<script>
+let cellId=null,timer=null,busy=false;
+const out=document.querySelector('#output'),status=document.querySelector('#status'),refresh=document.querySelector('#refresh');
+function show(cell){cellId=cell.cellId;out.textContent=(cell.outputs||[]).map(x=>x.text||'').join('\n')+(cell.error?'\n'+(typeof cell.error==='string'?cell.error:JSON.stringify(cell.error)):'');status.textContent='Notebook cell '+cell.cellId+' · '+cell.state;refresh.hidden=false;const found=out.textContent.match(/"validationId"\s*:\s*"([a-f0-9]{64})"/);if(found)document.querySelector('#validation').value=found[1];clearTimeout(timer);if(['running','queued','waiting'].includes(cell.state))timer=setTimeout(observe,700)}
+async function observe(){if(!cellId)return;try{const result=await rho.call('cell',{cellId});if(result.state!=='completed')throw new Error(result.error||result.state);const cell=result.value.cells?.find(x=>x.cellId===cellId);if(cell)show(cell);else status.textContent='Original cell is not available. Keep its identity; do not resubmit.'}catch(error){status.textContent=error.message;refresh.hidden=false}}
+refresh.onclick=observe;
+document.querySelectorAll('[data-op]').forEach(button=>button.onclick=async()=>{
+ if(busy)return;const operation=button.dataset.op,object=document.querySelector('#object').value.trim();let input={};
+ try{
+ if(['ledger','registry','report'].includes(operation))input={object,...(operation==='ledger'?{includeArtifacts:true}:{})};
+ if(operation==='report'&&document.querySelector('#report-id').value.trim())input.recordId=document.querySelector('#report-id').value.trim();
+ if(operation==='skill')input={name:'sclet-driver'};
+ if(operation==='validate')input={object,plan:JSON.parse(document.querySelector('#plan').value)};
+ if(operation==='record')input={object,recordId:document.querySelector('#record-id').value.trim(),result:JSON.parse(document.querySelector('#result').value)};
+ if(operation==='execute')input={validationId:document.querySelector('#validation').value.trim()};
+ busy=true;document.querySelectorAll('[data-op]').forEach(b=>b.disabled=true);status.textContent='Submitting '+operation+'…';clearTimeout(timer);
+ const result=await rho.call(operation,input);if(result.state!=='completed')throw new Error(result.error||result.state);
+ if(operation==='record')document.querySelector('#report-id').value=input.recordId;
+ if(result.value.cell)show(result.value.cell);else{out.textContent=JSON.stringify(result.value,null,2);status.textContent='Observed existing sessions. No session was started.'}
+ }catch(error){status.textContent=error.message}finally{busy=false;document.querySelectorAll('[data-op]').forEach(b=>b.disabled=false)}
+});
+</script></body></html>
