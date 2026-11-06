@@ -1,6 +1,14 @@
 # Current component status
 
-Updated: 2026-11-05.
+Updated: 2026-11-06.
+
+Agent **0.4.29** retains native Harness conversations in project-local observations,
+with original session/turn/call identities, visible replies, separate tool/exit
+outcomes and reported or exact-version results. Read-only operations and the UI
+entry keep input in the original client. [Budgets and boundaries](../plugins/agent/README.md#external-conversations)
+cover partial records, backwards/conflicting sources, symlinks and writer locks.
+Four focused owner regressions pass; the application's real Harness episode is
+separate from this component check.
 
 The optional [sclet package](../examples/sclet-plugin/README.md) is the first
 consumer of Rho's runtime third-party API 1. It lives outside the base catalog:

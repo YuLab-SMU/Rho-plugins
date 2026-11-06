@@ -425,7 +425,10 @@ const legacyOperationContracts = {
 } as const;
 
 const business = (schema: any) => structuredClone(schema);
+export { externalSessionSchemas } from './external-session-contract.js';
+import { externalSessionOperations } from './external-session-contract.js';
 export const operationContracts = {
+  ...externalSessionOperations,
   ...activityOperationContracts,
   ...legacyOperationContracts,
   'feedback.submit': { inputSchema: feedbackSchemas.FeedbackSubmitInput, outputSchema: feedbackSchemas.SubmissionRecord, requires: ['documents', 'annotations'], effect: 'metadata' as const },

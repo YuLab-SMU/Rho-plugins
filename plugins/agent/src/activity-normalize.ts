@@ -13,7 +13,7 @@ const sensitive = /(?:^|[_-])(?:authorization|cookie|password|passwd|secret|api[
 const hidden = /^(?:thinking|reasoning|reasoning_content|signature)$/i;
 const txt = (v: any): string => typeof v === 'string' ? v : Array.isArray(v) ? v.filter(b => b?.type === 'text').map(b => b.text).join('\n') : '';
 
-function payload(value: any, options: CaptureOptions) {
+export function activityPayload(value: any, options: CaptureOptions) {
   let redacted = false, truncated = false;
   const cap = options.maxFieldBytes ?? 8192;
   const identities = new Set(['native_id','call_id','root_call_id','job_id','parent_message_id']);
@@ -21,7 +21,7 @@ function payload(value: any, options: CaptureOptions) {
     if (depth > 12) { truncated = true; return '[depth limit]'; }
     if (typeof v === 'string') {
       const scrubbed = v.replace(/\b(Bearer)\s+[^\s'";]+/gi, '$1 [redacted]')
-        .replace(/\b([\w-]*(?:api[_-]?key|password|passwd|auth[_-]?token|access[_-]?token|secret)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s'";]+)/gi, '$1[redacted]');
+        .replace(/\b([\w-]*(?:api[_-]?key|password|passwd|auth[_-]?token|access[_-]?token|token|cookie|authorization|secret)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s'";]+)/gi, '$1[redacted]');
       if (scrubbed !== v) redacted = true;
       if (Buffer.byteLength(scrubbed) <= cap) return scrubbed;
       truncated = true;
@@ -63,7 +63,7 @@ function inputSummary(input: any) {
 function chained(items: { kind: string; data: any }[], options: CaptureOptions): ObservedEvent[] {
   let prefix = hash(activityNormalizer);
   return items.map(({ kind, data }, sequence) => {
-    const safe = payload(data, options);
+    const safe = activityPayload(data, options);
     prefix = hash(prefix + canonicalActivity({ kind, data: safe }));
     return { sequence, kind, data: { ...safe, prefix_sha256: prefix } };
   });

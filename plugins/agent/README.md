@@ -390,3 +390,42 @@ fetched; an explicit response excludes replies already present in that context.
 ACP retains Codex's native MCP spelling while identifying its operation, and names
 an otherwise unnamed permission from the original tool update. These observations
 do not expand native permission or grant access to arbitrary session history.
+
+## External conversations
+
+Agent 0.4.29 exports `dsh-session` for a Harness adapter to retain a read-only
+observation of a native version-4 session. `observeDshSession(projectRoot, header,
+events)` requires the real native working folder to equal the selected project.
+It preserves session, turn and tool-call identities. Repeated cuts replace the
+same record; a changed prefix or backwards cursor is refused. It never creates
+an Agent, executes a tool, changes a grant or resumes a runtime.
+
+`external-session` supplies bounded `listExternalSessions` and
+`readExternalSession` reads. The operation contracts are `agent.sessions.list`
+and `agent.sessions.read`; an embedding application supplies authorization.
+`ui-external-session` renders prompts, visible replies, operations and results,
+with input explicitly retained by the native client. Reasoning, injected context
+and system messages are excluded; credential-shaped strings are redacted.
+This is an observation of the client's reports, not an independent execution proof.
+
+A successful resource-registration reply carries its exact resource identity and
+version. The application must verify that tuple against its own project resources.
+A native deliverable without a receipt is only a reported path, with no historical
+bytes asserted. Tool return, native exit code and turn completion remain separate.
+An unfinished turn with no observation for 10 seconds has an unknown outcome.
+
+`externalSessionLimits` names the fixed local observation budgets: 64 sessions
+per project, 200 retained turns per session, 256 tools per turn, 32,768 source
+events / 32 MiB per cut, 32,768 characters per prompt/reply and earlier-reply
+collection, 8,192 characters per tool field, and 4 MiB per stored record.
+Text/tools/earlier turns beyond their budgets are omitted with counts. An
+oversized source, conflicting cut, invalid record or busy writer retains the
+previous record and reports failure. Storage is `.rho/agent/external`, contained
+in the project without symlink directories; atomic replacement leaves readers a
+complete record. A positively dead PID lock can be reclaimed; an unknown/live
+lock cannot. Reads create no directories or runtime state. These limits protect
+local storage and observation work; they do not limit the native Agent.
+
+`test/external-session.test.mjs` checks identity, prefix conflicts, omissions,
+missing outcomes, redaction, project containment, retained failure and pagination.
+The Rho application records its separate real Harness/browser acceptance.

@@ -297,3 +297,4 @@ export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspa
   skills: [{ ...agentSkill, presentation: skillPresentation }, { ...feedbackSkill, presentation: { displayName: 'Business feedback', description: 'Reads original feedback, preserves current human edits and links an explicit reply.' } }, { ...presentationSkill, presentation: { displayName: 'Presentation', description: 'Enhances the assigned visible layout without business feedback or document access.' } }],
   agent: { id: 'claude-code-mcp', transport: 'stdio', modelLoop: 'external-client', contextDelivery: 'pull-tool-result', proactivePush: 'unsupported' }
 };
+export { listExternalSessions, readExternalSession } from './external-session.js';

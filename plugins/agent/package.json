@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-agent",
-  "version": "0.4.28",
+  "version": "0.4.29",
   "type": "module",
   "description": "Rho agent plugin",
   "license": "AGPL-3.0-only",
@@ -8,6 +8,9 @@
     "node": ">=22.22.0 <23"
   },
   "exports": {
+    "./external-session": "./dist/external-session.js",
+    "./dsh-session": "./dist/dsh-session.js",
+    "./external-session-contract": "./dist/external-session-contract.js",
     "./session-contract": "./dist/session-contract.js",
     "./conversation": "./dist/conversation.js",
     "./activity-normalize": "./dist/activity-normalize.js",
@@ -25,6 +28,7 @@
     "./claude-feedback-hook": "./dist/claude-feedback-hook.js",
     "./claude-feedback-worker": "./dist/claude-feedback-worker.js",
     "./ui": "./dist/ui.js",
+    "./ui-external-session": "./dist/ui-external-session.js",
     "./layered-contract": "./dist/layered-contract.js",
     "./layered": "./dist/layered.js",
     "./external-acp": "./dist/external-acp.js",
