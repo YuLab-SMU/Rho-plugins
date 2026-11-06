@@ -8,7 +8,7 @@ import { externalSessionLimits as limits } from './external-session-contract.js'
 const text = (v: any): string => typeof v === 'string' ? v : Array.isArray(v) ? v.filter(b => b?.type === 'text' && typeof b.text === 'string').map(b => b.text).join('\n') : '';
 const time = (v: any) => { const n = typeof v === 'number' ? v : Date.parse(v); if (!Number.isFinite(n)) throw new Error('Native event has no valid timestamp.'); return new Date(n).toISOString(); };
 const hash = (v: unknown) => createHash('sha256').update(canonicalActivity(v)).digest('hex');
-const safe = (value: string, cap = limits.maxTextChars) => (activityPayload({ text: value }, { content: true, maxFieldBytes: cap * 4, maxEventBytes: cap * 8 }).text as string ?? '').slice(0, cap).replace(/[\uD800-\uDBFF]$/, '');
+const safe = (value: string, cap = limits.maxTextChars) => (activityPayload({ text: value.replace(/\b([\w-]*(?:token|cookie|authorization)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s'";]+)/gi, '$1[redacted]') }, { content: true, maxFieldBytes: cap * 4, maxEventBytes: cap * 8 }).text as string ?? '').slice(0, cap).replace(/[\uD800-\uDBFF]$/, '');
 export function externalProjectPath(root: string, input: unknown): string | null {
   if (typeof input !== 'string' || input.length > 1024 || input.includes('\0')) return null;
   const relative = path.relative(root, path.resolve(root, input)).split(path.sep).join('/');

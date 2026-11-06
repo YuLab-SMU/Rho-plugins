@@ -21,7 +21,7 @@ export function activityPayload(value: any, options: CaptureOptions) {
     if (depth > 12) { truncated = true; return '[depth limit]'; }
     if (typeof v === 'string') {
       const scrubbed = v.replace(/\b(Bearer)\s+[^\s'";]+/gi, '$1 [redacted]')
-        .replace(/\b([\w-]*(?:api[_-]?key|password|passwd|auth[_-]?token|access[_-]?token|token|cookie|authorization|secret)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s'";]+)/gi, '$1[redacted]');
+        .replace(/\b([\w-]*(?:api[_-]?key|password|passwd|auth[_-]?token|access[_-]?token|secret)["']?\s*[=:]\s*)(?:"[^"]*"|'[^']*'|[^\s'";]+)/gi, '$1[redacted]');
       if (scrubbed !== v) redacted = true;
       if (Buffer.byteLength(scrubbed) <= cap) return scrubbed;
       truncated = true;
