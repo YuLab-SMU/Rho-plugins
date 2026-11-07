@@ -91,6 +91,11 @@ interface Live {
   pipe?: net.Server; answering?: net.Socket; answersClosed?: Promise<void>;
 }
 const markStart = '\x1eRHO:';
+// R on Windows sets these categories from the environment, and Windows has no C.UTF-8: given one,
+// as an Agent's Git Bash gives LC_CTYPE, R warns at startup, runs in the C locale and prints
+// "3 × 2" as "3 <U+00D7> 2". Without them a session takes the system's own locale, UTF-8 there.
+const posixUtf8 = /^(C|POSIX)\.UTF-?8$/i, rLocale = /^LC_(ALL|CTYPE|COLLATE|TIME|MONETARY)$/;
+const windowsEnvironment = (env: NodeJS.ProcessEnv) => Object.fromEntries(Object.entries(env).filter(([name, value]) => !(rLocale.test(name.toUpperCase()) && posixUtf8.test(value ?? ''))));
 // On Windows a session's descriptor 3 reaches a program built on Microsoft's C runtime (Python),
 // but R has no way to name it. There R opens a named pipe served here, by the name it is given in
 // RHO_KERNEL_ANSWERS; the first connection is the session's and no other is taken.
@@ -304,7 +309,7 @@ export class KernelHost {
     const runner = source && `.cache/rho/kernel/runner-${digest(source).slice(0, 16)}${language === 'r' ? '.R' : '.py'}`;
     const pipe = windows && language === 'r' ? await answerPipe() : null;
     const child = place ? await this.transport(place).spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
-      : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...process.env, MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}) } });
+      : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...(windows ? windowsEnvironment(process.env) : process.env), MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}) } });
     let settle = () => {};
     const ended = new Promise<void>(resolve => { settle = resolve; });
     const live: Live = { started: selected, root, ended, settle, record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve(), pipe: pipe?.server };

@@ -75,6 +75,22 @@ test('R cells share one session: values stay, output, warnings, errors and plots
   await host.close();
 });
 
+// An Agent's Git Bash gives Rho LC_CTYPE=C.UTF-8, which Windows does not have: R warned at startup,
+// ran in the C locale and printed "3 × 2" as "3 <U+00D7> 2".
+test('on Windows a session given a POSIX C.UTF-8 locale prints text as it was written', { skip: process.platform !== 'win32' && 'only Windows has no C.UTF-8' }, async () => {
+  const root = await project(), saved = { LC_ALL: process.env.LC_ALL, LC_CTYPE: process.env.LC_CTYPE };
+  process.env.LC_ALL = 'C.UTF-8'; process.env.LC_CTYPE = 'C.utf8';
+  const host = new KernelHost(root, { rscript });
+  try {
+    const shown = await host.run({ language: 'r', code: 'cat("3 \\u00d7 2", "\\u4e2d\\u6587", l10n_info()$`UTF-8`, "\\n")', changeId: 'utf8', by: 'agent:a', waitMs: 30000 });
+    assert.equal(shown.cell.state, 'done');
+    assert.equal(text(shown.cell), '3 × 2 中文 TRUE \n');
+  } finally {
+    for (const [name, value] of Object.entries(saved)) if (value === undefined) delete process.env[name]; else process.env[name] = value;
+    await host.close();
+  }
+});
+
 test('Python cells share one session and show the last value and matplotlib figures', async () => {
   const root = await project();
   const host = new KernelHost(root);
