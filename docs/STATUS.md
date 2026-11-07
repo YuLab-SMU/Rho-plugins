@@ -2,6 +2,8 @@
 
 Updated: 2026-11-07.
 
+The optional [Semantic figures 0.1.0](../plugins/semantic-figures/README.md) plugin captures native ggtree tree layouts and enrichplot dotplot/cnetplot views from project RDS files. Two separate adapters retain clade membership and term/gene identities; conditional shared selections are readable by Agents. Five owner checks pass; the [Rho episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/SEMANTIC-FIGURES-EPISODE.md) passed with public package data, real R and Chrome, including layout switching, bidirectional linking, reopening and failure recovery. Views remain on Plugins; no automatic Agent interpretation, semantic migration, npm publication or update to the user’s running instance.
+
 Agent **0.4.33** records its shared MCP export, stdio transport and four tools in
 `plugin.agent.mcp`. The server and descriptor use `src/mcp-entry.ts`, so discovery
 does not maintain another list or start a server. Three intent/unreachable-MCP

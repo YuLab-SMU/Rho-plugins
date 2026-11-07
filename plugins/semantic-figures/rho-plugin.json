@@ -1,0 +1,185 @@
+{
+  "apiVersion": 1,
+  "id": "yulab.semantic-figures",
+  "title": "Semantic figures",
+  "description": "Explore native ggtree layouts and linked enrichplot dotplot/network views. Selected entities retain their source snapshot and are readable by your Agent.",
+  "host": "host.mjs",
+  "operations": [
+    {
+      "id": "list",
+      "title": "List captured figures",
+      "description": "Read retained captures without starting R. Incomplete captures retain their original cell.",
+      "effect": "read",
+      "methods": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "capture",
+      "title": "Capture native R figures",
+      "description": "Capture a project RDS with the selected adapter in the shared local R session. Returns the original cell; observe it with cell.",
+      "effect": "native",
+      "methods": [
+        "kernel.read",
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "adapter": {
+            "enum": [
+              "ggtree",
+              "enrichplot"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 120
+          },
+          "showCategory": {
+            "type": "integer",
+            "minimum": 2,
+            "maximum": 8
+          }
+        },
+        "required": [
+          "adapter",
+          "source"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "cell",
+      "title": "Observe capture cell",
+      "description": "Read the original cell, including any package, input or rendering failure; do not silently rerun it.",
+      "effect": "read",
+      "methods": [
+        "kernel.read"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cellId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        },
+        "required": [
+          "cellId"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "read",
+      "title": "Read captured figure",
+      "description": "Read the exact captured plots and data, current selection, and whether the source file changed.",
+      "effect": "read",
+      "methods": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "selection",
+      "title": "Read semantic selection",
+      "description": "Read selected clades, terms or genes and their source snapshot, for Agent context.",
+      "effect": "read",
+      "methods": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "expectedDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          }
+        },
+        "required": [
+          "id",
+          "expectedDigest"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "select",
+      "title": "Select figure entities",
+      "description": "Conditionally change the shared selection at an exact figure version. A stale revision is refused.",
+      "effect": "native",
+      "methods": [],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{32}$"
+          },
+          "expectedDigest": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "expectedRevision": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "keys": {
+            "type": "array",
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        },
+        "required": [
+          "id",
+          "expectedDigest",
+          "expectedRevision",
+          "keys"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "skills": [
+    {
+      "id": "figures",
+      "title": "Explore semantic figures",
+      "file": "SKILL.md"
+    }
+  ],
+  "views": [
+    {
+      "id": "workbench",
+      "title": "Interactive figures",
+      "file": "view.html"
+    }
+  ]
+}
