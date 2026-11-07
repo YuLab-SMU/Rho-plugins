@@ -40,9 +40,11 @@ export function NotebookWorkSection({ work, snapshot, onOpen }: { work: Notebook
   return <section className="project-section notebook-work" aria-labelledby="notebook-work-title">
     <div className="section-heading"><h2 id="notebook-work-title">Notebook</h2><button className="text-button" onClick={onOpen}>Open Notebook</button></div>
     {problem && <p role="alert">{problem}</p>}
+    {/* A live session runs on this machine unless a server runs it. An ended one may come with a
+        copied project, such as the one Rho ships, so it names only the server it ran on. */}
     {sessions.length > 0 && <ul className="notebook-work-sessions">{sessions.map(s => <li key={s.sessionId}>
       <Icon name={s.place ? 'server' : 'code'} size={15} />
-      <span><strong>{versionOf(s)}</strong> {s.place ? 'on ' + s.place.label : 'on this machine'}</span>
+      <span><strong>{versionOf(s)}</strong> {s.place ? 'on ' + s.place.label : s.state !== 'ended' ? 'on this machine' : ''}</span>
       <small>{s.state === 'ended' ? 'ended' : s.state} · {s.cells} {s.cells === 1 ? 'cell' : 'cells'}{s.state !== 'ended' ? ` · ${s.variables.length + s.variablesOmitted} ${s.variables.length + s.variablesOmitted === 1 ? 'value' : 'values'}` : ''}</small>
     </li>)}</ul>}
     {newest.length > 0 && <div className="activity-list">{newest.map(cell => <button className="activity-row" key={cell.cellId} onClick={() => { askCell(cell.cellId); onOpen(); }}>

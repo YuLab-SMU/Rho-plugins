@@ -86,7 +86,10 @@ redraws Data flow as a graph of values from the files read to the results, with 
 constants named on what uses them, a bar to trace one result and the chosen value's path and
 details; each node is titled with the meaning its `# means:` comment gives, with its name beneath (the
 Agent writes these, and `scriptFlow` and each session cell read them from the text: `sessionGraph`,
-`scriptGraph`); `lanes`, `related`, `flowPath` and `scriptStepAt` are gone.
+`scriptGraph`); `lanes`, `related`, `flowPath` and `scriptStepAt` are gone. Notebook 0.5.6 says
+"on this machine" in the Overview only for a live session: the project Rho ships listed its
+ended sessions, recorded where the example was made with R 4.5.2, as "R 4.5.2 on this machine"
+on a Windows machine with R 4.5.1 ([Rho#112](https://github.com/YuLab-SMU/Rho/issues/112)).
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a
