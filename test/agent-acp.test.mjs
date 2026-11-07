@@ -294,3 +294,24 @@ test('a missing client fails the message with its name before the adapter starts
     await driver.close();
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });
+test('installed ACP Agents are found on PATH by their own command, starting nothing', async () => {
+  const { installedAcpAgents, knownAcpAgent } = await import('../plugins/agent/dist/acp-command.js');
+  const root = await fs.mkdtemp(path.join(temporary, 'rho-acp-known-')), bin = path.join(root, 'bin'), home = path.join(root, 'dsh');
+  const program = name => process.platform === 'win32' ? name + '.cmd' : name;
+  try {
+    await fs.mkdir(bin);
+    for (const name of ['kimi', 'dsh']) await fs.writeFile(path.join(bin, program(name)), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
+    // Harness serves ACP only from its acp profile, so its launcher alone is not listed.
+    assert.deepEqual(installedAcpAgents({ PATH: bin, DSH_HOME: home }).map(a => [a.id, a.command.file, a.command.args]), [['kimi', path.join(bin, program('kimi')), ['acp']]]);
+    await fs.mkdir(path.join(home, 'profiles', 'acp'), { recursive: true }); await fs.writeFile(path.join(home, 'profiles', 'acp', 'package.json'), '{}');
+    assert.deepEqual(installedAcpAgents({ PATH: bin, DSH_HOME: home }).map(a => a.id), ['dsh', 'kimi']);
+    assert.equal(knownAcpAgent({ file: path.join(bin, program('kimi')), args: ['acp'] })?.name, 'Kimi Code');
+    assert.equal(knownAcpAgent({ file: path.join(bin, program('kimi')), args: [] }), null);
+  } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+test('an Agent that exits before it answers is reported with the last line it printed', async () => {
+  const { GenericAcpConversation } = await import('../plugins/agent/dist/conversation.js');
+  const limits = { maxAgentTurns: 8, maxOutputBytes: 32768, maxLineBytes: 4096, stopGraceMs: 100, connectTimeoutMs: 5000 };
+  const exits = new GenericAcpConversation({ cwd: temporary, mcpServers: [], limits, command: { file: process.execPath, args: ['-e', "process.stderr.write('usage: agent [options]\\n\\nUnknown argument: acp\\n'); process.exit(1)"] } });
+  await assert.rejects(exits.inspect(), /^Error: The Agent exited before it answered \(exit 1\)\. It printed: Unknown argument: acp$/);
+});

@@ -9,7 +9,7 @@ export interface ExternalTool { id: string; at: string; name: string; detail: st
 export interface ExternalResult { path: string; toolId: string; id?: string; version?: string; projectId?: string }
 export interface ExternalTurn { id: string; at: string; endedAt?: string; state: 'running' | 'completed' | 'failed' | 'stopped' | 'unknown'; prompt: string; reply: string; messages: Array<{ at: string; text: string }>; tools: ExternalTool[]; results: ExternalResult[]; omittedTools: number; omittedChars: number ; where?: string }
 export interface ExternalSessionSummary { id: string; producer: string; sessionId: string; title: string; lastAt: string; observedAt: string; state: ExternalTurn['state']; turns: number; sourceCursor: number; omittedTurns: number; problem?: string; inputOwner?: 'external';
-  where?: string; open?: { where: string; since?: string; pid?: number } | null; resume?: string; bytes?: number; continueWith?: 'claude-acp' | 'codex-acp' | 'acp' | null; conversationId?: string }
+  where?: string; open?: { where: string; since?: string; pid?: number } | null; resume?: string; bytes?: number; continueWith?: 'claude-acp' | 'codex-acp' | 'acp' | `acp:${string}` | null; conversationId?: string }
 export interface ExternalSessionRecord { format: 1; projectRoot: string; summary: ExternalSessionSummary; turns: ExternalTurn[]; sourceDigest: string }
 export const externalSessionId = (producer: string, session: string) => 'x-' + createHash('sha256').update(producer + '\0' + session).digest('hex');
 const schema = new Ajv({ strict: false }).compile({ type: 'object', additionalProperties: false, required: ['format', 'projectRoot', 'summary', 'turns', 'sourceDigest'], properties: {

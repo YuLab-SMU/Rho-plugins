@@ -155,8 +155,14 @@ export class AcpConversation implements AgentConversation {
     } });
     bounded.on('error', () => {});
     child.stdout.pipe(bounded);
-    // Drain diagnostics without storing credentials, URLs or native reasoning.
-    child.stderr.on('data', (chunk: Buffer) => { this.outputBytes += chunk.length; if (this.outputBytes > o.limits.maxOutputBytes) overflow('output-limit'); });
+    // Drain diagnostics without storing credentials, URLs or native reasoning. Its last few
+    // kilobytes stay in memory only, to say why an Agent that exits before it answers did not
+    // start (an unknown argument, a missing sign-in); only its last line is shown, redacted.
+    let printed = '';
+    child.stderr.on('data', (chunk: Buffer) => {
+      this.outputBytes += chunk.length; if (this.outputBytes > o.limits.maxOutputBytes) overflow('output-limit');
+      printed = (printed + chunk.toString('utf8')).slice(-4096);
+    });
     this.connection = acp.client({ name: 'rho-agent' })
       .onNotification(acp.methods.client.session.update, ({ params }) => {
         try { this.observe(params); } catch (error) { this.fault = visibleError(error, env); void this.close(); }
@@ -222,6 +228,13 @@ export class AcpConversation implements AgentConversation {
       this.identity = { acpSessionId: this.sessionId, protocolVersion: 1,
         ...(initialized.agentInfo ? { adapter: { name: initialized.agentInfo.name, version: initialized.agentInfo.version } } : {}), ...(model ? { model } : {}) };
       this.observationOrigin = 'live';
+    } catch (error) {
+      await Promise.race([this.childEnded, new Promise(resolve => setTimeout(resolve, 300))]);
+      const last = printed.replace(/\x1b\[[0-9;]*[A-Za-z]/g, '').split(/\r?\n/).map(line => line.trim()).filter(Boolean).at(-1);
+      // The process may have ended while this waited, which the type of exit does not follow.
+      const exit = this.exit as { code: number | null } | null;
+      if (exit && last && !this.fault) throw new Error(`The Agent exited before it answered${exit.code !== null ? ' (exit ' + exit.code + ')' : ''}. It printed: ${last.slice(0, 300)}`);
+      throw error;
     } finally { clearTimeout(timer); }
   }
 

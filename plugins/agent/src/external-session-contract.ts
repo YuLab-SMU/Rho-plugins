@@ -10,9 +10,10 @@ export const externalToolSchema = obj({ id: text, at: text, name: text, detail: 
 export const externalTurnSchema = obj({ id: text, at: text, endedAt: text, state, prompt: text, reply: text, messages: array(obj({ at: text, text }), 200), tools: array(externalToolSchema, externalSessionLimits.maxTools), results: array(externalResultSchema, 64), omittedTools: count, omittedChars: count, where: text }, ['id', 'at', 'state', 'prompt', 'reply', 'messages', 'tools', 'results', 'omittedTools', 'omittedChars']);
 export const externalSessionSummarySchema = obj({ id: { type: 'string', pattern: '^x-[a-f0-9]{64}$' }, producer: text, sessionId: text, title: text, lastAt: text, observedAt: text, state, turns: count, sourceCursor: count, omittedTurns: count, problem: text, inputOwner: { const: 'external' },
   // Native sessions: where it was started, a live process holding it, the command that continues it in a terminal
-  // and its size. The application adds the Agent it continues with in Rho and the Rho conversation that continued it.
+  // and its size. The application adds the Agent it continues with in Rho (acp:… is an ACP Agent the person
+  // added there) and the Rho conversation that continued it.
   where: text, open: { anyOf: [{ type: 'null' }, obj({ where: text, since: text, pid: count }, ['where'])] }, resume: text, bytes: count,
-  continueWith: { enum: ['claude-acp', 'codex-acp', 'acp', null] }, conversationId: text }, ['id', 'producer', 'sessionId', 'title', 'lastAt', 'observedAt', 'state', 'turns', 'sourceCursor', 'omittedTurns']);
+  continueWith: { anyOf: [{ enum: ['claude-acp', 'codex-acp', 'acp', null] }, { type: 'string', pattern: '^acp:[a-z0-9][a-z0-9-]{0,39}$' }] }, conversationId: text }, ['id', 'producer', 'sessionId', 'title', 'lastAt', 'observedAt', 'state', 'turns', 'sourceCursor', 'omittedTurns']);
 export const externalSessionSchemas = { summary: externalSessionSummarySchema, turn: externalTurnSchema };
 export const externalSessionOperations = {
   'agent.sessions.list': { inputSchema: obj({}), outputSchema: obj({ sessions: array(externalSessionSummarySchema, 128), omitted: count }), requires: [], effect: 'read' as const },
