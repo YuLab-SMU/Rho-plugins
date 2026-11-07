@@ -1,8 +1,17 @@
 # Current component status
 
-Updated: 2026-11-06.
+Updated: 2026-11-07.
 
-Agent **0.4.29** retains native Harness conversations in project-local observations,
+Agent **0.4.30** lists and reads the Claude Code and Codex sessions recorded for a
+project folder from the Agents' own files, with where each started, whether another
+process holds it now and its resume command; reading starts no Agent and is bounded
+by `nativeSessionLimits`. ACP conversations can continue a copy of a session
+(`forkFrom`, ACP fork), and the adapter no longer passes inherited Claude Code session
+markers that turn off transcript saving. [Native sessions](../plugins/agent/README.md#native-claude-code-and-codex-sessions);
+32 Agent owner tests pass. The application's continuity episode with a real Claude
+Code is separate from this component check.
+
+Agent 0.4.29 retains native Harness conversations in project-local observations,
 with original session/turn/call identities, visible replies, separate tool/exit
 outcomes and reported or exact-version results. Read-only operations and the UI
 entry keep input in the original client. [Budgets and boundaries](../plugins/agent/README.md#external-conversations)

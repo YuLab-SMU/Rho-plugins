@@ -429,3 +429,32 @@ local storage and observation work; they do not limit the native Agent.
 `test/external-session.test.mjs` checks identity, prefix conflicts, omissions,
 missing outcomes, redaction, project containment, retained failure and pagination.
 The Rho application records its separate real Harness/browser acceptance.
+
+### Native Claude Code and Codex sessions
+
+Agent 0.4.30 exports `native-sessions`. `listNativeSessions(root, nativeSources(env))`
+lists the Claude Code and Codex sessions whose recorded working folder is `root`,
+read from the Agents' own records: `CLAUDE_CONFIG_DIR` (or `~/.claude`)
+`/projects/<folder>/<id>.jsonl` and `CODEX_HOME` (or `~/.codex`)
+`/sessions/**/rollout-*.jsonl`. Each summary keeps the native session ID, title,
+times, turn counts, where it started (Claude Code's `entrypoint`, Codex's
+`originator`), whether another process holds it now (Claude Code's live
+`sessions/<pid>.json` with a running PID, Codex's `thread-writer-locks/<id>.lock`)
+and the terminal resume command. `readNativeSession` streams one record into the
+same turn shape as `readExternalSession`, with each turn's tools, results and
+reply. Reading starts no Agent, takes no lock and writes nothing.
+`nativeSessionLimits` names the budgets: 64 sessions per listing, 4,096 files
+scanned per Claude Code folder and across Codex's sessions, 256 KiB read from each end of a file for a summary, at most 256 MiB
+streamed from the end for a read, 200 turns, 256 tools per turn, and the text and
+tool field limits above. Sidechains, injected reminders and local command output
+are excluded. A recorded interruption is stopped. A last turn without an end record
+is running while its file was written in the last minute; after that it is completed
+when it has a reply and no unanswered tool, and unknown otherwise.
+
+To continue such a session, the application passes its ID as `sessionId` (ACP
+`session/load`). `forkFrom` instead asks the Agent for a separate copy through
+`session/fork`; the connection is refused before sending when the Agent does not
+advertise fork, or returns the same ID. `acpEnvironment` drops inherited Claude Code
+session markers (`CLAUDECODE`, `CLAUDE_CODE_CHILD_SESSION` and related variables):
+a Claude Code started under them saves no transcript, so its session could not be
+listed or continued anywhere else.

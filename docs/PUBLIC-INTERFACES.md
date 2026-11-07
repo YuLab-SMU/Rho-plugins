@@ -215,6 +215,10 @@ project-scoped stdio MCP adapter. The external client owns the model loop/chat.
   `RHO_AGENT_CONNECTION` selects a private descriptor. Granted protocol methods
   become `rho_<operation_with_underscores>` tools; project identity is injected.
   Managed calls require a retained `operationId` before HTTP delivery.
+- `./native-sessions` exports `listNativeSessions(root, nativeSources(env))`,
+  `readNativeSession`, `nativeSession` and `nativeSessionLimits`: bounded reads of
+  Claude Code and Codex session records for one project folder, starting no Agent
+  ([native sessions](../plugins/agent/README.md#native-claude-code-and-codex-sessions)).
 - No registered Agent view, embedded chat, proactive external-chat push, model
   provider hosting or conversation synchronization is implemented. Binding close
   does not stop a task. `session.grant` and credential enforcement belong to Rho.

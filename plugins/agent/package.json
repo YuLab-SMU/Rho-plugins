@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-agent",
-  "version": "0.4.29",
+  "version": "0.4.30",
   "type": "module",
   "description": "Rho agent plugin",
   "license": "AGPL-3.0-only",
@@ -9,6 +9,7 @@
   },
   "exports": {
     "./external-session": "./dist/external-session.js",
+    "./native-sessions": "./dist/native-sessions.js",
     "./dsh-session": "./dist/dsh-session.js",
     "./external-session-contract": "./dist/external-session-contract.js",
     "./session-contract": "./dist/session-contract.js",

@@ -14,7 +14,15 @@ const clientName: Record<AcpAgent, string> = { claude: 'Claude Code', codex: 'Co
  * executable, else the one already named in the environment, else the client on PATH. */
 export function acpEnvironment(agent: AcpAgent, env: NodeJS.ProcessEnv, executable?: string): NodeJS.ProcessEnv {
   const name = executableVariable[agent];
-  return { ...env, [name]: executable || env[name] || agent };
+  return { ...withoutSessionMarkers(env), [name]: executable || env[name] || agent };
+}
+// When Rho itself was started from inside a Claude Code session (an Agent ran the setup), the
+// environment carries that session's markers. A Claude Code started with them takes itself for
+// its child: it saves no transcript (so its session cannot be continued anywhere) and reports to
+// the parent's socket. Rho's sessions are the person's own, so those markers are not passed on.
+const sessionMarkers = /^(CLAUDECODE|CLAUDE_CODE_(CHILD_SESSION|ENTRYPOINT|SESSION_ID|SESSION_ATTENDED|MESSAGING_SOCKET|MESSAGING_TOKEN|EXECPATH|SSE_PORT)|CLAUDE_PID)$/;
+export function withoutSessionMarkers(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([key]) => !sessionMarkers.test(key)));
 }
 /** Why the adapter could not start the person's client, or null when its executable is
  * there. The adapters report a missing client only as a closed connection. */

@@ -37,6 +37,9 @@ function toolDetail(input: Record<string, unknown> | undefined) {
 export interface AcpConversationOptions {
   cwd: string; mcpServers: AgentMcpServer[]; limits: AgentProcessLimits;
   sessionId?: string;
+  // Start as a copy of this existing session of the Agent (ACP session/fork) instead of an empty
+  // one. The original session is only read; the copy gets its own identity.
+  forkFrom?: string;
   // Trusted embedding configuration, never supplied by a model or a prompt.
   command: { file: string; args: string[] }; env?: NodeJS.ProcessEnv;
   model?: string; sessionMeta?: acp.NewSessionRequest['_meta'];
@@ -199,6 +202,12 @@ export class AcpConversation implements AgentConversation {
         } else {
           throw new Error('This Agent cannot load the original session. Nothing was resent.');
         }
+      } else if (o.forkFrom) {
+        const caps: any = initialized.agentCapabilities;
+        if (!caps?.sessionCapabilities?.fork) throw new Error('This Agent cannot continue a copy of a session. Nothing was sent.');
+        const forked: any = await connection.agent.request('session/fork' as any, { ...params, sessionId: o.forkFrom } as any);
+        if (typeof forked?.sessionId !== 'string' || forked.sessionId === o.forkFrom) throw new Error('The Agent did not create a separate copy of the session. Nothing was sent.');
+        this.sessionId = forked.sessionId; this.settings = forked.configOptions ?? [];
       } else {
         const created = await connection.agent.request(acp.methods.agent.session.new, params);
         this.sessionId = created.sessionId; this.settings = created.configOptions ?? [];
