@@ -46,9 +46,17 @@ export interface UiSnapshot {
 // person ran since it began, up to `at` during a replay (null for now).
 export interface SessionScope { principal: string | null; since: number | null; at: number | null }
 
+// A plot whose marks an extension bound to their rows, as the page that shows the Notebook draws
+// it: the page owns how it is drawn and what asking about it does; the picture stands in for it.
+export interface FigureSlot {
+  client: UiClient; projectId: string; cellId: string; plot: number; width: number; height: number; label: string;
+  // A short name for the plot where it is mentioned elsewhere: "R cell 4, plot 1".
+  name?: string; fit?: boolean; cursor?: number; fallback: ReactNode; author?: (by: string) => { name: string; mine: boolean };
+}
 export interface KernelShell {
   highlight?(code: string, language: string): Promise<DocumentFragment | null>;
   markdown?(text: string): ReactNode;
+  figure?(slot: FigureSlot): ReactNode;
 }
 const Shell = createContext<KernelShell>({});
 export const ShellProvider = Shell.Provider;

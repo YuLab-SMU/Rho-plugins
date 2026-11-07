@@ -1,0 +1,40 @@
+{
+  "name": "@rho-workspace/plugin-figures",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Rho figures plugin: plots drawn in the live R session kept with their marks bound to the data rows they were drawn from, for the person to select and the Agent to read",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./operations": "./dist/operations.js",
+    "./record": "./dist/record.js",
+    "./ui": "./dist/ui.js"
+  },
+  "files": [
+    "dist",
+    "r",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@rho-workspace/plugin-contracts": "0.4.0"
+  },
+  "peerDependencies": {
+    "react": "19.3.1"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0"
+  }
+}

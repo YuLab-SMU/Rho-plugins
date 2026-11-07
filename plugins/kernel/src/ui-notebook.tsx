@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { statements, unfinished } from './statements.js';
 import { cellRelations, type CellRelations, type LineageCell } from './lineage.js';
 import { CellScriptFlow } from './ui-flow.js';
@@ -16,7 +16,7 @@ type Read = KernelOutputs['kernel.read'];
 export type Cell = Read['cells'][number];
 export type Session = Read['sessions'][number];
 // An output as the views read it: printed text, or a plot with its size.
-type Output = { kind: Cell['outputs'][number]['kind']; text?: string; plot?: number; width?: number; height?: number };
+type Output = { kind: Cell['outputs'][number]['kind']; text?: string; plot?: number; width?: number; height?: number; figure?: unknown; figureProblem?: string };
 type Language = Cell['language'];
 export const languages: Language[] = ['r', 'python'];
 export const languageName: Record<Language, string> = { r: 'R', python: 'Python' };
@@ -77,12 +77,28 @@ export function usePlot(client: UiClient, projectId: string, cellId: string, plo
   return { src, problem };
 }
 
+// What a figure on this page needs from it: who ran what, and the page's event cursor.
+const FigureFacts = createContext<{ who?: (by: string) => Author; cursor?: number }>({});
+function WithFacts({ snapshot, children }: { snapshot: UiSnapshot; children: ReactNode }) {
+  const who = useAuthors(snapshot), cursor = snapshot.cursor;
+  return <FigureFacts.Provider value={useMemo(() => ({ who, cursor }), [who, cursor])}>{children}</FigureFacts.Provider>;
+}
+// A plot an extension described is drawn by the page's figure, with the picture standing in until
+// then; one it could not describe says why under its picture.
+function useFigure(client: UiClient, projectId: string, cell: Cell, output: Output, label: string, picture: ReactNode, fit = false) {
+  const { figure } = useShell(), facts = useContext(FigureFacts);
+  if (!output.figure || !figure) return null;
+  return figure({ client, projectId, cellId: cell.cellId, plot: output.plot!, width: output.width || 1008, height: output.height || 720, label, name: `${languageName[cell.language]} cell ${cell.number}, plot ${output.plot}`, fit, cursor: facts.cursor, fallback: picture,
+    author: facts.who && (by => ({ name: facts.who!(by).name, mine: by === me })) });
+}
 function Plot({ client, projectId, cell, output, label }: { client: UiClient; projectId: string; cell: Cell; output: Output; label: string }) {
   const { src, problem } = usePlot(client, projectId, cell.cellId, output.plot!);
   // Plots are drawn at twice the size they are shown at, for sharp lines on dense screens.
   const width = Math.round((output.width || 1008) / 2), height = Math.round((output.height || 720) / 2);
+  const picture = <figure className="nb-plot" style={{ maxWidth: width }}>{src ? <img src={src} width={width} height={height} alt={label} /> : <div className="nb-plot-wait" style={{ aspectRatio: `${width} / ${height}` }} aria-label="Reading the plot" />}</figure>;
+  const described = useFigure(client, projectId, cell, output, label, picture);
   if (problem) return <p className="nb-note">This plot could not be read. {problem}</p>;
-  return <figure className="nb-plot" style={{ maxWidth: width }}>{src ? <img src={src} width={width} height={height} alt={label} /> : <div className="nb-plot-wait" style={{ aspectRatio: `${width} / ${height}` }} aria-label="Reading the plot" />}</figure>;
+  return <>{described ?? picture}{output.figureProblem && <p className="nb-note">Its marks are not selectable: {output.figureProblem}</p>}</>;
 }
 
 export function Code({ code, language }: { code: string; language: Language }) {
@@ -505,15 +521,15 @@ export function SessionPane({ client, snapshot, prepared, onTaken, onConversatio
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
-  return withShell(shell, <div className="nb-view" ref={box}>
+  return withShell(shell, <WithFacts snapshot={snapshot}><div className="nb-view" ref={box}>
     <NotebookBody client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken} onObject={onObject} beside={beside} form={form} scope={scope} />
-  </div>);
+  </div></WithFacts>);
 }
 
 // The Notebook as a page of its own, or inside a view. The page that shows it may give it the
 // application's code highlighting.
 export function NotebookPage({ shell, ...props }: Parameters<typeof NotebookBody>[0] & { shell?: KernelShell }) {
-  return withShell(shell, <NotebookBody {...props} />);
+  return withShell(shell, <WithFacts snapshot={props.snapshot}><NotebookBody {...props} /></WithFacts>);
 }
 function NotebookBody({ client, snapshot, onConversation, onObject, scope, compact = false, inView = false, shown = 0, prepared, onTaken, beside = {}, form = 'notebook' }: {
   client: UiClient; snapshot: UiSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void; beside?: Beside; form?: NotebookForm;
@@ -759,7 +775,10 @@ export function VariablesPane({ client, snapshot, onObject }: { client: UiClient
 // the ones before it to step back through. A new plot comes forward as it is drawn. Plots of an
 // ended session stay with their cells in the Notebook.
 export const plotsPaneLimits = { plots: 24 };
-export function PlotsPane({ client, snapshot }: { client: UiClient; snapshot: UiSnapshot }) {
+export function PlotsPane({ client, snapshot, shell }: { client: UiClient; snapshot: UiSnapshot; shell?: KernelShell }) {
+  return withShell(shell, <WithFacts snapshot={snapshot}><Plots client={client} snapshot={snapshot} /></WithFacts>);
+}
+function Plots({ client, snapshot }: { client: UiClient; snapshot: UiSnapshot }) {
   const projectId = snapshot.project.id;
   const { read, off, problem } = useKernel(client, projectId, snapshot.cursor);
   const who = useAuthors(snapshot);
@@ -800,8 +819,10 @@ export function PlotsPane({ client, snapshot }: { client: UiClient; snapshot: Ui
 }
 function PlotFit({ client, projectId, cell, output, label }: { client: UiClient; projectId: string; cell: Cell; output: Output; label: string }) {
   const { src, problem } = usePlot(client, projectId, cell.cellId, output.plot!);
+  const picture = <figure className="nb-plots-fit">{src ? <img src={src} alt={label} /> : <span className="nb-plot-wait" aria-label="Reading the plot" />}</figure>;
+  const described = useFigure(client, projectId, cell, output, label, picture, true);
   if (problem) return <p className="nb-note">This plot could not be read. {problem}</p>;
-  return <figure className="nb-plots-fit">{src ? <img src={src} alt={label} /> : <span className="nb-plot-wait" aria-label="Reading the plot" />}</figure>;
+  return described ? <div className="nb-plots-figure">{described}</div> : picture;
 }
 function PlotThumb({ client, projectId, cell, output, current, label, onShow }: { client: UiClient; projectId: string; cell: Cell; output: Output; current: boolean; label: string; onShow: () => void }) {
   const { src } = usePlot(client, projectId, cell.cellId, output.plot!);

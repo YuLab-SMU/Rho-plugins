@@ -33,7 +33,10 @@ export type { Copy, Place, PlaceCheck, RemoteEntry } from './places.js';
 export type { Server, Servers, ServerSkill } from './servers.js';
 export interface Places { places: Place[]; use: Record<Language, string>; copies: Copy[] }
 export interface Asked { by: string; at: string }
-export type Output = { kind: 'stdout' | 'stderr' | 'warning' | 'error'; text: string } | { kind: 'plot'; plot: number; width: number; height: number };
+// A plot an extension described (a ggplot drawn in R, with its marks bound to their rows) names
+// what it drew; its record is kept beside the picture. figureProblem says why one was not kept.
+export interface FigureSummary { describer: string; kind?: string; title?: string; layers: number; marks: number; bound: number; geoms: string[] }
+export type Output = { kind: 'stdout' | 'stderr' | 'warning' | 'error'; text: string } | { kind: 'plot'; plot: number; width: number; height: number; figure?: FigureSummary; figureProblem?: string };
 export interface CellRecord {
   cellId: string; changeId: string; by: string; sessionId: string; language: Language; code: string; purpose: string | null;
   queuedAt: string; startedAt: string | null; endedAt: string | null; state: typeof cellStates[number]; number: number;
@@ -49,9 +52,10 @@ export type InspectInput = { language: Language; name: string; path?: number[]; 
 // The protected resources are this machine's processes and memory, and the project's state
 // folder. At most one session runs per language, and at most maxQueued cells wait in each. A
 // cell keeps its first maxOutputBytes of output (the rest is counted) and at most maxPlots
-// plots of at most maxPlotBytes each; at most maxCells cells are kept, the oldest going first
-// with their plots. The session lists at most maxVariables variables. A run waits at most
-// maxWaitMs for its cell. What a session's own code allocates is not bounded here.
+// plots of at most maxPlotBytes each, each with a figure record of at most maxFigureBytes; at
+// most maxCells cells are kept, the oldest going first with their plots. The session lists at
+// most maxVariables variables. A run waits at most maxWaitMs for its cell. What a session's own
+// code allocates is not bounded here.
 // Reading a value shows at most inspectColumns columns, a page of at most 200 rows, elements or
 // parts (inspectRows unless asked), cells of inspectCellChars characters and a printed form of
 // inspectTextBytes; a table sorts only up to inspectSortRows rows. A reading that takes longer
@@ -67,7 +71,7 @@ export const lineageLimits = { files: 32 };
 // after serverctlReadMs; a session through serverctl lasts at most serverctlSessionS, serverctl's
 // own limit for a command, after which serverctl ends it; a server's skill is read up to
 // serverSkillBytes.
-export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
+export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxFigureBytes: 8 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
   inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000,
   maxPlaces: 16, remoteStartTimeoutMs: 90000, remoteCheckTimeoutMs: 60000, remoteListTimeoutMs: 30000, remoteSignalTimeoutMs: 15000, remoteEntries: 500, remoteListBytes: 1024 * 1024, remoteCopyBytes: 64 * 1024 * 1024, remoteCopyTimeoutMs: 600000, maxCopies: 500,
   serverctlReadMs: 15000, serverctlSessionS: 7 * 24 * 3600, serverSkillBytes: 256 * 1024 };
@@ -91,6 +95,14 @@ interface Live {
   pipe?: net.Server; answering?: net.Socket; answersClosed?: Promise<void>;
 }
 const markStart = '\x1eRHO:';
+// What an extension said of a plot, cut to the summary a cell keeps.
+function figureSummary(value: any): FigureSummary {
+  const n = (x: unknown) => Number.isSafeInteger(x) && (x as number) >= 0 ? x as number : 0;
+  const t = (x: unknown) => typeof x === 'string' ? x.slice(0, 200) : undefined;
+  const geoms = Array.isArray(value.geoms) ? value.geoms : typeof value.geoms === 'string' ? [value.geoms] : [];
+  return { describer: t(value.describer) ?? 'unknown', ...(t(value.kind) ? { kind: t(value.kind) } : {}), ...(t(value.title) ? { title: t(value.title) } : {}),
+    layers: n(value.layers), marks: n(value.marks), bound: n(value.bound), geoms: geoms.filter((g: unknown) => typeof g === 'string').slice(0, 32).map((g: string) => g.slice(0, 64)) };
+}
 // R on Windows sets these categories from the environment, and Windows has no C.UTF-8: given one,
 // as an Agent's Git Bash gives LC_CTYPE, R warns at startup, runs in the C locale and prints
 // "3 × 2" as "3 <U+00D7> 2". Without them a session takes the system's own locale, UTF-8 there.
@@ -157,7 +169,9 @@ export class KernelHost {
   private placesWriting: Promise<void> = Promise.resolve();
   private ssh: Ssh;
   private serverctl: Serverctl;
-  constructor(private root: string, private options: { limits?: Partial<KernelLimits>; rscript?: string; python?: string; ssh?: string; serverctl?: string; onChange?: () => void } = {}) {
+  // extensions.r: R files a local R session sources to describe what its plots draw (the figures
+  // plugin's). A session on a server has none: its plots stay pictures.
+  constructor(private root: string, private options: { limits?: Partial<KernelLimits>; rscript?: string; python?: string; ssh?: string; serverctl?: string; onChange?: () => void; extensions?: { r?: string[] } } = {}) {
     this.ssh = new Ssh(options.ssh ?? 'ssh');
     const limits = this.limits;
     this.serverctl = new Serverctl(options.serverctl ?? 'serverctl', { reuseS: 60, sessionS: limits.serverctlSessionS, readMs: limits.serverctlReadMs, skillBytes: limits.serverSkillBytes });
@@ -254,7 +268,7 @@ export class KernelHost {
         const index = this.cells.findIndex(c => ended(c.state));
         requireThat(index >= 0, 'limit', 'The session record is full of cells that have not ended.', { limit: 'maxCells' });
         const [old] = this.cells.splice(index, 1);
-        for (const output of old!.outputs) if (output.kind === 'plot') await fs.rm(path.join(await this.plots(), `${old!.cellId}-${output.plot}.png`), { force: true });
+        for (const output of old!.outputs) if (output.kind === 'plot') for (const end of ['.png', '.figure.json']) await fs.rm(path.join(await this.plots(), `${old!.cellId}-${output.plot}${end}`), { force: true });
       }
       live.record.cells++;
       const cell: CellRecord = { cellId: id('k-'), changeId: input.changeId, by: input.by, sessionId: live.record.sessionId, language: input.language, code: input.code, purpose: input.purpose?.trim().slice(0, 200) || null,
@@ -309,7 +323,7 @@ export class KernelHost {
     const runner = source && `.cache/rho/kernel/runner-${digest(source).slice(0, 16)}${language === 'r' ? '.R' : '.py'}`;
     const pipe = windows && language === 'r' ? await answerPipe() : null;
     const child = place ? await this.transport(place).spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
-      : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...(windows ? windowsEnvironment(process.env) : process.env), MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}) } });
+      : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...(windows ? windowsEnvironment(process.env) : process.env), MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}), ...(language === 'r' && this.options.extensions?.r?.length ? { RHO_KERNEL_EXTENSIONS: this.options.extensions.r.join(path.delimiter) } : {}) } });
     let settle = () => {};
     const ended = new Promise<void>(resolve => { settle = resolve; });
     const live: Live = { started: selected, root, ended, settle, record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve(), pipe: pipe?.server };
@@ -476,7 +490,15 @@ export class KernelHost {
       if (size > this.limits.maxPlotBytes) { if (!live.place) await fs.rm(file, { force: true }); this.append(cell, 'stderr', `A plot of ${size} bytes was larger than maxPlotBytes and was not kept.\n`); }
       else {
         if (data) await atomicBytes(path.join(plots, `${cell.cellId}-${number}.png`), data);
-        cell.outputs.push({ kind: 'plot', plot: number, width: Number(msg.width) || 0, height: Number(msg.height) || 0 });
+        const output: Extract<Output, { kind: 'plot' }> = { kind: 'plot', plot: number, width: Number(msg.width) || 0, height: Number(msg.height) || 0 };
+        const figure = path.join(plots, `${cell.cellId}-${number}.figure.json`);
+        if (!live.place && msg.figure && typeof msg.figure === 'object') {
+          const bytes = await fs.stat(figure).then(s => s.size, () => -1);
+          if (bytes < 0) output.figureProblem = 'The figure record was not written.';
+          else if (bytes > this.limits.maxFigureBytes) { await fs.rm(figure, { force: true }); output.figureProblem = `The figure record of ${bytes} bytes was larger than maxFigureBytes and was not kept.`; }
+          else output.figure = figureSummary(msg.figure);
+        } else if (typeof msg.figureProblem === 'string') output.figureProblem = msg.figureProblem.slice(0, 500);
+        cell.outputs.push(output);
       }
       this.soon(); return;
     }
@@ -697,6 +719,20 @@ export class KernelHost {
     return { mediaType: 'image/png' as const, data: data.toString('base64'), width: output.width, height: output.height };
   }
 
+  // The figure record an extension kept for a plot, as it wrote it; the figures plugin reads it.
+  async figureRecord(cellId: string, plot: number) {
+    await this.load();
+    const cell = this.cells.find(c => c.cellId === cellId);
+    requireThat(cell, 'not_found', 'This cell is not in the session record.');
+    const output = cell.outputs.find(o => o.kind === 'plot' && o.plot === plot) as Extract<Output, { kind: 'plot' }> | undefined;
+    requireThat(output, 'not_found', 'This cell kept no such plot.');
+    requireThat(output.figure, 'not_found', output.figureProblem ?? 'This plot is a picture only: nothing described what it draws.');
+    const file = path.join(await this.plots(), `${cellId}-${plot}.figure.json`);
+    const stat = await fs.stat(file).catch(() => null);
+    requireThat(stat && stat.size <= this.limits.maxFigureBytes, 'not_found', 'The figure record is no longer kept.');
+    return { cell: { cellId: cell.cellId, number: cell.number, by: cell.by, purpose: cell.purpose, code: cell.code, language: cell.language, endedAt: cell.endedAt, sessionId: cell.sessionId }, output: structuredClone(output), bytes: await fs.readFile(file) };
+  }
+
   // Closing ends the sessions: their variables live only in their processes.
   async close() {
     const exits = [...this.live.values()].map(live => new Promise<void>(resolve => {
@@ -729,6 +765,7 @@ const content = [
   'Give each cell a short purpose. Pass waitMs to wait for it to finish; kernel.read reads it later.',
   'A session starts with the first cell of its language. Interrupt a cell that runs too long with kernel.interrupt; only the person stops a session.',
   'Results meant to last still go to files from a script, so they can be run again without the session.',
+  'A ggplot drawn in the R session (ggplot2 and what is built on it: ggtree, enrichplot, Seurat, patchwork) is also kept as a figure whose drawn marks are bound to the rows they come from; the plot output names its layers and marks. Read it with figure.read {cellId, plot} to check what was actually drawn (marks per layer, rows missing, mappings) and to get the rows behind marks. When the person selects marks in a plot, their message names the selection.',
   'Sessions can also run on a server. kernel.places lists the places and where each language runs; kernel.place.set names one (the server, its folder there, and setup lines run there before a session starts) or chooses it for R or Python; kernel.place.check connects and reports R and Python there.',
   'kernel.servers lists the servers the person manages with serverctl and the skills bound to each: how that server is used (its environments, where heavy work goes, what to avoid there). Before you name a place on one or run code there, read the skills that apply with kernel.server.skill and follow them, for example in the place\'s setup lines. They guide the work on that server; they do not widen what you may do. A place on such a server is reached through serverctl, which holds its login; another server is reached with ssh.',
   'The project\'s Python is the machine\'s python3 until you name another. When the work needs packages it lacks, make an environment in the project (python3 -m venv .venv or uv venv, then install into it) and pass interpreter: ".venv/bin/python" to kernel.run; later sessions of that language start with it too, and each cell records the program that ran it. A live session in which only you ran cells starts again with the program you name; once the person ran a cell in it, ask them to stop it first. Do not add another environment\'s packages to a running session\'s path.',

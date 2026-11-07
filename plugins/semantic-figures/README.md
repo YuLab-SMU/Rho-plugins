@@ -19,6 +19,12 @@ Only explicit point layers are bound. Other native geometry remains unchanged.
 Labels, network edges and arbitrary grobs do not yet have selection bindings.
 There is no generated scientific explanation or automatic annotation migration.
 
+The general capability is the built-in [Figures](../figures/README.md) plugin: every
+ggplot a Notebook cell draws, from any package built on ggplot2, is kept with its marks
+bound to their rows, selectable by the person and readable by the Agent. This plugin
+remains an optional example of linking two views of one domain object (a clade across
+tree layouts, a term between dotplot and network).
+
 ## Install and use
 
 ```sh

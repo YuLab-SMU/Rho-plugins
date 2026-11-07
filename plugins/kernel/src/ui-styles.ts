@@ -188,6 +188,8 @@ button.nb-cell-link:hover { background: var(--color-hover); text-decoration: und
 .nb-plots-fit { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 0; margin: 0; }
 .nb-plots-fit img { max-width: 100%; max-height: 100%; object-fit: contain; border: 1px solid var(--color-hairline); border-radius: 6px; background: #fff; }
 .nb-plots-fit .nb-plot-wait { width: min(100%, 504px); aspect-ratio: 7 / 5; }
+.nb-plots-figure { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.nb-plots-figure > .fig { flex: 1; min-height: 0; }
 .nb-plots-strip { display: flex; flex: none; gap: 6px; overflow-x: auto; padding: 2px; }
 .nb-plots-thumb { flex: none; width: 72px; min-height: 0; padding: 2px; border: 1px solid var(--color-hairline); border-radius: 6px; background: var(--color-surface); }
 .nb-plots-thumb[aria-current="true"] { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent); }

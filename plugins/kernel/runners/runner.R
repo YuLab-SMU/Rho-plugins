@@ -161,6 +161,26 @@ call_text <- function(condition) {
 # that draws several keeps each; a cell reports the pages it drew or changed, drawn to files at
 # its end. A device the code opens itself is its own.
 device <- NULL; seen <- NULL; plots <- list()
+# Plugins can describe what a page draws (RHO_KERNEL_EXTENSIONS names their R files). Each file is
+# sourced into an environment of its own; page_object() names the object a page starts drawing,
+# and describe_page() writes a record beside the page's picture. One that fails is left out, and a
+# page whose object no extension describes stays a picture.
+extensions <- list()
+for (file in strsplit(Sys.getenv("RHO_KERNEL_EXTENSIONS"), .Platform$path.sep, fixed = TRUE)[[1]]) {
+  if (!nzchar(file)) next
+  env <- new.env(parent = baseenv())
+  if (!inherits(tryCatch(sys.source(file, envir = env), error = function(e) e), "error")) extensions[[length(extensions) + 1]] <- env
+}
+page_object <- NULL
+started_page <- function(grid) {
+  if (is.null(device) || grDevices::dev.cur() != device) return()
+  page_object <<- NULL
+  if (!grid) return()
+  for (env in extensions) if (is.function(env$page_object)) {
+    found <- tryCatch(env$page_object(), error = function(e) NULL)
+    if (!is.null(found)) { page_object <<- list(env = env, object = found); return() }
+  }
+}
 recording <- function() {
   if (!is.null(device) && device %in% grDevices::dev.list()) { grDevices::dev.set(device); return() }
   grDevices::pdf(NULL, width = 7, height = 5); grDevices::dev.control("enable")
@@ -171,10 +191,10 @@ snapshot <- function() {
   current <- grDevices::dev.cur(); if (current != device) grDevices::dev.set(device)
   p <- grDevices::recordPlot()
   if (current != device) grDevices::dev.set(current)
-  if (length(drawn(p[[1]])) && !(length(seen) && same(drawn(p[[1]]), drawn(seen)))) { plots[[length(plots) + 1]] <<- p; seen <<- p[[1]] }
+  if (length(drawn(p[[1]])) && !(length(seen) && same(drawn(p[[1]]), drawn(seen)))) { attr(p, "rho_page") <- page_object; plots[[length(plots) + 1]] <<- p; seen <<- p[[1]] }
 }
-setHook("before.plot.new", function() snapshot())
-setHook("before.grid.newpage", function() snapshot())
+setHook("before.plot.new", function() { snapshot(); started_page(FALSE) })
+setHook("before.grid.newpage", function() { snapshot(); started_page(TRUE) })
 
 run <- function(msg) {
   id <- msg$id; plots <<- list(); ok <- TRUE; interrupted <- FALSE
@@ -205,6 +225,11 @@ run <- function(msg) {
     tryCatch(grDevices::replayPlot(shown[[i]]), error = function(e) NULL)
     grDevices::dev.off()
     plot <- list(id = id, kind = "plot", file = file, width = 1008, height = 720)
+    page <- attr(shown[[i]], "rho_page")
+    if (!is.null(page) && !isTRUE(msg$inline) && is.function(page$env$describe_page)) {
+      described <- tryCatch(page$env$describe_page(page$object, file, 7, 5), error = function(e) list(problem = conditionMessage(e)))
+      if (!is.null(described$problem)) plot$figureProblem <- as.character(described$problem)[1] else if (!is.null(described)) plot$figure <- described
+    }
     if (isTRUE(msg$inline)) { plot$data <- jsonlite::base64_enc(readBin(file, "raw", file.info(file)$size)); unlink(file) }
     say(plot)
   }

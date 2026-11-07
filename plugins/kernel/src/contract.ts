@@ -76,7 +76,9 @@ export const sessionSchema = obj({
   // (.venv/bin/python). Sessions recorded before have none.
   program: maybe({ type: 'string' }),
 }, ['sessionId', 'language', 'state', 'version', 'pid', 'startedAt', 'startedBy', 'endedAt', 'ending', 'stop', 'problem', 'variables', 'variablesOmitted', 'variablesAt', 'cells']);
-export const outputSchema = obj({ kind: { enum: ['stdout', 'stderr', 'warning', 'error', 'plot'] }, text: { type: 'string' }, plot: { type: 'integer', minimum: 1 }, width: { type: 'integer' }, height: { type: 'integer' } }, ['kind']);
+// A described plot names what it drew: its describer, layers, marks and how many are bound to rows.
+export const figureSummarySchema = obj({ describer: text, kind: { type: 'string' }, title: { type: 'string' }, layers: { type: 'integer', minimum: 0 }, marks: { type: 'integer', minimum: 0 }, bound: { type: 'integer', minimum: 0 }, geoms: { type: 'array', items: { type: 'string' } } }, ['describer', 'layers', 'marks', 'bound', 'geoms']);
+export const outputSchema = obj({ kind: { enum: ['stdout', 'stderr', 'warning', 'error', 'plot'] }, text: { type: 'string' }, plot: { type: 'integer', minimum: 1 }, width: { type: 'integer' }, height: { type: 'integer' }, figure: figureSummarySchema, figureProblem: { type: 'string' } }, ['kind']);
 export const cellSchema = obj({
   cellId, changeId, by: text, sessionId, language, code: { type: 'string' }, purpose: maybe({ type: 'string' }),
   queuedAt: time, startedAt: maybe(time), endedAt: maybe(time), state: { enum: [...cellStates] },
