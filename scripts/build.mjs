@@ -1,7 +1,7 @@
 import { rm } from 'node:fs/promises';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-const folders = ['packages/contracts', ...['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'markdown', 'html', 'console', 'kernel', 'skills'].map(id => 'plugins/' + id)];
+const folders = ['packages/contracts', ...['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'agent-icons', 'annotations', 'markdown', 'html', 'console', 'kernel', 'skills'].map(id => 'plugins/' + id)];
 // On Windows npm is a .cmd shim that only a shell can start; npm's own CLI runs under this node
 // there: the one npm named when it started this script, else the one installed beside node.
 const cli = /npm-cli\.js$/.test(process.env.npm_execpath ?? '') ? process.env.npm_execpath : process.platform === 'win32' ? path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js') : null;

@@ -15,6 +15,11 @@ Agent **0.4.31**: the MCP bridge sends its client's own `clientInfo` name and ve
 to the application in `x-rho-client` ([Layered MCP](../plugins/agent/README.md#layered-mcp-and-optional-presentation)),
 so a connected Agent can be named by what it reports. 33 Agent owner tests pass.
 
+Agent icons **0.1.0** is a new web-only package: the marks and names of 62 Agents and
+model makers. These are mostly lobehub icons (MIT), each identified by whole words of
+the name an Agent gave, in catalog order. The build refuses icons with scripts, outside
+references or no entry. [Agent icons](../plugins/agent-icons/README.md); 4 tests pass.
+
 Agent 0.4.29 retains native Harness conversations in project-local observations,
 with original session/turn/call identities, visible replies, separate tool/exit
 outcomes and reported or exact-version results. Read-only operations and the UI
@@ -136,6 +141,7 @@ by Rho, separately from component checks.
 | Tables | One to sixteen numeric field pairs, explicit keys/namespaces/mapping, full/left/inner join, before/after/delta and row presence | Missing row/null/zero differ; invalid mapping/duplicates/non-finite delta refused; no inferred scientific comparability |
 | Documents | Single shared buffer, own undo, disk conditions/merge, native-edit hook, snapshots; confirmed range review and immutable text comparison | Disk/buffer capture stays distinct; 1 MiB comparison read and 64 KiB preview |
 | Agent | Claude/Codex ACP, native tools normally, optional Core, bounded activity/commands, frozen contexts, explicit response facts and tool-less one-sentence file descriptions | Unknown outcomes preserved; no arbitrary session-history access or human decision authority; a description is generated and unchecked |
+| Agent icons | Marks and names of Agents and model makers, looked up by the words of the name an Agent or its client gave; one-colour marks follow the theme's ink | A name that matches no alias gets no mark; a mark identifies its owner only, from lobehub 1.102.0 or the product's site |
 | Markdown | Optional reader over Documents with to-dos ticked in place, an editor with formatting controls, relative links/media and math | Same buffer; not an additional document owner; a to-do whose line moved is left alone |
 | Console | Person-run commands in the project folder: change identity, process-group stop, exit/signal, head-and-tail output, continuing/unknown after restart | 200 records, 4 running, 1 MiB kept output (64 KiB tail); the host decides who may run; never reruns a known identity |
 | Notebook | Live R and Python sessions shared by an Agent and the person: per-caller cell identity, one queue per session, streamed output in order, R and matplotlib plots, variables, interrupt by cell, stop by session, rho-closed/unknown/not-run after restart | 16 waiting cells, 256 KiB output and 8 plots (4 MiB each) per cell, 500 cells, 200 variables; a cell's own memory and time unbounded; the host decides who may stop |

@@ -38,6 +38,7 @@
     "plugins/media",
     "plugins/charts",
     "plugins/agent",
+    "plugins/agent-icons",
     "plugins/annotations",
     "plugins/markdown",
     "plugins/html",

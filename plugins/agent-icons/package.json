@@ -1,0 +1,23 @@
+{
+  "name": "@rho-workspace/plugin-agent-icons",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Marks and names of the Agents and model makers Rho shows",
+  "license": "AGPL-3.0-only AND MIT",
+  "engines": {
+    "node": ">=22.22.0 <23"
+  },
+  "exports": {
+    ".": "./dist/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/build.mjs && tsc -p tsconfig.json",
+    "prepack": "npm run build"
+  }
+}

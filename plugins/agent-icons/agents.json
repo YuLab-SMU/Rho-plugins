@@ -1,0 +1,803 @@
+{
+ "schema": 1,
+ "note": "Order is priority: the first entry with an alias among a name's words names it. Marks belong to their owners and identify them only.",
+ "sources": {
+  "lobehub": "@lobehub/icons-static-svg 1.102.0 (MIT), via the ai-agent-icons collection of 2026-11-03 and, for Claude Code, Codex, OpenCode and Nous Research, directly",
+  "official": "the product's own site, where the collection found the lobehub mark outdated (GLM, Tiangong)"
+ },
+ "agents": [
+  {
+   "id": "claude-code",
+   "name": "Claude Code",
+   "maker": "Anthropic",
+   "agent": true,
+   "icon": "icons/claudecode-color.svg",
+   "ink": false,
+   "aliases": [
+    "claude-code",
+    "claudecode",
+    "claude-acp",
+    "claude-agent-acp",
+    "claude-cli"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "codex",
+   "name": "Codex",
+   "maker": "OpenAI",
+   "agent": true,
+   "icon": "icons/codex-color.svg",
+   "ink": false,
+   "aliases": [
+    "codex",
+    "codex-acp",
+    "codex-cli",
+    "codex-mcp-client"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "opencode",
+   "name": "OpenCode",
+   "maker": "OpenCode",
+   "agent": true,
+   "icon": "icons/opencode.svg",
+   "ink": true,
+   "aliases": [
+    "opencode",
+    "open-code"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "deepseek-harness",
+   "name": "DeepSeek Harness",
+   "maker": "DeepSeek",
+   "agent": true,
+   "icon": "icons/deepseek.svg",
+   "ink": false,
+   "aliases": [
+    "deepseek-harness",
+    "dsh",
+    "dsh-mcp-client"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "hermes",
+   "name": "Hermes Agent",
+   "maker": "Nous Research",
+   "agent": true,
+   "icon": "icons/nousresearch.svg",
+   "ink": true,
+   "aliases": [
+    "hermes",
+    "hermes-agent"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "workbuddy",
+   "name": "WorkBuddy",
+   "maker": "Tencent",
+   "agent": true,
+   "icon": "icons/workbuddy.svg",
+   "ink": false,
+   "aliases": [
+    "workbuddy",
+    "work-buddy"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "codebuddy",
+   "name": "CodeBuddy",
+   "maker": "Tencent Cloud",
+   "agent": true,
+   "icon": "icons/codebuddy.svg",
+   "ink": false,
+   "aliases": [
+    "codebuddy",
+    "code-buddy"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "gemini-cli",
+   "name": "Gemini CLI",
+   "maker": "Google",
+   "agent": true,
+   "icon": "icons/gemini.svg",
+   "ink": false,
+   "aliases": [
+    "gemini-cli"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "qwen-code",
+   "name": "Qwen Code",
+   "maker": "Alibaba",
+   "agent": true,
+   "icon": "icons/qwen.svg",
+   "ink": false,
+   "aliases": [
+    "qwen-code"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "kimi-cli",
+   "name": "Kimi CLI",
+   "maker": "Moonshot AI",
+   "agent": true,
+   "icon": "icons/kimi.svg",
+   "ink": false,
+   "aliases": [
+    "kimi-cli",
+    "kimi-code"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "github-copilot",
+   "name": "GitHub Copilot",
+   "maker": "GitHub",
+   "agent": true,
+   "icon": "icons/githubcopilot.svg",
+   "ink": true,
+   "aliases": [
+    "github-copilot",
+    "githubcopilot",
+    "copilot-cli",
+    "gh-copilot"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "cursor",
+   "name": "Cursor",
+   "maker": "Anysphere",
+   "agent": true,
+   "icon": "icons/cursor.svg",
+   "ink": true,
+   "aliases": [
+    "cursor",
+    "cursor-agent"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "windsurf",
+   "name": "Windsurf",
+   "maker": "Cognition",
+   "agent": true,
+   "icon": "icons/windsurf.svg",
+   "ink": true,
+   "aliases": [
+    "windsurf"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "devin",
+   "name": "Devin",
+   "maker": "Cognition",
+   "agent": true,
+   "icon": "icons/devin.svg",
+   "ink": false,
+   "aliases": [
+    "devin"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "replit",
+   "name": "Replit Agent",
+   "maker": "Replit",
+   "agent": true,
+   "icon": "icons/replit.svg",
+   "ink": false,
+   "aliases": [
+    "replit",
+    "replit-agent"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "cline",
+   "name": "Cline",
+   "maker": "Cline",
+   "agent": true,
+   "icon": "icons/cline.svg",
+   "ink": true,
+   "aliases": [
+    "cline"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "openhands",
+   "name": "OpenHands",
+   "maker": "All Hands AI",
+   "agent": true,
+   "icon": "icons/openhands.svg",
+   "ink": false,
+   "aliases": [
+    "openhands",
+    "open-hands"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "trae",
+   "name": "Trae",
+   "maker": "ByteDance",
+   "agent": true,
+   "icon": "icons/trae.svg",
+   "ink": false,
+   "aliases": [
+    "trae"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "qoder",
+   "name": "Qoder",
+   "maker": "Alibaba",
+   "agent": true,
+   "icon": "icons/qoder.svg",
+   "ink": false,
+   "aliases": [
+    "qoder"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "codegeex",
+   "name": "CodeGeeX",
+   "maker": "Zhipu AI",
+   "agent": true,
+   "icon": "icons/codegeex.svg",
+   "ink": false,
+   "aliases": [
+    "codegeex"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "v0",
+   "name": "v0",
+   "maker": "Vercel",
+   "agent": true,
+   "icon": "icons/v0.svg",
+   "ink": true,
+   "aliases": [
+    "v0"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "lovable",
+   "name": "Lovable",
+   "maker": "Lovable",
+   "agent": true,
+   "icon": "icons/lovable.svg",
+   "ink": false,
+   "aliases": [
+    "lovable"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "manus",
+   "name": "Manus",
+   "maker": "Butterfly Effect",
+   "agent": true,
+   "icon": "icons/manus.svg",
+   "ink": true,
+   "aliases": [
+    "manus"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "monica",
+   "name": "Monica",
+   "maker": "Butterfly Effect",
+   "agent": true,
+   "icon": "icons/monica.svg",
+   "ink": false,
+   "aliases": [
+    "monica"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "openai",
+   "name": "OpenAI",
+   "maker": "OpenAI",
+   "agent": false,
+   "icon": "icons/openai.svg",
+   "ink": true,
+   "aliases": [
+    "openai",
+    "chatgpt",
+    "gpt"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "anthropic",
+   "name": "Claude",
+   "maker": "Anthropic",
+   "agent": false,
+   "icon": "icons/claude.svg",
+   "ink": false,
+   "aliases": [
+    "claude",
+    "anthropic"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "deepseek",
+   "name": "DeepSeek",
+   "maker": "DeepSeek",
+   "agent": false,
+   "icon": "icons/deepseek.svg",
+   "ink": false,
+   "aliases": [
+    "deepseek"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "gemini",
+   "name": "Gemini",
+   "maker": "Google",
+   "agent": false,
+   "icon": "icons/gemini.svg",
+   "ink": false,
+   "aliases": [
+    "gemini",
+    "google"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "qwen",
+   "name": "Qwen",
+   "maker": "Alibaba",
+   "agent": false,
+   "icon": "icons/qwen.svg",
+   "ink": false,
+   "aliases": [
+    "qwen",
+    "tongyi"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "kimi",
+   "name": "Kimi",
+   "maker": "Moonshot AI",
+   "agent": false,
+   "icon": "icons/kimi.svg",
+   "ink": false,
+   "aliases": [
+    "kimi",
+    "moonshot"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "doubao",
+   "name": "Doubao",
+   "maker": "ByteDance",
+   "agent": false,
+   "icon": "icons/doubao.svg",
+   "ink": false,
+   "aliases": [
+    "doubao"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "ernie",
+   "name": "ERNIE",
+   "maker": "Baidu",
+   "agent": false,
+   "icon": "icons/wenxin.svg",
+   "ink": false,
+   "aliases": [
+    "ernie",
+    "wenxin"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "glm",
+   "name": "GLM",
+   "maker": "Zhipu AI",
+   "agent": false,
+   "icon": "icons/chatglm.png",
+   "ink": false,
+   "aliases": [
+    "glm",
+    "chatglm",
+    "zhipu"
+   ],
+   "source": "official"
+  },
+  {
+   "id": "yuanbao",
+   "name": "Yuanbao",
+   "maker": "Tencent",
+   "agent": false,
+   "icon": "icons/yuanbao.svg",
+   "ink": false,
+   "aliases": [
+    "yuanbao",
+    "hunyuan"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "spark",
+   "name": "Spark",
+   "maker": "iFlytek",
+   "agent": false,
+   "icon": "icons/spark.svg",
+   "ink": false,
+   "aliases": [
+    "iflytek",
+    "xinghuo"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "minimax",
+   "name": "MiniMax",
+   "maker": "MiniMax",
+   "agent": false,
+   "icon": "icons/minimax.svg",
+   "ink": false,
+   "aliases": [
+    "minimax",
+    "hailuo"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "stepfun",
+   "name": "StepFun",
+   "maker": "StepFun",
+   "agent": false,
+   "icon": "icons/stepfun.svg",
+   "ink": false,
+   "aliases": [
+    "stepfun"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "baichuan",
+   "name": "Baichuan",
+   "maker": "Baichuan",
+   "agent": false,
+   "icon": "icons/baichuan.svg",
+   "ink": false,
+   "aliases": [
+    "baichuan"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "yi",
+   "name": "Yi",
+   "maker": "01.AI",
+   "agent": false,
+   "icon": "icons/yi.svg",
+   "ink": false,
+   "aliases": [
+    "yi",
+    "01-ai"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "sensenova",
+   "name": "SenseNova",
+   "maker": "SenseTime",
+   "agent": false,
+   "icon": "icons/sensenova.svg",
+   "ink": false,
+   "aliases": [
+    "sensenova",
+    "sensetime"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "copilot",
+   "name": "Microsoft Copilot",
+   "maker": "Microsoft",
+   "agent": false,
+   "icon": "icons/copilot.svg",
+   "ink": false,
+   "aliases": [
+    "copilot",
+    "microsoft-copilot"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "grok",
+   "name": "Grok",
+   "maker": "xAI",
+   "agent": false,
+   "icon": "icons/grok.svg",
+   "ink": true,
+   "aliases": [
+    "grok",
+    "xai"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "perplexity",
+   "name": "Perplexity",
+   "maker": "Perplexity AI",
+   "agent": false,
+   "icon": "icons/perplexity.svg",
+   "ink": false,
+   "aliases": [
+    "perplexity"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "meta",
+   "name": "Meta AI",
+   "maker": "Meta",
+   "agent": false,
+   "icon": "icons/meta.svg",
+   "ink": false,
+   "aliases": [
+    "meta-ai",
+    "metaai",
+    "llama"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "mistral",
+   "name": "Mistral",
+   "maker": "Mistral AI",
+   "agent": false,
+   "icon": "icons/mistral.svg",
+   "ink": false,
+   "aliases": [
+    "mistral",
+    "le-chat",
+    "lechat"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "coze",
+   "name": "Coze",
+   "maker": "ByteDance",
+   "agent": false,
+   "icon": "icons/coze.svg",
+   "ink": true,
+   "aliases": [
+    "coze"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "volcengine",
+   "name": "Volcengine",
+   "maker": "ByteDance",
+   "agent": false,
+   "icon": "icons/volcengine.svg",
+   "ink": false,
+   "aliases": [
+    "volcengine"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "modelscope",
+   "name": "ModelScope",
+   "maker": "Alibaba",
+   "agent": false,
+   "icon": "icons/modelscope.svg",
+   "ink": false,
+   "aliases": [
+    "modelscope"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "dify",
+   "name": "Dify",
+   "maker": "LangGenius",
+   "agent": false,
+   "icon": "icons/dify.svg",
+   "ink": false,
+   "aliases": [
+    "dify"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "tiangong",
+   "name": "Tiangong",
+   "maker": "Kunlun Tech",
+   "agent": false,
+   "icon": "icons/tiangong.png",
+   "ink": false,
+   "aliases": [
+    "tiangong",
+    "skywork"
+   ],
+   "source": "official"
+  },
+  {
+   "id": "huawei",
+   "name": "Huawei Cloud",
+   "maker": "Huawei",
+   "agent": false,
+   "icon": "icons/huawei.svg",
+   "ink": false,
+   "aliases": [
+    "huawei",
+    "pangu"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "antgroup",
+   "name": "Ant Group",
+   "maker": "Ant Group",
+   "agent": false,
+   "icon": "icons/antgroup.svg",
+   "ink": false,
+   "aliases": [
+    "antgroup",
+    "ant-group"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "langchain",
+   "name": "LangChain",
+   "maker": "LangChain",
+   "agent": false,
+   "icon": "icons/langchain.svg",
+   "ink": false,
+   "aliases": [
+    "langchain",
+    "langgraph"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "crewai",
+   "name": "CrewAI",
+   "maker": "CrewAI",
+   "agent": false,
+   "icon": "icons/crewai.svg",
+   "ink": false,
+   "aliases": [
+    "crewai",
+    "crew-ai"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "n8n",
+   "name": "n8n",
+   "maker": "n8n",
+   "agent": false,
+   "icon": "icons/n8n.svg",
+   "ink": false,
+   "aliases": [
+    "n8n"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "huggingface",
+   "name": "Hugging Face",
+   "maker": "Hugging Face",
+   "agent": false,
+   "icon": "icons/huggingface.svg",
+   "ink": false,
+   "aliases": [
+    "huggingface",
+    "hugging-face"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "ollama",
+   "name": "Ollama",
+   "maker": "Ollama",
+   "agent": false,
+   "icon": "icons/ollama.svg",
+   "ink": true,
+   "aliases": [
+    "ollama"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "openrouter",
+   "name": "OpenRouter",
+   "maker": "OpenRouter",
+   "agent": false,
+   "icon": "icons/openrouter.svg",
+   "ink": false,
+   "aliases": [
+    "openrouter"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "llamaindex",
+   "name": "LlamaIndex",
+   "maker": "LlamaIndex",
+   "agent": false,
+   "icon": "icons/llamaindex.svg",
+   "ink": false,
+   "aliases": [
+    "llamaindex",
+    "llama-index"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "bedrock",
+   "name": "Amazon Bedrock",
+   "maker": "AWS",
+   "agent": false,
+   "icon": "icons/aws.svg",
+   "ink": false,
+   "aliases": [
+    "bedrock",
+    "aws"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "azure",
+   "name": "Azure AI",
+   "maker": "Microsoft",
+   "agent": false,
+   "icon": "icons/azure.svg",
+   "ink": false,
+   "aliases": [
+    "azure",
+    "azure-ai"
+   ],
+   "source": "lobehub"
+  },
+  {
+   "id": "groq",
+   "name": "Groq",
+   "maker": "Groq",
+   "agent": false,
+   "icon": "icons/groq.svg",
+   "ink": true,
+   "aliases": [
+    "groq"
+   ],
+   "source": "lobehub"
+  }
+ ]
+}
