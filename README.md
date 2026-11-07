@@ -20,15 +20,16 @@ capabilities and their entries.
 UI entry designs do not establish shipped renderers.
 A plugin can contribute several views over one state owner. Rho selects and
 arranges those entries; a workflow's dataset, method choices and sequencing stay
-in project code or an example. The 0.4 implementation ships those
-capabilities as nine independent npm plugins; browser entries remain separate work.
+in project code or an example. The current source supplies twelve independently
+versioned capability packages and optional browser entries. The selected Rho
+composition determines which entries are installed and usable.
 
 ## Implemented capabilities
 
-The nine `@rho-workspace/plugin-<id>` packages have independent versions, pinned in
+The twelve `@rho-workspace/plugin-<id>` packages have independent versions, pinned in
 each package manifest and the selected application composition. Each
 ships its own implementation and descriptor; the generic Contracts package is
-shared infrastructure, not a tenth capability. The source root is private and
+shared infrastructure, not another capability. The source root is private and
 cannot be packed as an aggregate runtime package.
 
 | Plugin | Available headless behavior | Owner reference |
@@ -38,7 +39,7 @@ cannot be packed as an aggregate runtime package.
 | `r` | Explicit script execution plans and bounded exported object snapshots; Core owns managed execution | [R](plugins/r/README.md) |
 | `requirements` | Declared R dependency probes and explicit project-library preparation plans | [Requirements](plugins/requirements/README.md) |
 | `tables` | Declared types/nulls/keys, bounded pages and keyed two-input comparisons | [Tables](plugins/tables/README.md) |
-| `media` | Original image/PDF bytes and metadata, checked coordinate context; no renderer | [Media](plugins/media/README.md) |
+| `media` | Original image/PDF bytes and metadata, checked coordinate context and a browser media view | [Media](plugins/media/README.md) |
 | `charts` | Validated scatter bindings, stable entity mapping and explicit sampling | [Charts](plugins/charts/README.md) |
 | `agent` | Frozen context, bindings/receipts, durable caller intents and project-scoped stdio MCP | [Agent](plugins/agent/README.md) |
 | `annotations` | Version-anchored feedback and explicit replies over Documents drafts and source-owner-validated anchors | [Annotations](plugins/annotations/README.md) |
@@ -46,9 +47,37 @@ cannot be packed as an aggregate runtime package.
 | `kernel` | Live R and Python sessions an Agent and the person share: cells, output, plots, variables, interrupt and restart-honest endings | [Notebook](plugins/kernel/README.md) |
 | `skills` | How work is done in a project, as SKILL.md files every Agent reads: each change's author, reason, evidence and undo | [Skills](plugins/skills/README.md) |
 
-`@rho-workspace/plugin-markdown` is a browser view only, not a capability: a UI
-extension over Documents that reads a Markdown document as formatted text
-([Markdown](plugins/markdown/README.md)).
+`@rho-workspace/plugin-markdown` and `@rho-workspace/plugin-html` are UI extensions
+over Documents, rather than separate content owners
+([Markdown](plugins/markdown/README.md), [HTML](plugins/html/README.md)).
+`@rho-workspace/plugin-agent-icons` supplies browser assets and name matching
+([Agent icons](plugins/agent-icons/README.md)); it contributes no capability
+operations, Skill or standalone view.
+
+## Entry records
+
+Each capability's public `plugin` descriptor records its own operations, optional
+components and digest-bound Skills. A component declares its identity/version,
+bindings, props schema and UI entry. A Skill declares its identity/version, digest
+and content, with optional intent, required operations, example, failure guidance
+and verification command. A verification command is guidance, not a current pass.
+Documents also declares its native Claude Code Skill and edit hook in `claudeCode`.
+
+Agent 0.4.33 declares the shared MCP entry in `plugin.agent.mcp`: its package export,
+transport and the actual four tools. `plugins/agent/src/mcp-entry.ts` supplies both
+this metadata and the stdio server's tool list. Other capabilities are reached
+through operations on that bridge, within the connected Agent's grant; they do
+not each imply another MCP server.
+
+Rho projects these declarations into its live `capability.list` and a retained
+build inventory, without copying Skill content into the descriptive inventory.
+Its Plugins page reads the same records; UI extension views retain their own
+package/version under their capability owner. An absent owner stays describable
+without being imported or enabled. Runtime third-party packages instead supply
+`rho-plugin.json`; their operations, Skills and views are read through
+`extension.describe`. Application-owned workspace Skills and project-owned
+Skills have separate owners. The [application disclosure episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-DISCLOSURE-EPISODE.md)
+records the observed gaps, browser results and remaining limits.
 
 Every owner ships `entryVersion:1.0`, versioned operation input/output contracts,
 dependency and side-effect declarations, and a digest-checked Skill in its compiled
@@ -86,11 +115,10 @@ is retained. Neither it nor the [ordinary base-R project](examples/ordinary-r-pr
 is shipped in any capability package. Both explicitly declare scripts, requirements,
 artifacts and checks to the same `r.execute` capability.
 
-The Python/R consumers and nine Node capability packages run today. Five view
-descriptors (`rho.editor`, `rho.table`, `rho.scatter`, `rho.media`, `rho.object`)
-validate properties and bindings, but all report UI unavailable. Browser renderers,
-Agent UI and presentation/animation entries remain separate work. The minimal
-Annotations headless owner does not implement annotation UI or other anchor kinds.
+The Python/R consumers, Node capability packages and selected browser views run
+today. A descriptor alone does not prove a renderer is installed: Rho checks the
+selected browser build separately. Component checks and application episodes
+retain their own verification scope in [Status](docs/STATUS.md).
 
 ## Use and verify
 
@@ -125,17 +153,17 @@ consumer's prerequisites, limits and evidence scope before execution.
 ## Build the shared experience
 
 Scientific code/data/plots, freely composed views and Agent-driven interaction
-evolve in one application flow. Rho first delivers an npm local backend, then a
-React/TypeScript, Vite and Dockview WebUI in one browser window. Electron and
-cross-window movement follow later. Selected views use CodeMirror 6, AG Grid
-Community and ECharts. Agent-composed UI uses a typed json-render catalog;
-independent HTML views may use isolated MCP Apps when needed.
+evolve in one application flow. Rho delivers an npm local service and a
+React/TypeScript WebUI in one browser window. Its shell arranges registered views
+as tabs and splits. The application's [technology stack](https://github.com/YuLab-SMU/Rho/blob/main/docs/TECHSTACK.md)
+records its current libraries; native desktop windows and cross-window movement
+remain later scope.
 
 [Architecture](docs/ARCHITECTURE.md) defines component responsibilities and the
 Action, Resource, Selection and View boundaries. The 0.4 headless owners use
 declared types, entity namespaces and fields without scientific workflow
 branches. Both R projects have passed actual headless execution in Rho. Browser
-rendering, input and layout remain selected work.
+rendering, input and layout have separately scoped application episodes.
 [Roadmap](docs/ROADMAP.md) defines the first integrated flow.
 Rho's [collaboration acceptance](https://github.com/YuLab-SMU/Rho/blob/main/docs/COLLABORATION-ACCEPTANCE.md)
 records fixed installed Full and Collaboration-minimal compositions separately

@@ -1,4 +1,5 @@
 import { layeredSchemas } from './layered-contract.js';
+import { mcpEntry } from './mcp-entry.js';
 import { skillPresentation, presentation, operationPresentation } from './presentation.js';
 import { operationContracts } from './operations.js';
 import * as fs from 'node:fs/promises';
@@ -291,10 +292,10 @@ const presentationSkill = {
   ],
   verify: { command: 'npm run test:presenter', description: 'Presentation enhances display within its witness and role, and refuses business feedback or document access.' }
 };
-export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.19', requires: [], capabilities: ['agent-context'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'agent', package: '@rho-workspace/plugin-agent', version: '0.4.33', requires: [], capabilities: ['agent-context'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
   components: [{ id: 'rho.agent-note', version: '0.2.0', owner: 'rho-plugins.agent', bindings: {}, propsSchema: layeredSchemas.AgentNoteProps, ui: './ui', presentation: { displayName: 'Agent note', description: 'A plain presentation explanation with authenticated author and binding basis.', readOnly: true, runsCode: false } }],
   skills: [{ ...agentSkill, presentation: skillPresentation }, { ...feedbackSkill, presentation: { displayName: 'Business feedback', description: 'Reads original feedback, preserves current human edits and links an explicit reply.' } }, { ...presentationSkill, presentation: { displayName: 'Presentation', description: 'Enhances the assigned visible layout without business feedback or document access.' } }],
-  agent: { id: 'claude-code-mcp', transport: 'stdio', modelLoop: 'external-client', contextDelivery: 'pull-tool-result', proactivePush: 'unsupported' }
+  agent: { id: 'claude-code-mcp', transport: 'stdio', modelLoop: 'external-client', contextDelivery: 'pull-tool-result', proactivePush: 'unsupported', mcp: mcpEntry }
 };
 export { listExternalSessions, readExternalSession } from './external-session.js';

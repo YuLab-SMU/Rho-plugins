@@ -2,6 +2,14 @@
 
 Updated: 2026-11-07.
 
+Agent **0.4.33** records its shared MCP export, stdio transport and four tools in
+`plugin.agent.mcp`. The server and descriptor use `src/mcp-entry.ts`, so discovery
+does not maintain another list or start a server. Three intent/unreachable-MCP
+regressions pass; Rho separately checked actual stdio tool discovery and its
+[plugin disclosure episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/PLUGIN-DISCLOSURE-EPISODE.md).
+The [README entry records](../README.md#entry-records) identify the current owner
+declarations and distinguish capability, UI extension and asset packages.
+
 Agent **0.4.30** lists and reads the Claude Code and Codex sessions recorded for a
 project folder from the Agents' own files, with where each started, whether another
 process holds it now and its resume command; reading starts no Agent and is bounded

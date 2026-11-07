@@ -3,7 +3,7 @@ import * as fs from 'node:fs/promises';
 import http from 'node:http';
 import path from 'node:path';
 import { retainAgentIntent } from './agent-intents.js';
-import { layeredSchemas } from './layered-contract.js';
+import { mcpTools as tools } from './mcp-entry.js';
 import { LayeredMcp } from './layered.js';
 import { ResultPages, resultLimits } from './result-pages.js';
 import { Ajv } from 'ajv';
@@ -120,12 +120,6 @@ const results = new ResultPages(path.dirname(descriptor), digest(c.projectId + '
   const index = await layer.index({ search: operation });
   requireThat(index.ok && index.value.entries.some((e: any) => e.id === operation), 'scope', 'The operation that produced this result is no longer available to this connection.');
 }, limits);
-const tools = [
-  { name: 'rho_index', description: 'Discover optional Rho workspace capabilities alongside your native tools. Core managed execution is chosen only when needed. Select owner or search to page authorized operations. No full schemas are loaded.', inputSchema: layeredSchemas.McpIndexInput },
-  { name: 'rho_resolve', description: 'Fetch complete guidance and contracts only for selected operations. Follow whole-object pages; knownRefs reuse bodies you still hold.', inputSchema: layeredSchemas.McpResolveInput },
-  { name: 'rho_call', description: 'Call one resolved authorized operation. Large replies return an immutable result reference for rho_read; never repeat a write to retrieve its output.', inputSchema: layeredSchemas.McpCallInput },
-  { name: 'rho_read', description: 'Inspect a retained result by JSON pointer, page containers or text, or explicitly release it. Text offsets count UTF-16 units. Reading never invokes the original operation.', inputSchema: layeredSchemas.McpReadInput }
-];
 const ajv = new Ajv({ strict: false });
 const validators = Object.fromEntries(tools.map(t => [t.name, ajv.compile(t.inputSchema)]));
 const server = new Server({ name: 'rho-project', version: '0.4.0' }, { capabilities: { tools: {} } });
