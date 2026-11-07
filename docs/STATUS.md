@@ -11,6 +11,10 @@ markers that turn off transcript saving. [Native sessions](../plugins/agent/READ
 32 Agent owner tests pass. The application's continuity episode with a real Claude
 Code is separate from this component check.
 
+Agent **0.4.31**: the MCP bridge sends its client's own `clientInfo` name and version
+to the application in `x-rho-client` ([Layered MCP](../plugins/agent/README.md#layered-mcp-and-optional-presentation)),
+so a connected Agent can be named by what it reports. 33 Agent owner tests pass.
+
 Agent 0.4.29 retains native Harness conversations in project-local observations,
 with original session/turn/call identities, visible replies, separate tool/exit
 outcomes and reported or exact-version results. Read-only operations and the UI

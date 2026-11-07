@@ -30,11 +30,19 @@ requireThat(Number.isSafeInteger(transportMs) && transportMs > 0, 'invalid', 'In
 const allowance = (input: Record<string, unknown>) => transportMs + (Number.isSafeInteger(input.waitMs) && (input.waitMs as number) > 0 ? Math.min(input.waitMs as number, 600000) : 0);
 // node:http rather than fetch: fetch stops waiting for a response's headers after 300 s whatever
 // the signal allows, and the service answers a waited cell only when the cell ends (P3, run 2).
+// The client that started this server, as it named itself in MCP initialize, so the person's
+// screen can show whose window the connection is. A name and version only, each bounded.
+function clientHeader(): Record<string, string> {
+  let info: { name?: string; version?: string } | undefined;
+  try { info = server.getClientVersion(); } catch { return {}; }
+  if (!info?.name) return {};
+  return { 'x-rho-client': [info.name, info.version].filter(Boolean).map(x => encodeURIComponent(String(x).slice(0, 128))).join('/') };
+}
 async function invoke(method: string, input: Record<string, unknown> = {}, contractRef?: string) {
   const body = JSON.stringify({ ...input, projectId: c.projectId });
   const response = await new Promise<http.IncomingMessage>((resolve, reject) => {
     const request = http.request(new URL('/api/v2/' + method, endpoint), { method: 'POST', signal: AbortSignal.timeout(allowance(input)),
-      headers: { authorization: 'Bearer ' + c.token, 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...(contractRef ? { 'x-rho-contract-ref': contractRef } : {}) } }, resolve);
+      headers: { authorization: 'Bearer ' + c.token, 'content-type': 'application/json', 'content-length': Buffer.byteLength(body), ...clientHeader(), ...(contractRef ? { 'x-rho-contract-ref': contractRef } : {}) } }, resolve);
     // A refused connection is the one failure whose outcome is known: nothing reached the
     // service, so nothing ran. It is usually Rho not running, and the person can start it.
     request.once('error', error => reject((error as NodeJS.ErrnoException).code === 'ECONNREFUSED'

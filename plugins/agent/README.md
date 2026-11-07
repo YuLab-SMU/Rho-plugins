@@ -347,6 +347,11 @@ observation of the original identity, never replacement work. A refused connecti
 transport failure whose outcome is known: nothing reached the service, so the call
 returns `unavailable` naming the address and saying nothing ran (`delivered: false`).
 
+Since 0.4.31 each call also carries `x-rho-client`: the name and version the MCP
+client gave in its own `initialize` (`clientInfo`), each URL-encoded and at most 128
+characters, joined by `/`. A client that gives no name sends no header. The
+application uses it to say which Agent a connection belongs to; it grants nothing.
+
 The pure `./layered-contract` entry defines the four tool inputs and Agent note
 props. `./layered` provides the bounded complete-object cache and caller checks;
 it owns no second registry, native loop or task scheduler. Before execution it
