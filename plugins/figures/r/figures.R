@@ -19,7 +19,7 @@
 # the random number stream is restored, and a failure leaves the page as a picture with the
 # reason. The protected resources are the session's time and the state folder: a description
 # stops after maxSeconds, refuses more than maxMarks drawn marks and writes at most maxBytes.
-# An airway volcano of every gene with a p-value (22,415 marks with its labels) took 2.8 s and 7.8 MB.
+# A volcano of every gene with a p-value (22,415 marks with its labels) took 2.8 s and 7.8 MB.
 limits <- list(maxMarks = 30000L, maxColumns = 40L, maxCellChars = 160L, maxSeconds = 20, maxBytes = 16L * 1024L * 1024L)
 schema <- "rho.figure/1"
 `%||%` <- function(a, b) if (is.null(a)) b else a
