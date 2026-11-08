@@ -26,7 +26,7 @@
 # reason. The protected resources are the session's time and the state folder: a description
 # stops after maxSeconds, refuses more than maxMarks drawn marks and writes at most maxBytes.
 # A volcano of every gene with a p-value (22,415 marks with its labels) took 2.8 s and 7.8 MB, and
-# DESeq2's plotMA of every gene with a count (33,469 points, written with png()) 2.5 s and 8.5 MB.
+# an MA plot of every gene with a count (33,469 points, written with png()) 2.5 s and 8.5 MB.
 limits <- list(maxMarks = 50000L, maxColumns = 40L, maxCellChars = 160L, maxSeconds = 20, maxBytes = 16L * 1024L * 1024L,
   maxTables = 64L, maxTableCells = 5e6, maxComparedColumns = 64L)
 schema <- "rho.figure/1"
