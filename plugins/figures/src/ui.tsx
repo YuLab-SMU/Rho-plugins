@@ -99,6 +99,7 @@ function rowFields(record: FigureRecord, row: MarkRow, max: number): Array<[stri
 // by its label; a row with neither is told by its fields alone.
 const title = (row: MarkRow) => row.key ? (typeof row.key.value === 'number' ? `${row.key.column} ${fmt(row.key.value)}` : fmt(row.key.value))
   : row.built.label !== undefined && row.built.label !== null ? fmt(row.built.label) : null;
+const tileGeom = /^(heatmap|tile|raster|image)$/i;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : /(s|x|sh|ch)$/.test(word) ? 'es' : 's'}`;
 const markWord = (geom: string) => /text|label|repel/i.test(geom) ? 'label' : /point|circle/i.test(geom) ? 'point' : /heatmap|cell/i.test(geom) ? 'cell' : /bar|col|histogram|rect|tile/i.test(geom) ? 'bar' : /box/i.test(geom) ? 'box' : /line|path|smooth|step/i.test(geom) ? 'line' : /violin|density|area|ribbon|polygon/i.test(geom) ? 'shape' : 'mark';
 
@@ -173,7 +174,14 @@ export function SemanticFigure({ client, projectId, cellId, plot, file, width = 
   // Each drawn element and the marks it stands for.
   const elements = useMemo(() => {
     if (!loaded) return [] as Array<{ el: Element; marks: string[] }>;
-    return [...loaded.svg.querySelectorAll('[data-rho]')].map(el => ({ el, marks: elementMarks(loaded.record, el.getAttribute('data-rho')!).map(markName) }));
+    // A cell of a heatmap or a tile says its value by its colour: it keeps it while others are
+    // selected, and a selection outlines it.
+    const tiles = new Set(loaded.record.figure.layers.flatMap((l, i) => tileGeom.test(l.geom) ? [i] : []));
+    return [...loaded.svg.querySelectorAll('[data-rho]')].map(el => {
+      const refs = elementMarks(loaded.record, el.getAttribute('data-rho')!);
+      if (refs.some(r => tiles.has(r.layer))) el.classList.add('fig-tile');
+      return { el, marks: refs.map(markName) };
+    });
   }, [loaded]);
   const byElement = useMemo(() => new Map(elements.map(e => [e.el, e.marks])), [elements]);
 

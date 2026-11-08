@@ -9,7 +9,8 @@ const styles = `/* A figure whose marks are bound to their rows. */
 .fig.fit .fig-canvas svg { width: 100%; height: 100%; }
 /* Dimming changes paint, not opacity: an opacity on each of thousands of marks makes each its own layer. */
 .fig-canvas [data-rho] { cursor: pointer; }
-.fig-canvas.has-sel [data-rho]:not(.fig-on) { fill-opacity: .13 !important; stroke-opacity: .13 !important; }
+.fig-canvas.has-sel [data-rho]:not(.fig-on):not(.fig-tile) { fill-opacity: .13 !important; stroke-opacity: .13 !important; }
+.fig-canvas [data-rho].fig-tile.fig-on { stroke-width: 2.2px !important; }
 .fig-canvas [data-rho].fig-on { stroke: var(--color-accent-strong) !important; stroke-width: 1.6px !important; stroke-opacity: 1 !important; }
 .fig-canvas text[data-rho].fig-on { fill: var(--color-accent-strong) !important; stroke: none !important; font-weight: 700; }
 .fig-canvas [data-rho].fig-hover { stroke: var(--color-ink) !important; stroke-width: 1.4px !important; fill-opacity: 1 !important; stroke-opacity: 1 !important; }
