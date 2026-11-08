@@ -36,7 +36,7 @@ export interface Places { places: Place[]; use: Record<Language, string>; copies
 export interface Asked { by: string; at: string }
 // A plot an extension described (a ggplot drawn in R, with its marks bound to their rows) names
 // what it drew; its record is kept beside the picture. figureProblem says why one was not kept.
-export interface FigureSummary { describer: string; kind?: string; title?: string; layers: number; marks: number; bound: number; geoms: string[] }
+export interface FigureSummary { describer: string; kind?: string; title?: string; layers: number; marks: number; bound: number; geoms: string[]; notes?: string[] }
 export type Output = { kind: 'stdout' | 'stderr' | 'warning' | 'error'; text: string } | { kind: 'plot'; plot: number; width: number; height: number; figure?: FigureSummary; figureProblem?: string };
 // A page the cell saved to a project file (ggsave) that an extension described. It names the file as
 // the cell left it, its bytes and their SHA-256, so a figure follows those bytes, not the path:
@@ -113,7 +113,10 @@ function figureSummary(value: any): FigureSummary {
   const t = (x: unknown) => typeof x === 'string' ? x.slice(0, 200) : undefined;
   const geoms = Array.isArray(value.geoms) ? value.geoms : typeof value.geoms === 'string' ? [value.geoms] : [];
   return { describer: t(value.describer) ?? 'unknown', ...(t(value.kind) ? { kind: t(value.kind) } : {}), ...(t(value.title) ? { title: t(value.title) } : {}),
-    layers: n(value.layers), marks: n(value.marks), bound: n(value.bound), geoms: geoms.filter((g: unknown) => typeof g === 'string').slice(0, 32).map((g: string) => g.slice(0, 64)) };
+    layers: n(value.layers), marks: n(value.marks), bound: n(value.bound), geoms: geoms.filter((g: unknown) => typeof g === 'string').slice(0, 32).map((g: string) => g.slice(0, 64)),
+    // What the describer noticed about the figure (marks drawn elsewhere than their values, labels
+    // naming other rows than the values they sit beside), so the Agent reads it with the cell.
+    ...(Array.isArray(value.notes) && value.notes.length ? { notes: value.notes.filter((t: unknown) => typeof t === 'string').slice(0, 4).map((t: string) => t.slice(0, 300)) } : {}) };
 }
 // R on Windows sets these categories from the environment, and Windows has no C.UTF-8: given one,
 // as an Agent's Git Bash gives LC_CTYPE, R warns at startup, runs in the C locale and prints
@@ -181,9 +184,9 @@ export class KernelHost {
   private placesWriting: Promise<void> = Promise.resolve();
   private ssh: Ssh;
   private serverctl: Serverctl;
-  // extensions.r: R files a local R session sources to describe what its plots draw (the figures
-  // plugin's). A session on a server has none: its plots stay pictures.
-  constructor(private root: string, private options: { limits?: Partial<KernelLimits>; rscript?: string; python?: string; ssh?: string; serverctl?: string; onChange?: () => void; extensions?: { r?: string[] } } = {}) {
+  // extensions.r and extensions.python: files a local session loads to describe what its plots draw
+  // (the figures plugin's). A session on a server has none: its plots stay pictures.
+  constructor(private root: string, private options: { limits?: Partial<KernelLimits>; rscript?: string; python?: string; ssh?: string; serverctl?: string; onChange?: () => void; extensions?: { r?: string[]; python?: string[] } } = {}) {
     this.ssh = new Ssh(options.ssh ?? 'ssh');
     const limits = this.limits;
     this.serverctl = new Serverctl(options.serverctl ?? 'serverctl', { reuseS: 60, sessionS: limits.serverctlSessionS, readMs: limits.serverctlReadMs, skillBytes: limits.serverSkillBytes });
@@ -336,7 +339,7 @@ export class KernelHost {
     const runner = source && `.cache/rho/kernel/runner-${digest(source).slice(0, 16)}${language === 'r' ? '.R' : '.py'}`;
     const pipe = windows && language === 'r' ? await answerPipe() : null;
     const child = place ? await this.transport(place).spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
-      : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...(windows ? windowsEnvironment(process.env) : process.env), MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}), ...(language === 'r' && this.options.extensions?.r?.length ? { RHO_KERNEL_EXTENSIONS: this.options.extensions.r.join(path.delimiter) } : {}) } });
+      : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...(windows ? windowsEnvironment(process.env) : process.env), MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}), ...(this.options.extensions?.[language]?.length ? { RHO_KERNEL_EXTENSIONS: this.options.extensions[language]!.join(path.delimiter) } : {}) } });
     let settle = () => {};
     const ended = new Promise<void>(resolve => { settle = resolve; });
     const live: Live = { started: selected, root, ended, settle, record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve(), pipe: pipe?.server };

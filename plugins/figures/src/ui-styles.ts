@@ -15,7 +15,7 @@ const styles = `/* A figure whose marks are bound to their rows. */
 .fig-canvas text[data-rho].fig-on { fill: var(--color-accent-strong) !important; stroke: none !important; font-weight: 700; }
 .fig-canvas [data-rho].fig-hover { stroke: var(--color-ink) !important; stroke-width: 1.4px !important; fill-opacity: 1 !important; stroke-opacity: 1 !important; }
 .fig-canvas.agent [data-rho].fig-on { stroke: var(--color-amber-text) !important; }
-.fig-canvas.agent text[data-rho].fig-on { fill: var(--color-amber-text) !important; }
+.fig-canvas.agent text[data-rho].fig-on { fill: var(--color-amber-text) !important; stroke: none !important; }
 .fig-canvas.arrived [data-rho].fig-on { animation: fig-arrive .9s ease-out 1; }
 @keyframes fig-arrive { 0% { stroke-width: 6px; } 100% { stroke-width: 1.6px; } }
 @media (prefers-reduced-motion: reduce) { .fig-canvas.arrived [data-rho].fig-on { animation: none; } }

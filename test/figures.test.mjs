@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { KernelHost } from '@rho-workspace/plugin-kernel';
-import { Figures, rExtension, parseRecord, elementMarks, markRow, plugin } from '@rho-workspace/plugin-figures';
+import { Figures, rExtension, pythonExtension, parseRecord, elementMarks, markRow, plugin } from '@rho-workspace/plugin-figures';
 
 // Real R sessions describe real plots here. The describer needs ggplot2, svglite, xml2 and
 // jsonlite; patchwork is used where present. Without them these checks are skipped, not passed.
@@ -268,6 +268,171 @@ test('describing a plot leaves the session as the cell left it: no output, no va
     assert.equal(drawn.cell.outputs.filter(o => o.kind === 'warning').length, 1, 'the cell warns once about its missing value; drawing it again for the figure does not warn again');
     const vars = (await host.read()).sessions.at(-1).variables.map(v => v.name);
     assert.deepEqual(vars.sort(), ['a', 'b']);
+  } finally { await host.close(); }
+});
+
+// Python sessions describe matplotlib figures with py/figures.py; seaborn is used where present.
+const python = process.env.RHO_PYTHON ?? 'python3';
+const pyProbe = spawnSync(python, ['-c', 'import importlib.util as u; print(*[u.find_spec(m) is not None for m in ("matplotlib", "numpy", "pandas", "seaborn")])'], { encoding: 'utf8' });
+const pyHave = pyProbe.status === 0 ? pyProbe.stdout.trim().split(/\s+/).map(v => v === 'True') : [];
+const pySkip = pyHave.slice(0, 3).every(Boolean) ? false : 'Python with matplotlib, numpy and pandas is not available';
+const seaborn = pyHave[3] === true;
+async function pySession() {
+  const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-figures-py-'));
+  const host = new KernelHost(root, { python, extensions: { python: [pythonExtension] } });
+  const figures = new Figures(root, { record: (cellId, plot) => host.figureRecord(cellId, plot), saved: sha256 => host.savedFigure(sha256) });
+  let n = 0;
+  const run = async (code, by = 'browser:local') => {
+    const { cell } = await host.run({ language: 'python', code, changeId: 'p' + ++n, by, waitMs: 120000 });
+    assert.equal(cell.state, 'done', cell.outputs.map(o => o.text ?? '').join(''));
+    return { cell, plots: cell.outputs.filter(o => o.kind === 'plot') };
+  };
+  return { root, host, figures, run };
+}
+const pyTable = `import numpy as np, pandas as pd, matplotlib.pyplot as plt
+rng = np.random.default_rng(1); n = 400
+res = pd.DataFrame({'baseMean': 10 ** rng.uniform(0, 4, n), 'log2FoldChange': rng.normal(0, 2, n), 'padj': 10 ** -rng.uniform(0, 12, n)}, index=pd.Index([f'G{i:03d}' for i in range(1, n + 1)], name='gene'))
+res.loc['G005', 'padj'] = np.nan`;
+
+test('a matplotlib figure is described: points drawn at -log10 of a column are bound to its rows, and labels by their text', { skip: pySkip, timeout: 180000 }, async () => {
+  const { host, figures, run } = await pySession();
+  try {
+    await run(pyTable);
+    const { cell, plots } = await run(`fig, ax = plt.subplots()
+ax.scatter(res.log2FoldChange, -np.log10(res.padj), s=4, c=np.where(res.padj < 0.01, 'tab:red', 'grey'))
+for g, r in res.nsmallest(3, 'padj').iterrows(): ax.annotate(g, (r.log2FoldChange, -np.log10(r.padj)), xytext=(4, 4), textcoords='offset points')
+ax.axhline(2, ls='--', color='black'); ax.set_title('Volcano'); ax.set_xlabel('log2 fold change')
+ax.text(0.02, 0.97, 'FDR 0.01', transform=ax.transAxes)
+fig.tight_layout()`);
+    assert.equal(plots.length, 1);
+    const summary = plots[0].figure;
+    assert.ok(summary, plots[0].figureProblem ?? 'the plot output names its figure');
+    assert.deepEqual([summary.describer, summary.geoms, summary.marks, summary.bound], ['matplotlib', ['points', 'abline', 'text', 'text'], 404, 404]);
+    assert.equal(cell.outputs.filter(o => o.kind === 'stdout' || o.kind === 'stderr').length, 0, 'describing prints nothing');
+    const fig = await record(host, cell.cellId);
+    const [points, line, labels, note] = fig.figure.layers;
+    assert.deepEqual([points.marks, points.source, points.mapping, points.bound], [399, 'res', { x: 'log2FoldChange', y: '-log10(padj)' }, 'mark']);
+    assert.equal(markRow(fig, { layer: 0, mark: 4 }).key.value, 'G006', 'the row whose padj is missing was not drawn and is skipped');
+    assert.deepEqual(markRow(fig, { layer: 0, mark: 4 }).key.column, 'gene', 'a DataFrame is keyed by its named index');
+    assert.equal(line.geom, 'abline');
+    assert.equal(markRow(fig, { layer: 1, mark: 0 }).built.yintercept, 2);
+    // Labels drawn at their points, in another order than the table's, name those points' rows; a
+    // note placed in the axes' corner has no position in the data.
+    assert.deepEqual([labels.source, labels.mapping], ['res', { x: 'log2FoldChange', y: '-log10(padj)' }]);
+    for (let m = 0; m < 3; m++) assert.equal(markRow(fig, { layer: 2, mark: m }).key.value, markRow(fig, { layer: 2, mark: m }).built.label);
+    assert.deepEqual([note.source, markRow(fig, { layer: 3, mark: 0 }).built], [null, { label: 'FDR 0.01' }]);
+    assert.deepEqual([fig.figure.plots[0].title, fig.figure.plots[0].labels.x], ['Volcano', 'log2 fold change']);
+
+    const covered = new Set([...fig.svg.matchAll(/data-rho="(\d+\.\d+)"/g)].flatMap(m => elementMarks(fig, m[1])).map(m => `${m.layer}.${m.mark}`));
+    assert.equal(covered.size, 404, 'every point, the line and the labels are drawn by elements that name them');
+    assert.match(fig.svg, /^(<\?xml[^>]*>\s*)?<svg[^>]*\sxmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+    assert.doesNotMatch(fig.svg, /<style|<script/i, 'no style sheet reaches the page the figure is shown in');
+
+    const strong = await figures.read({ cellId: cell.cellId, plot: 1, where: [{ layer: 0, column: 'padj', op: 'lt', value: 1e-11 }], limit: 500 });
+    assert.ok(strong.matched.total > 0);
+    for (const row of strong.rows) assert.ok(row.values.padj < 1e-11);
+    const { selection } = await figures.select({ cellId: cell.cellId, plot: 1, marks: strong.matched.marks.slice(0, 3), note: 'Strongest', changeId: 'py-pick' }, 'agent:a');
+    assert.equal(selection.count, 3);
+
+    // A position on a log axis is read in the data's units; markers of a line are its points.
+    const ma = await run(`fig, ax = plt.subplots(); ax.plot(res.baseMean, res.log2FoldChange, 'o', ms=2); ax.set_xscale('log')`);
+    const maFig = await record(host, ma.cell.cellId);
+    assert.deepEqual([maFig.figure.layers[0].geom, maFig.figure.layers[0].mapping, maFig.figure.layers[0].marks], ['points', { x: 'baseMean', y: 'log2FoldChange' }, 400]);
+    assert.equal(maFig.figure.plots[0].positions.x.transform, 'log-10');
+    const first = markRow(maFig, { layer: 0, mark: 0 });
+    assert.ok(Math.abs(first.built.x - first.values.baseMean) <= 1e-9 * first.built.x);
+
+    // Rasterized points are drawn as points for the figure, and left rasterized. Genes not tested
+    // are drawn at 0 and bound by their fold change. A count of 0 is not "near" every value through
+    // -log10(0) = inf, and a table with fewer rows than the marks (samples × genes) is not compared.
+    const tested = await run(`res2 = res.copy(); res2.iloc[::20, res2.columns.get_loc('padj')] = np.nan
+counts = pd.DataFrame(rng.integers(0, 3, size=(n, 4)), index=res.index, columns=list('abcd'))
+wide = pd.DataFrame(rng.normal(size=(8, 5000)))
+ok = res2.padj.notna()
+fig, ax = plt.subplots()
+ax.scatter(res2.log2FoldChange[ok], -np.log10(res2.padj[ok]), s=3, rasterized=True)
+ax.scatter(res2.log2FoldChange[~ok], np.zeros((~ok).sum()), s=3, rasterized=True)
+fig.savefig('tested.png')
+print(ax.collections[0].get_rasterized(), ax.collections[0].get_gid())`);
+    assert.equal(tested.cell.outputs.filter(o => o.kind === 'stdout').map(o => o.text).join(''), 'True None\n', 'the figure is left as the code made it');
+    const tfig = await record(host, tested.cell.cellId);
+    assert.deepEqual(tfig.figure.layers.map(l => [l.marks, l.bound, l.source, l.mapping, l.notes ?? null]), [
+      [379, 'mark', 'res2', { x: 'log2FoldChange', y: '-log10(padj)' }, null],
+      [21, 'mark', 'res2', { x: 'log2FoldChange' }, ['All 21 marks are drawn at y = 0.']]], 'every 20th gene and G005 were not tested');
+    assert.ok(tfig.seconds < 5, `describing took ${tfig.seconds} s`);
+  } finally { await host.close(); }
+});
+
+test('seaborn heatmaps and bars are figures: a cell names its row, column and value, also when clustered; a bar its category', { skip: pySkip || (!seaborn && 'seaborn is not available'), timeout: 180000 }, async () => {
+  const { host, run } = await pySession();
+  try {
+    const heat = await run(`import numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
+mat = pd.DataFrame(np.random.default_rng(2).normal(size=(12, 4)), index=[f'g{i}' for i in range(1, 13)], columns=['s1', 's2', 's3', 's4'])
+sns.heatmap(mat, cmap='vlag', cbar_kws={'label': 'z-score'})`);
+    assert.ok(heat.plots[0].figure, heat.plots[0].figureProblem);
+    const fig = await record(host, heat.cell.cellId);
+    assert.deepEqual([fig.figure.layers[0].geom, fig.figure.layers[0].source, fig.figure.layers[0].marks], ['heatmap', 'mat', 48]);
+    for (let m = 0; m < 48; m++) {
+      const row = markRow(fig, { layer: 0, mark: m });
+      assert.equal(row.key.value, row.built.row);
+      assert.ok(Math.abs(row.values[row.built.column] - row.built.value) <= 1e-6 * Math.max(1, Math.abs(row.built.value)), 'a cell\'s value is its row\'s value in its column');
+    }
+    assert.deepEqual(fig.figure.plots[0].scales.map(s => [s.aesthetic, s.title]), [['fill', 'z-score']]);
+
+    // Row labels set in the table's order on a clustered heatmap name other rows than they sit beside.
+    const wrong = await run(`g = sns.clustermap(mat); g.ax_heatmap.set_yticks(np.arange(12) + 0.5, mat.index, rotation=0)`);
+    assert.match(wrong.plots[0].figure.notes?.[0] ?? '', /^\d+ of 12 rows are labelled with another row of mat: row \d+ is labelled g\d+ and draws the values of g\d+\.$/);
+    // Labels set on the cells' edges, one for each row, are read in their order, and noted.
+    const edges = await run(`plt.figure(); ax = sns.heatmap(mat.to_numpy()); ax.set_yticks(range(12), mat.index); ax.set_xticks(range(4), mat.columns)`);
+    const efig = await record(host, edges.cell.cellId);
+    assert.deepEqual([0, 5].map(m => markRow(efig, { layer: 0, mark: m }).built.row), ['g1', 'g2']);
+    assert.deepEqual(efig.figure.layers[0].notes, ["Its row labels sit on the rows' edges, not their middles; label k is read as naming row k.", "Its column labels sit on the columns' edges, not their middles; label k is read as naming column k."]);
+    const clustered = await run(`g = sns.clustermap(mat)`);
+    assert.equal(clustered.plots[0].figure.notes, undefined, 'labels seaborn placed name their rows');
+    const cfig = await record(host, clustered.cell.cellId);
+    const layer = cfig.figure.layers.findIndex(l => l.geom === 'heatmap');
+    assert.equal(cfig.figure.layers[layer].source, 'mat', 'a clustered heatmap is matched to its table with rows and columns reordered');
+    for (let m = 0; m < 48; m++) {
+      const row = markRow(cfig, { layer, mark: m });
+      assert.ok(Math.abs(row.values[row.built.column] - row.built.value) <= 1e-6 * Math.max(1, Math.abs(row.built.value)));
+    }
+
+    const bars = await run(`tips = pd.DataFrame({'day': ['Thu', 'Fri', 'Sat', 'Sun'] * 5, 'total': np.arange(20.)}); plt.figure(); sns.barplot(tips, x='day', y='total', errorbar=None)`);
+    const bfig = await record(host, bars.cell.cellId);
+    const rect = bfig.figure.layers.findIndex(l => l.geom === 'rect');
+    assert.deepEqual([0, 1, 2, 3].map(m => markRow(bfig, { layer: rect, mark: m }).built.label), ['Thu', 'Fri', 'Sat', 'Sun']);
+    assert.deepEqual([0, 3].map(m => markRow(bfig, { layer: rect, mark: m }).built.ymax), [8, 11]);
+    assert.deepEqual(bfig.figure.plots[0].positions.x, { discrete: true, levels: ['Thu', 'Fri', 'Sat', 'Sun'] });
+  } finally { await host.close(); }
+});
+
+test('a matplotlib figure saved with savefig is a figure of the file while the file keeps the bytes the cell saved', { skip: pySkip, timeout: 180000 }, async () => {
+  const { root, host, figures, run } = await pySession();
+  const sha = async relative => createHash('sha256').update(await fs.readFile(path.join(root, relative))).digest('hex');
+  try {
+    await run(pyTable);
+    const saving = await run(`import os, tempfile; os.makedirs('results', exist_ok=True)
+fig, ax = plt.subplots(figsize=(6, 4)); ax.scatter(res.log2FoldChange, -np.log10(res.padj), s=3)
+fig.savefig('results/volcano.png', dpi=100, bbox_inches='tight')
+fig.savefig(os.path.join(tempfile.mkdtemp(), 'outside.png'))
+plt.savefig('results/again')
+plt.close(fig)`);
+    assert.equal(saving.plots.length, 0, 'a closed figure draws nothing in the cell');
+    assert.deepEqual(saving.cell.saved?.map(s => s.path), ['results/volcano.png', 'results/again.png'], 'a file outside the project is not kept; a name without an extension is saved with one');
+    const [saved] = saving.cell.saved;
+    assert.equal(saved.sha256, await sha('results/volcano.png'));
+    assert.ok(saved.figure, saved.figureProblem);
+    assert.equal(saved.figure.marks, 399);
+    const read = await figures.read({ path: 'results/volcano.png', form: 'view' });
+    assert.deepEqual([read.figure.cellId, read.record.size.width, read.record.size.height], [saving.cell.cellId, 6, 4]);
+    assert.equal((await figures.read({ path: 'results/volcano.png', marks: ['0.0'] })).rows[0].key.value, 'G001');
+    const vars = (await host.read()).sessions.at(-1).variables.map(v => v.name);
+    assert.ok(!vars.some(v => /rho|describ/i.test(v)), 'describing the saved figure adds no variables');
+
+    // Written again by something else, the file is a picture; the bytes the cell saved still name it.
+    await run(`open('results/volcano.png', 'wb').write(b'not a figure')`);
+    await assert.rejects(figures.read({ path: 'results/volcano.png' }), /No Notebook cell saved a figure as this file/);
+    assert.equal((await figures.read({ sha256: saved.sha256 })).figure.path, 'results/volcano.png');
   } finally { await host.close(); }
 });
 

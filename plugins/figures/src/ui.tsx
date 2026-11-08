@@ -87,7 +87,10 @@ function rowFields(record: FigureRecord, row: MarkRow, max: number): Array<[stri
     // layer maps that its row does not hold (a heatmap cell's column and value) follows the key.
     const names = Object.keys(row.values).filter(n => n === '.rownames' || !n.startsWith('.')), first = mappedColumns(record, row.layer, names);
     const own = Object.values(record.figure.layers[row.layer]?.mapping ?? {}).filter(n => n in row.built && !(n in row.values!) && row.built[n] !== row.key?.value);
-    const order = [...(row.key ? [row.key.column] : []), ...first, ...names].filter((n, i, a) => a.indexOf(n) === i);
+    // A row's other names (a gene symbol beside its Ensembl key) follow the mapped columns, before the
+    // rest of its numbers.
+    const textual = new Set(record.sources.find(s => s.id === row.source)?.columns.filter(c => c.type === 'text').map(c => c.name) ?? []);
+    const order = [...(row.key ? [row.key.column] : []), ...first, ...names.filter(n => textual.has(n)), ...names].filter((n, i, a) => a.indexOf(n) === i);
     const held = (n: string): [string, Cell] => [n === '.rownames' ? 'row' : n, row.values![n] ?? null];
     return [...order.slice(0, row.key ? 1 : 0).map(held), ...own.map((n): [string, Cell] => [n, row.built[n] ?? null]), ...order.slice(row.key ? 1 : 0).map(held)].slice(0, max);
   }
@@ -274,6 +277,9 @@ export function SemanticFigure({ client, projectId, cellId, plot, file, width = 
   };
 
   const bound = record.figure.layers.filter(l => l.bound !== 'none').length;
+  // What the record could not do, and what it noticed: marks drawn elsewhere than their values,
+  // labels that name other rows than the values beside them.
+  const notes = [...record.problems, ...new Set(record.figure.layers.flatMap(l => l.notes ?? []))];
   const agentShown = !!from && !(author?.(from.by).mine ?? false);
   return <figure className={'fig' + (fit ? ' fit' : '')} style={fit || !width ? undefined : { maxWidth: Math.round(width / 2) }}
     onKeyDown={event => { if (event.key === 'Escape' && selected.size) { event.stopPropagation(); setSelected(new Set()); setFrom(null); } }}>
@@ -293,7 +299,7 @@ export function SemanticFigure({ client, projectId, cellId, plot, file, width = 
     {selected.size > 0 ? <Selected record={record} marks={[...selected]} from={from} who={from ? author?.(from.by).name ?? 'Agent' : undefined} agent={agentShown}
       asking={asking} onAsk={onAsk ? ask : undefined} onClear={() => { setSelected(new Set()); setFrom(null); }} />
       : <p className="fig-hint">{bound ? <>Point at a mark to read its row. <b>Click</b> or <b>drag</b> to select{onAsk ? ', then ask the Agent about the selection' : ''}.</> : 'Nothing in this plot could be bound to its rows.'}
-        {record.problems.length > 0 && <> {record.problems.join(' ')}</>}</p>}
+        {notes.length > 0 && <> {notes.join(' ')}</>}</p>}
   </figure>;
 }
 

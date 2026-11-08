@@ -17,8 +17,9 @@ device that stays open for the session, as the console's does: a later cell can 
 over an earlier cell's plot (a line over its points) and reports the plot it changed,
 and each page is recorded before a new one starts, so a sourced script that draws two
 plots keeps both. Calls that only set graphics state (`par`, `palette`, `layout`) do not
-make a page new. A host constructed with `extensions.r` hands those R files to each
-local R session it starts (`RHO_KERNEL_EXTENSIONS`); the Figures plugin's describer is one,
+make a page new. A host constructed with `extensions.r` and `extensions.python` hands those
+files to each local R or Python session it starts (`RHO_KERNEL_EXTENSIONS`); the Figures
+plugin's describers are such files,
 and a plot it described names its `figure` (layers, marks, how many are bound) or why it
 was not described (`figureProblem`), and `figureRecord` returns the record beside the
 PNG. A page the code saves to a project file on a device of its own (`ggsave`) is found by
@@ -27,7 +28,10 @@ at; the cell's `saved` names each such file with its bytes and SHA-256 and the f
 summary or `figureProblem`, and `savedFigure(sha256)` returns the record of the newest cell
 that saved those bytes. A file written again since has other bytes and no record. A file
 written with `png()` or `pdf()` and `print()` is not found: nothing names its file.
-Python closes its figures after each cell. After each cell the
+In Python, `Figure.savefig` (and so `plt.savefig`) is watched once `matplotlib.figure` is
+imported: a figure saved to a file in the project is described as savefig wrote it and named
+in `saved` when the cell ends, also when the cell closed the figure. Python closes its
+figures after each cell. After each cell the
 session lists its variables with their type, size and a one-line summary.
 Each cell also names the values it made or changed (`defined`) and, when neither list
 was cut, those it removed (`removed`). It names the values it read (`used`): the names

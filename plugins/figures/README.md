@@ -1,8 +1,8 @@
 # Figures
 
-`@rho-workspace/plugin-figures` 0.3.0 keeps the plots a project's live R session draws as
-figures whose marks know the rows they were drawn from. It is built into Rho and needs the
-Notebook (`kernel`).
+`@rho-workspace/plugin-figures` 0.4.0 keeps the plots a project's live R or Python session
+draws as figures whose marks know the rows they were drawn from. It is built into Rho and
+needs the Notebook (`kernel`).
 
 ## What it does
 
@@ -63,8 +63,53 @@ matrix row as its source (named after the session's matrix when one is identical
 drawn as one image (`use_raster`) are not bound; annotations, dendrograms and names are
 drawn and not bound.
 
-Other grid drawings and Python plots stay pictures. Their plot output has neither `figure`
-nor `figureProblem`: nothing failed, nothing described them.
+A matplotlib figure in a live Python session (and what draws through matplotlib: seaborn,
+pandas `.plot`) is described by `py/figures.py`, which the Notebook's host hands to each local
+Python session. matplotlib keeps what each Axes drew as artists, so nothing is read from
+pixels: a scatter's points are a collection with their offsets, a line keeps its vertices,
+each bar is a rectangle, a heatmap (`pcolormesh`, seaborn's `heatmap` and `clustermap`) a mesh
+of cells, a label its text and position. Each artist is given an id for the drawing, the
+figure is written as SVG at its own size, and the elements matplotlib wrote for each artist
+are named after its marks; when they cannot be matched one for one, the layer says why. An
+artist drawn `rasterized=True` (a large scatter, to keep its file small) is drawn as vectors
+for the figure; the figure and its picture are left as the code made them.
+
+- Points, line vertices and labels keep the values they were drawn at, in the data's units
+  (a log axis reads in counts). Where their x and y are two columns of a table in the session
+  (a DataFrame, a numeric Series with its index, a 2-D numeric array), they are bound to its
+  rows in the table's order, skipping rows not drawn. A position drawn through `-log10`,
+  `log10`, `log2`, `log2(x + 1)` or `log1p` of a column is matched through it, and the
+  layer's mapping says so (`y: -log10(padj)`). Marks all drawn at one value of the other axis
+  (genes not tested, drawn at 0) are bound by their own axis alone, and noted. Tables the
+  cell's code assigns, then those it reads, are compared first. A DataFrame is keyed by its
+  text index (named after the index's name), else a unique text column.
+- A label (`ax.text`, `ax.annotate`) drawn at a bound point's position names that point's row,
+  whatever order the labels were drawn in; otherwise one whose text names rows of a table
+  another layer of the plot is bound to is bound by its text, wherever it was moved to. A text
+  placed in the axes' own coordinates (a note in a corner) is a layer of its own.
+- A heatmap cell names its row, column and value. When a table of the session holds the same
+  values, also with rows and columns reordered (a clustered heatmap), the cell's source row
+  is that table's row, and tick labels that name other rows of it than the values they sit
+  beside are noted (*29 of 30 rows are labelled with another row of heat_z: row 1 is labelled
+  SPARCL1 and draws the values of PDPN*). Otherwise the drawn matrix is the source, named by
+  its tick labels; labels set on the cells' edges, one for each, are read in their order and
+  noted.
+- A bar is named by the category drawn at its middle; positions on an axis of categories are
+  named by their category. Horizontal and vertical reference lines (`axhline`, `axvline`)
+  keep their intercept. Segments and polygons keep their ends and extents.
+- The legend and colour bar are the plot's scales; a seaborn facet's title (`dex = trt`) is
+  its facet.
+- What the describer notices (marks drawn elsewhere than their values, labels naming other
+  rows) is kept as the layer's `notes`, carried in the cell's plot output for the Agent and
+  shown under the figure.
+
+A figure saved with `savefig()` to a file in the project is kept as a figure of that file,
+like a ggplot saved with `ggsave()`: the Notebook's runner watches `Figure.savefig`, the figure
+is described as it was saved (with its `bbox_inches`), and the cell's `saved` list names the
+file with its bytes when the cell ends, also when the cell closed the figure.
+
+Other grid drawings and images drawn with `imshow` stay pictures. A plot output nothing
+described has neither `figure` nor `figureProblem`: nothing failed, nothing described them.
 
 ## Who uses it
 
@@ -93,7 +138,7 @@ selection, and the same `changeId` with other marks is refused.
 
 ## Limits
 
-The protected resource is the R session's time and the project's state folder.
+The protected resource is the session's time and the project's state folder.
 
 | Limit | Value | When it is exceeded |
 | --- | --- | --- |
@@ -101,7 +146,8 @@ The protected resource is the R session's time and the project's state folder.
 | Time to describe (`maxSeconds`) | 20 s | Describing stops; the plot stays a picture. |
 | Record size (`maxBytes`, kernel `maxFigureBytes`) | 16 MiB | The record is not kept; `figureProblem` says how large it was. |
 | Columns kept for a source or a layer (`maxColumns`) | 40 | Later columns are left out of the record. |
-| Session tables compared with a base graphics layer (`maxTables`) | 64 | Later tables are not compared; the layer keeps its drawn values. |
+| Session tables compared with a base graphics or matplotlib layer (`maxTables`) | 64 | Later tables are not compared; the layer keeps its drawn values. |
+| Numeric columns of one table compared with a matplotlib layer (`maxComparedColumns`) | 64 | Later columns are not compared. A table with fewer rows than the layer's marks is not compared. |
 | Cells of one compared table (`maxTableCells`) | 5 000 000 | A larger table is not compared. |
 | Characters of a text value (`maxCellChars`) | 160 | The value is cut and ends with `…`. |
 | Marks in a selection | 5 000 | The selection is refused. |
@@ -116,8 +162,10 @@ npm run test:figures
 ```
 
 It describes real ggplot2 and patchwork plots, base graphics pages and a ComplexHeatmap in
-R through the Notebook and reads, matches and selects their marks. It saves plots with
+R, and matplotlib and seaborn figures in Python, through the Notebook and reads, matches and
+selects their marks. It saves plots with
 `ggsave()` as PNG and PDF and reads them by path and by bytes until the file is written
 again. Without R and ggplot2, svglite, xml2 and jsonlite the checks are skipped, not passed;
 so are the base graphics check without gridGraphics and the heatmap check without
-ComplexHeatmap.
+ComplexHeatmap. The Python checks run `RHO_PYTHON` (else `python3`) and are skipped without
+matplotlib, numpy and pandas; the seaborn check without seaborn.

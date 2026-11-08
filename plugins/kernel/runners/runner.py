@@ -4,7 +4,7 @@
 # that value, as a notebook does. Figures made with matplotlib are saved after each cell. An
 # interrupt (SIGINT; on Windows a Ctrl+C or Ctrl+Break on the session's console) stops the cell
 # that is running and leaves the session and its variables.
-import ast, base64, io, json, linecache, os, platform, re, signal, sys, tempfile, traceback, types
+import ast, base64, functools, io, json, linecache, os, platform, re, signal, sys, tempfile, traceback, types
 
 root = sys.argv[1]
 os.chdir(root)
@@ -67,6 +67,27 @@ def variables(most):
         items.append({'name': name, 'type': type(value).__name__, 'size': size, 'bytes': bytes_, 'summary': summary})
     return {'items': items, 'omitted': max(0, len(names) - most)}
 
+# Plugins can describe what a figure draws (RHO_KERNEL_EXTENSIONS names their Python files). Each file
+# runs in a namespace of its own; describe_figure() writes a record beside the figure's picture. One
+# that fails to load is left out, and a figure no extension describes stays a picture.
+extensions = []
+for file in os.environ.get('RHO_KERNEL_EXTENSIONS', '').split(os.pathsep):
+    if not file: continue
+    try:
+        with open(file, encoding='utf-8') as f: scope = {'__name__': 'rho_extension', '__file__': file}; exec(compile(f.read(), file, 'exec'), scope)
+        if callable(scope.get('describe_figure')): extensions.append(scope)
+    except Exception: pass
+
+# The names the running cell's code assigns, then those it reads: a describer compares those tables
+# first, a table the cell made before one it read.
+cell_names = []
+def describe(figure, into, **options):
+    for scope in extensions:
+        try: out = scope['describe_figure'](figure, into, namespace, prefer=cell_names, **options)
+        except Exception as error: return {'problem': f'{type(error).__name__}: {error}'}
+        if out is not None: return out
+    return None
+
 # A session on a server draws in its own temporary folder and sends each figure with its answer.
 def save_figures(cell, folder, most, inline=False):
     plt = sys.modules.get('matplotlib.pyplot')
@@ -81,8 +102,84 @@ def save_figures(cell, folder, most, inline=False):
             if inline:
                 with open(file, 'rb') as f: plot['data'] = base64.b64encode(f.read()).decode('ascii')
                 os.remove(file)
+            elif extensions:
+                described = describe(figure, file[:-4] + '.figure.json', bbox_inches='tight')
+                if described and described.get('problem'): plot['figureProblem'] = str(described['problem'])[:500]
+                elif described: plot['figure'] = described
             emit(plot)
     plt.close('all')
+
+# Figures the code saved to files in the project (savefig): each is described as savefig wrote it,
+# and named with its file when the cell ends, once the file is as the cell left it. A file saved twice
+# keeps its last figure. Nothing is kept for a session on a server, or for a file outside the project.
+saving = {'cell': None, 'folder': None, 'files': {}, 'most': 0}
+def saved_figure(figure, fname, kwargs):
+    import matplotlib
+    cell, folder, files = saving['cell'], saving['folder'], saving['files']
+    if not cell or not folder or not isinstance(fname, (str, os.PathLike)): return
+    full = os.path.realpath(os.path.join(os.getcwd(), os.fspath(fname)))
+    # savefig adds the format's extension to a name that has none.
+    fmt = kwargs.get('format') or matplotlib.rcParams['savefig.format']
+    if not os.path.isfile(full) and os.path.isfile(f'{full}.{fmt}'): full = f'{full}.{fmt}'
+    root = os.path.realpath(os.getcwd())
+    if not full.startswith(root + os.sep) or full.startswith(os.path.realpath(folder) + os.sep) or not os.path.isfile(full): return
+    if full not in files and len(files) >= saving['most']: return
+    pending = files[full][0] if full in files else os.path.join(folder, f'{cell}-p{len(files) + 1}.figure.json')
+    bbox = kwargs.get('bbox_inches', matplotlib.rcParams['savefig.bbox'])
+    options = {'bbox_inches': None if bbox == 'standard' else bbox, 'pad_inches': kwargs.get('pad_inches', matplotlib.rcParams['savefig.pad_inches'])}
+    files[full] = (pending, describe(figure, pending, **options))
+
+def watch_savefig(module):
+    Figure = getattr(module, 'Figure', None)
+    if Figure is None or getattr(Figure.savefig, '_rho', False): return
+    original = Figure.savefig
+    @functools.wraps(original)
+    def savefig(self, fname, *args, **kwargs):
+        result = original(self, fname, *args, **kwargs)
+        try: saved_figure(self, fname, kwargs)
+        except Exception: pass
+        return result
+    savefig._rho = True
+    Figure.savefig = savefig
+
+# matplotlib.figure is watched as it is first imported, whichever cell imports it.
+class WatchFigures:
+    def find_spec(self, name, path=None, target=None):
+        if name != 'matplotlib.figure': return None
+        for finder in sys.meta_path:
+            if finder is self or not hasattr(finder, 'find_spec'): continue
+            spec = finder.find_spec(name, path, target)
+            if spec is None: continue
+            loader = spec.loader
+            if loader is not None and hasattr(loader, 'exec_module'):
+                run = loader.exec_module
+                def exec_module(module, run=run):
+                    run(module)
+                    try: watch_savefig(module)
+                    except Exception: pass
+                loader.exec_module = exec_module
+            return spec
+        return None
+if extensions:
+    if 'matplotlib.figure' in sys.modules: watch_savefig(sys.modules['matplotlib.figure'])
+    else: sys.meta_path.insert(0, WatchFigures())
+
+def emit_saved(cell):
+    root, k = os.path.realpath(os.getcwd()), 0
+    for full, (pending, described) in saving['files'].items():
+        if not os.path.isfile(full): continue
+        k += 1
+        out = {'id': cell, 'kind': 'saved', 'path': os.path.relpath(full, root).replace(os.sep, '/'), 'number': k}
+        if described and described.get('problem'): out['figureProblem'] = str(described['problem'])[:500]
+        elif described and os.path.isfile(pending):
+            record = os.path.join(saving['folder'], f'{cell}-s{k}.figure.json')
+            os.replace(pending, record)
+            out['figure'] = dict(described, file=os.path.basename(record))
+        emit(out)
+    for pending, _ in saving['files'].values():
+        if os.path.isfile(pending):
+            try: os.remove(pending)
+            except OSError: pass
 
 # What a cell's code reads and assigns, from its parsed text before it runs: the names it loads,
 # the names it binds (also through df[...] = or obj.attr =, def, class and import), and its
@@ -210,6 +307,8 @@ def run(msg):
     name = f"<cell {msg.get('number', '')}>"
     linecache.cache[name] = (len(msg['code']), None, msg['code'].splitlines(True), name)
     sys.stdout, sys.stderr = Stream(cell, 'stdout'), Stream(cell, 'stderr')
+    if extensions and not msg.get('inline') and msg.get('plots'): saving.update(cell=cell, folder=msg['plots'], files={}, most=msg['maxPlots'])
+    cell_names[:] = list(assigned) + sorted(n for n in mentioned if n not in assigned)
     try:
         tree = ast.parse(msg['code'], name, 'exec')
         last = tree.body.pop() if tree.body and isinstance(tree.body[-1], ast.Expr) else None
@@ -227,8 +326,14 @@ def run(msg):
         emit({'id': cell, 'kind': 'error', 'text': 'Traceback (most recent call last):\n' + text if frames else text})
     finally:
         sys.stdout, sys.stderr = real_out, real_err
+    # The cell's own pictures are not files it saved.
+    saving['cell'] = None
     try: save_figures(cell, msg['plots'], msg['maxPlots'], msg.get('inline', False))
     except Exception as error: emit({'id': cell, 'kind': 'stderr', 'text': f'The figures could not be saved: {error}\n'})
+    if saving['files']:
+        try: emit_saved(cell)
+        except Exception: pass
+    saving.update(cell=None, folder=None, files={}, most=0)
     emit({'id': cell, 'kind': 'done', 'ok': ok, 'interrupted': interrupted, 'variables': variables(msg['maxVariables']),
           'used': sorted(mentioned & known), 'assigned': assigned, 'files': touched(files)})
 
