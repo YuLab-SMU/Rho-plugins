@@ -236,9 +236,11 @@ run <- function(msg) {
     tryCatch(grDevices::replayPlot(shown[[i]]), error = function(e) NULL)
     grDevices::dev.off()
     plot <- list(id = id, kind = "plot", file = file, width = 1008, height = 720)
+    # A page no extension named an object for (base graphics) is offered to them as it was recorded.
     page <- attr(shown[[i]], "rho_page")
+    if (is.null(page)) for (env in extensions) if (is.function(env$describe_page)) { page <- list(env = env, object = shown[[i]]); break }
     if (!is.null(page) && !isTRUE(msg$inline) && is.function(page$env$describe_page)) {
-      described <- tryCatch(page$env$describe_page(page$object, file, 7, 5), error = function(e) list(problem = conditionMessage(e)))
+      described <- tryCatch(page$env$describe_page(page$object, file, 7, 5, recorded = shown[[i]]), error = function(e) list(problem = conditionMessage(e)))
       if (!is.null(described$problem)) plot$figureProblem <- as.character(described$problem)[1] else if (!is.null(described)) plot$figure <- described
     }
     if (isTRUE(msg$inline)) { plot$data <- jsonlite::base64_enc(readBin(file, "raw", file.info(file)$size)); unlink(file) }

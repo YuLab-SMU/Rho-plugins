@@ -12,7 +12,7 @@ export interface FigureColumn { name: string; type: 'number' | 'integer' | 'text
 export interface FigureSource { id: string; rows: number; columnsTotal: number; key: string | null; index: number[]; columns: FigureColumn[] }
 export interface FigureLayer {
   plot: number; layer: number; geom: string; stat: string; position: string; mapping: Record<string, string>;
-  constants: Record<string, string | number>; source: string | null; marks: number; units: number; bound: 'mark' | 'group' | 'none'; unbound?: string[];
+  constants: Record<string, string | number>; source: string | null; marks: number; units: number; bound: 'mark' | 'group' | 'none'; unbound?: string[]; notes?: string[];
 }
 export interface FigureMarks { panel: number[]; group: number[]; row: number[] | null; columns: FigureColumn[] }
 export interface FigureUnit { layer: number; panel: number; marks: number[][] }
@@ -44,7 +44,7 @@ export function parseRecord(bytes: Uint8Array | string): FigureRecord {
       ...raw.figure,
       plots: list<any>(raw.figure?.plots).map(p => ({ ...p, labels: named<string>(p.labels), panels: list<any>(p.panels).map(x => ({ panel: x.panel, facets: named<string>(x.facets) })),
         scales: list<any>(p.scales).map(s => ({ ...s, breaks: list<string>(s.breaks), values: list<string>(s.values) })), positions: named<any>(p.positions) })),
-      layers: list<any>(raw.figure?.layers).map(l => ({ ...l, mapping: named<string>(l.mapping), constants: named<string | number>(l.constants), unbound: l.unbound ? list<string>(l.unbound) : undefined })),
+      layers: list<any>(raw.figure?.layers).map(l => ({ ...l, mapping: named<string>(l.mapping), constants: named<string | number>(l.constants), unbound: l.unbound ? list<string>(l.unbound) : undefined, notes: l.notes ? list<string>(l.notes) : undefined })),
     },
     marks: list<any>(raw.marks).map(m => ({ panel: list<number>(m.panel), group: list<number>(m.group), row: m.row === null || m.row === undefined ? null : list<number>(m.row), columns: columns(m.columns) })),
     sources: list<any>(raw.sources).map(s => ({ ...s, key: s.key ?? null, index: list<number>(s.index), columns: columns(s.columns) })),
@@ -148,7 +148,7 @@ export function figureSummary(record: FigureRecord) {
       scales: p.scales.map(s => ({ aesthetic: s.aesthetic, title: s.title, breaks: s.breaks.slice(0, 24) })),
       positions: Object.fromEntries(Object.entries(p.positions).map(([k, v]) => [k, v?.discrete ? { discrete: true, levels: v.levels?.slice(0, 48), levelCount: v.levels?.length } : { discrete: false, range: v?.range }])) })),
     layers: record.figure.layers.map((l, i) => ({ layer: i, plot: l.plot, geom: l.geom, stat: l.stat, position: l.position, mapping: l.mapping, constants: l.constants,
-      source: l.source, marks: l.marks, bound: l.bound, ...(l.unbound?.length ? { notBound: l.unbound } : {}),
+      source: l.source, marks: l.marks, bound: l.bound, ...(l.unbound?.length ? { notBound: l.unbound } : {}), ...(l.notes?.length ? { notes: l.notes } : {}),
       builtColumns: record.marks[i]?.columns.map(c => c.name) ?? [] })),
     sources: record.sources.map(s => ({ id: s.id, rows: s.rows, rowsWithMarks: s.index.length, key: s.key, columns: s.columns.map(c => ({ name: c.name, type: c.type })), columnsTotal: s.columnsTotal })),
     problems: record.problems,

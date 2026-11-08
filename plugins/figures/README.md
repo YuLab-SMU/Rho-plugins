@@ -1,6 +1,6 @@
 # Figures
 
-`@rho-workspace/plugin-figures` 0.2.0 keeps the plots a project's live R session draws as
+`@rho-workspace/plugin-figures` 0.3.0 keeps the plots a project's live R session draws as
 figures whose marks know the rows they were drawn from. It is built into Rho and needs the
 Notebook (`kernel`).
 
@@ -41,9 +41,30 @@ cell saves it as a figure again. A file outside the project is not kept, nor one
 a server saved. A file written with `png()` or `pdf()` and `print()` is not found, because
 nothing names its file.
 
-Base graphics, grid drawings that are not ggplots (ComplexHeatmap) and Python plots stay
-pictures. Their plot output has neither `figure` nor `figureProblem`: nothing failed,
-nothing described them.
+A page drawn with base graphics (`plot`, `points`, `text`, `barplot`, `abline`, `image` and
+the functions built on them) is described from its recording. gridGraphics makes the page
+into grobs named after what drew them, and each drawn part in a plot's window is a layer:
+points, text, rect, lines, polygon, segments, circles or a reference line. Each element is a
+mark that keeps the values it was drawn at, in the data's units (a log axis is read back).
+A bar is named by the axis label at its middle. Axes, boxes and titles are drawn and not
+bound. Points, labels and lines whose x and y are two columns of a table in the session (a
+data frame, a Bioconductor `DataFrame`, a numeric matrix or a named vector) are bound to its
+rows, value for value and in the table's order. Rows that were not drawn are skipped. The
+layer's `mapping` names the two columns, and its `notes` count marks drawn at another
+value, such as points clipped to the axis limit. A part drawn from computed values matches
+no table and keeps only its drawn values.
+
+A ComplexHeatmap is described from the heatmap list it laid out. `draw()` starts the page
+before it lays the heatmaps out, so the describer keeps the frame of its method when the
+page starts and reads the laid-out list when the cell ends: the rows and columns in the order
+and slices drawn, and the matrix. The page is drawn again from its recording, and each cell
+rectangle of a heatmap body is a mark naming its row, column, value and slices, with the
+matrix row as its source (named after the session's matrix when one is identical). Cells
+drawn as one image (`use_raster`) are not bound; annotations, dendrograms and names are
+drawn and not bound.
+
+Other grid drawings and Python plots stay pictures. Their plot output has neither `figure`
+nor `figureProblem`: nothing failed, nothing described them.
 
 ## Who uses it
 
@@ -80,6 +101,8 @@ The protected resource is the R session's time and the project's state folder.
 | Time to describe (`maxSeconds`) | 20 s | Describing stops; the plot stays a picture. |
 | Record size (`maxBytes`, kernel `maxFigureBytes`) | 16 MiB | The record is not kept; `figureProblem` says how large it was. |
 | Columns kept for a source or a layer (`maxColumns`) | 40 | Later columns are left out of the record. |
+| Session tables compared with a base graphics layer (`maxTables`) | 64 | Later tables are not compared; the layer keeps its drawn values. |
+| Cells of one compared table (`maxTableCells`) | 5 000 000 | A larger table is not compared. |
 | Characters of a text value (`maxCellChars`) | 160 | The value is cut and ends with `…`. |
 | Marks in a selection | 5 000 | The selection is refused. |
 | Saved files described per cell (kernel `maxPlots`) | 8 | Later files stay pictures. |
@@ -92,7 +115,9 @@ The protected resource is the R session's time and the project's state folder.
 npm run test:figures
 ```
 
-It describes real ggplot2 and patchwork plots in R through the Notebook and reads, matches
-and selects their marks, and saves plots with `ggsave()` as PNG and PDF and reads them by
-path and by bytes until the file is written again. Without R and ggplot2, svglite, xml2 and jsonlite the checks are
-skipped, not passed.
+It describes real ggplot2 and patchwork plots, base graphics pages and a ComplexHeatmap in
+R through the Notebook and reads, matches and selects their marks. It saves plots with
+`ggsave()` as PNG and PDF and reads them by path and by bytes until the file is written
+again. Without R and ggplot2, svglite, xml2 and jsonlite the checks are skipped, not passed;
+so are the base graphics check without gridGraphics and the heatmap check without
+ComplexHeatmap.

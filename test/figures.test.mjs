@@ -15,6 +15,9 @@ const probe = spawnSync(rscript, ['-e', 'cat(vapply(c("ggplot2","svglite","xml2"
 const have = probe.status === 0 ? probe.stdout.trim().split(/\s+/).map(v => v === 'TRUE') : [];
 const skip = have.slice(0, 4).every(Boolean) ? false : 'R with ggplot2, svglite, xml2 and jsonlite is not available';
 const patchwork = have[4] === true;
+// Base graphics pages are described through gridGraphics; heatmaps need ComplexHeatmap.
+const drawing = spawnSync(rscript, ['-e', 'cat(vapply(c("gridGraphics","ComplexHeatmap"), requireNamespace, TRUE, quietly = TRUE))'], { encoding: 'utf8' });
+const [gridGraphics, complexHeatmap] = drawing.status === 0 ? drawing.stdout.trim().split(/\s+/).map(v => v === 'TRUE') : [false, false];
 
 async function session() {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-figures-'));
@@ -127,7 +130,7 @@ ggplot(d, aes(dex, count)) + geom_boxplot() + geom_point() + facet_wrap(~ gene) 
   } finally { await host.close(); }
 });
 
-test('a composition numbers its layers across its plots; plots other systems draw stay pictures without a problem', { skip, timeout: 180000 }, async () => {
+test('a composition numbers its layers across its plots; drawings no describer knows stay pictures without a problem', { skip, timeout: 180000 }, async () => {
   const { host, run } = await session();
   try {
     if (patchwork) {
@@ -138,11 +141,69 @@ test('a composition numbers its layers across its plots; plots other systems dra
       assert.deepEqual(fig.figure.layers.map(l => [l.plot, l.geom]), [[1, 'Point'], [2, 'Bar']]);
       assert.equal(markRow(fig, { layer: 0, mark: 0 }).key.value, 'Mazda RX4', 'rows keep their names inside a composition');
     }
-    const base = await run(`plot(mtcars$wt, mtcars$mpg)`);
-    assert.equal(base.plots.length, 1);
-    assert.equal(base.plots[0].figure, undefined);
-    assert.equal(base.plots[0].figureProblem, undefined, 'a plot nothing describes is a picture, not a failure');
-    await assert.rejects(host.figureRecord(base.cell.cellId, 1), /picture only/);
+    const drawn = await run(`grid::grid.newpage(); grid::grid.rect(width = 0.5)`);
+    assert.equal(drawn.plots.length, 1);
+    assert.equal(drawn.plots[0].figure, undefined);
+    assert.equal(drawn.plots[0].figureProblem, undefined, 'a plot nothing describes is a picture, not a failure');
+    await assert.rejects(host.figureRecord(drawn.cell.cellId, 1), /picture only/);
+  } finally { await host.close(); }
+});
+
+test('a page drawn with base graphics is a figure: its points are bound to the table that holds their values, its bars to their labels', { skip: skip || (!gridGraphics && 'gridGraphics is not available'), timeout: 180000 }, async () => {
+  const { host, figures, run } = await session();
+  try {
+    await run(`set.seed(4); res <- data.frame(baseMean = c(0, 10^runif(299, 0, 4)), lfc = rnorm(300), row.names = sprintf("G%03d", 1:300)); res$lfc[9] <- 8`);
+    // A point at zero on a log axis is not drawn, and one past the limit is drawn at the limit.
+    const { cell, plots } = await run(`plot(res$baseMean, pmin(res$lfc, 3), log = "x", pch = ifelse(res$lfc > 3, 2, 16), main = "MA", xlab = "mean", ylab = "log fold change")
+abline(h = 0)
+text(res$baseMean[2:3], res$lfc[2:3], rownames(res)[2:3])`);
+    assert.equal(plots.length, 1);
+    assert.ok(plots[0].figure, plots[0].figureProblem);
+    assert.deepEqual([plots[0].figure.describer, plots[0].figure.geoms, plots[0].figure.marks, plots[0].figure.bound], ['graphics', ['points', 'abline', 'text'], 302, 302]);
+    const fig = await record(host, cell.cellId);
+    const [points, line, labels] = fig.figure.layers;
+    assert.deepEqual([points.marks, points.bound, points.source, points.mapping], [299, 'mark', 'res', { x: 'baseMean', y: 'lfc' }]);
+    assert.deepEqual(points.notes, ['1 of 299 marks are drawn at a y other than their lfc.']);
+    assert.equal(markRow(fig, { layer: 0, mark: 0 }).key.value, 'G002', 'the first drawn point is the first row with a mean above zero');
+    assert.deepEqual([line.source, markRow(fig, { layer: 1, mark: 0 }).built.yintercept], [null, 0]);
+    assert.deepEqual([labels.source, markRow(fig, { layer: 2, mark: 1 }).key.value, markRow(fig, { layer: 2, mark: 1 }).built.label], ['res', 'G003', 'G003']);
+    assert.deepEqual([fig.figure.plots[0].title, fig.figure.plots[0].labels, fig.figure.plots[0].positions.x.transform], ['MA', { x: 'mean', y: 'log fold change' }, 'log-10']);
+    const x = markRow(fig, { layer: 0, mark: 0 }).built.x;
+    assert.ok(Math.abs(x - markRow(fig, { layer: 0, mark: 0 }).values.baseMean) <= 1e-9 * x, 'a log axis is read back in the data\'s units');
+    // The point past the limit is found by its row's value, not by where it was drawn.
+    const far = await figures.read({ cellId: cell.cellId, plot: 1, where: [{ column: 'lfc', op: 'gt', value: 7 }, { layer: 0, column: 'lfc', op: 'gt', value: 7 }] });
+    assert.deepEqual(far.matched.marks, ['0.7']);
+    const covered = new Set([...fig.svg.matchAll(/data-rho="(\d+\.\d+)"/g)].flatMap(m => elementMarks(fig, m[1])).map(m => `${m.layer}.${m.mark}`));
+    assert.equal(covered.size, 302, 'every point, the line and both labels are drawn by elements that name them');
+
+    const bars = await run(`barplot(c(alpha = 3, beta = 5, gamma = 2))`);
+    const barFig = await record(host, bars.cell.cellId);
+    assert.equal(barFig.figure.layers[0].geom, 'rect');
+    assert.deepEqual([0, 1, 2].map(m => [markRow(barFig, { layer: 0, mark: m }).built.label, markRow(barFig, { layer: 0, mark: m }).built.ymax]), [['alpha', 3], ['beta', 5], ['gamma', 2]]);
+  } finally { await host.close(); }
+});
+
+test('a ComplexHeatmap is a figure: each cell names its row, column, value and slice, in the order drawn', { skip: skip || (!complexHeatmap && 'ComplexHeatmap is not available'), timeout: 180000 }, async () => {
+  const { host, run } = await session();
+  try {
+    const { cell, plots } = await run(`suppressPackageStartupMessages(library(ComplexHeatmap)); set.seed(1)
+mat <- matrix(rnorm(48), 12, dimnames = list(paste0("g", 1:12), paste0("s", 1:4)))
+Heatmap(mat, name = "z-score (VST)", row_split = rep(c("a", "b"), 6))`);
+    assert.ok(plots[0].figure, plots[0].figureProblem);
+    assert.deepEqual([plots[0].figure.describer, plots[0].figure.marks, plots[0].figure.bound], ['ComplexHeatmap', 48, 48]);
+    const fig = await record(host, cell.cellId);
+    assert.deepEqual([fig.figure.layers[0].geom, fig.figure.layers[0].source], ['heatmap', 'mat']);
+    for (let m = 0; m < 48; m++) {
+      const row = markRow(fig, { layer: 0, mark: m });
+      assert.equal(row.values[row.built.column], row.built.value, 'a cell\'s value is its row\'s value in its column');
+    }
+    // The top left cell drawn is the first row and column of the order the heatmap was drawn in.
+    const order = (await run(`o <- draw(Heatmap(mat, name = "z-score (VST)", row_split = rep(c("a", "b"), 6))); cat(rownames(mat)[row_order(o)[[1]][1]], colnames(mat)[column_order(o)[1]])`)).cell.outputs.filter(o => o.kind === 'stdout').map(o => o.text).join('').trim().split(' ');
+    const cells = [...fig.svg.matchAll(/<rect[^>]*\sx="([\d.]+)"[^>]*\sy="([\d.]+)"[^>]*data-rho="(\d+\.\d+)"/g)].map(m => ({ x: Number(m[1]), y: Number(m[2]), at: m[3] }));
+    assert.equal(cells.length, 48);
+    const corner = cells.sort((a, b) => a.y - b.y || a.x - b.x)[0];
+    const first = markRow(fig, elementMarks(fig, corner.at)[0]);
+    assert.deepEqual([first.built.row, first.built.column, first.facets['row slice']], [...order, 'a']);
   } finally { await host.close(); }
 });
 

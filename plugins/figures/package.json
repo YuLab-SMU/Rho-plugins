@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-figures",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "description": "Rho figures plugin: plots drawn in the live R session kept with their marks bound to the data rows they were drawn from, for the person to select and the Agent to read",
   "license": "AGPL-3.0-only",

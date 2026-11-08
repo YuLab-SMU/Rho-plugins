@@ -83,10 +83,13 @@ function mappedColumns(record: FigureRecord, layer: number, columns: string[]) {
 }
 function rowFields(record: FigureRecord, row: MarkRow, max: number): Array<[string, Cell]> {
   if (row.values) {
-    // Columns a package adds for its own drawing (.ggtangle_id) are left to the Agent.
+    // Columns a package adds for its own drawing (.ggtangle_id) are left to the Agent. A value the
+    // layer maps that its row does not hold (a heatmap cell's column and value) follows the key.
     const names = Object.keys(row.values).filter(n => n === '.rownames' || !n.startsWith('.')), first = mappedColumns(record, row.layer, names);
+    const own = Object.values(record.figure.layers[row.layer]?.mapping ?? {}).filter(n => n in row.built && !(n in row.values!) && row.built[n] !== row.key?.value);
     const order = [...(row.key ? [row.key.column] : []), ...first, ...names].filter((n, i, a) => a.indexOf(n) === i);
-    return order.slice(0, max).map(n => [n === '.rownames' ? 'row' : n, row.values![n] ?? null]);
+    const held = (n: string): [string, Cell] => [n === '.rownames' ? 'row' : n, row.values![n] ?? null];
+    return [...order.slice(0, row.key ? 1 : 0).map(held), ...own.map((n): [string, Cell] => [n, row.built[n] ?? null]), ...order.slice(row.key ? 1 : 0).map(held)].slice(0, max);
   }
   const preferred = ['label', 'x', 'y', 'count', 'density', 'ymin', 'lower', 'middle', 'upper', 'ymax', 'xmin', 'xmax', 'fill', 'colour'];
   const names = Object.keys(row.built).sort((a, b) => (preferred.indexOf(a) + 1 || 99) - (preferred.indexOf(b) + 1 || 99));
@@ -97,7 +100,7 @@ function rowFields(record: FigureRecord, row: MarkRow, max: number): Array<[stri
 const title = (row: MarkRow) => row.key ? (typeof row.key.value === 'number' ? `${row.key.column} ${fmt(row.key.value)}` : fmt(row.key.value))
   : row.built.label !== undefined && row.built.label !== null ? fmt(row.built.label) : null;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : /(s|x|sh|ch)$/.test(word) ? 'es' : 's'}`;
-const markWord = (geom: string) => /text|label|repel/i.test(geom) ? 'label' : /point/i.test(geom) ? 'point' : /bar|col|histogram|rect|tile/i.test(geom) ? 'bar' : /box/i.test(geom) ? 'box' : /line|path|smooth|step/i.test(geom) ? 'line' : /violin|density|area|ribbon|polygon/i.test(geom) ? 'shape' : 'mark';
+const markWord = (geom: string) => /text|label|repel/i.test(geom) ? 'label' : /point|circle/i.test(geom) ? 'point' : /heatmap|cell/i.test(geom) ? 'cell' : /bar|col|histogram|rect|tile/i.test(geom) ? 'bar' : /box/i.test(geom) ? 'box' : /line|path|smooth|step/i.test(geom) ? 'line' : /violin|density|area|ribbon|polygon/i.test(geom) ? 'shape' : 'mark';
 
 // Selected marks by layer, largest first. Layers that draw the same keyed rows (every point, a
 // highlighted subset, its labels) are one group: told once, by the first layer's word, with its
@@ -324,7 +327,8 @@ function Rows({ record, layer, rows }: { record: FigureRecord; layer: number; ro
   const fields = rowFields(record, shown[0]!, figureViewLimits.tableColumns).map(([name]) => name);
   const facets = [...new Set(shown.flatMap(r => Object.keys(r.facets)))].filter(f => !fields.includes(f));
   const columns = [...facets, ...fields].slice(0, Math.max(figureViewLimits.tableColumns, facets.length + 1));
-  const value = (r: MarkRow, name: string) => facets.includes(name) ? r.facets[name] ?? null : r.values ? r.values[name === 'row' ? '.rownames' : name] ?? null : r.built[name] ?? null;
+  const value = (r: MarkRow, name: string) => { const held = name === 'row' ? '.rownames' : name;
+    return facets.includes(name) ? r.facets[name] ?? null : r.values && held in r.values ? r.values[held] ?? null : r.built[name] ?? null; };
   return <>
     <div className="fig-table-wrap">
       <table className="fig-table">
@@ -332,6 +336,6 @@ function Rows({ record, layer, rows }: { record: FigureRecord; layer: number; ro
         <tbody>{shown.map(r => <tr key={r.mark}>{columns.map(c => { const v = value(r, c); return <td key={c} className={typeof v === 'number' ? 'num' : undefined} title={v === null ? undefined : String(v)}>{fmt(v)}</td>; })}</tr>)}</tbody>
       </table>
     </div>
-    {rows.length > shown.length && <p className="fig-more">{rows.length - shown.length} more {record.figure.layers[layer]!.geom.toLowerCase()} rows are selected; the Agent reads them all.</p>}
+    {rows.length > shown.length && <p className="fig-more">{rows.length - shown.length} more {plural(rows.length - shown.length, markWord(record.figure.layers[layer]!.geom)).replace(/^\d+ /, '')} {rows.length - shown.length === 1 ? 'is' : 'are'} selected; the Agent reads them all.</p>}
   </>;
 }
