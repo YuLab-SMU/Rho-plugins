@@ -154,17 +154,29 @@ export function SemanticFigure({ client, projectId, cellId, plot, file, width = 
   const drag = useRef<{ x: number; y: number; moved: boolean; add: boolean; on: Element | null } | null>(null);
   const show = (s: FigureSelection) => { setSelected(new Set(s.marks ?? [])); setFrom(s); };
 
+  // A file a cell has just written is shown before the cell has described it: no cell names those
+  // bytes yet. Such a file is asked again when the page's events move on (the cell ending is one).
+  const missedAt = useRef<number | undefined>(undefined), latest = useRef(cursor);
+  latest.current = cursor;
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => { if (missedAt.current !== undefined && cursor !== undefined && cursor !== missedAt.current) { missedAt.current = undefined; setAttempt(a => a + 1); } }, [cursor]);
   useEffect(() => {
     if (!near) return;
-    let live = true;
+    let live = true; const asked = cursor;
     setLoaded(null); setProblem(''); setSelected(new Set()); setFrom(null); seen.current = null;
     readView(client, projectId, ref).then(v => {
       if (!live) return;
+      missedAt.current = undefined;
       try { setLoaded({ record: v.record, selections: v.selections, svg: svgElement(v.record.svg) }); setSelections(v.selections); }
       catch (e) { setProblem((e as Error).message); }
-    }, e => { if (live && !(ref.sha256 && e?.error?.kind === 'not_found' && !e?.error?.details?.saved)) setProblem(e?.error?.message ?? e?.message ?? 'The figure could not be read.'); });
+    }, e => {
+      if (!live) return;
+      // Events that arrived while it was asked are already past: ask again now.
+      if (ref.sha256 && e?.error?.kind === 'not_found' && !e?.error?.details?.saved) { if (asked !== undefined && latest.current !== asked) setAttempt(a => a + 1); else missedAt.current = asked; }
+      else setProblem(e?.error?.message ?? e?.message ?? 'The figure could not be read.');
+    });
     return () => { live = false; };
-  }, [client, projectId, key, near]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [client, projectId, key, near, attempt]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Marks people and Agents pointed to arrive with the page's events.
   useEffect(() => {
@@ -307,8 +319,13 @@ function Tip({ record, tip, box }: { record: FigureRecord; tip: { x: number; y: 
   const row = tip.rows[0]!, facets = Object.entries(row.facets).map(([k, v]) => `${k} ${v}`).join(', ');
   const heading = title(row);
   const fields = rowFields(record, row, figureViewLimits.tipColumns + (row.key ? 1 : 0)).filter(([name, value]) => value !== null && !(row.key && name === (row.key.column === '.rownames' ? 'row' : row.key.column)));
-  const right = box && tip.x > box.width - 290, below = box && tip.y < 120;
-  return <div className="fig-tip" style={{ left: right ? undefined : tip.x + 14, right: right ? (box!.width - tip.x + 14) : undefined, top: below ? tip.y + 16 : undefined, bottom: below ? undefined : (box ? box.height - tip.y + 12 : undefined) }}>
+  // Beside the pointer where the tip fits, to its right or else to its left; in a figure narrower than
+  // that (a phone), across the figure's width, above or below the pointer.
+  const wide = box ? Math.min(280, box.width) : 280, below = box && tip.y < 120;
+  const side = !box || tip.x + 14 + wide <= box.width ? 'right' : tip.x - 14 - wide >= 0 ? 'left' : 'across';
+  const across = side === 'across' ? Math.max(0, Math.min(tip.x - wide / 2, box!.width - wide)) : undefined;
+  return <div className="fig-tip" style={{ left: side === 'right' ? tip.x + 14 : across, right: side === 'left' ? box!.width - tip.x + 14 : undefined, width: side === 'across' ? wide : undefined, maxWidth: wide,
+    top: below ? tip.y + 16 : undefined, bottom: below ? undefined : (box ? box.height - tip.y + 12 : undefined) }}>
     <small>{row.geom}{facets ? ' · ' + facets : ''}{tip.extra > 0 ? ` · one of ${tip.extra + 1} rows` : ''}</small>
     {heading && <b>{heading}</b>}
     {fields.length > 0 && <dl>{fields.map(([name, value]) => <div key={name} style={{ display: 'contents' }}><dt>{name}</dt><dd>{fmt(value)}</dd></div>)}</dl>}

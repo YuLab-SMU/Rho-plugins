@@ -38,8 +38,17 @@ record is kept with the cell's plots. The cell's `saved` list names the file wit
 and SHA-256. A page that shows the file names it by those bytes, so the figure holds only
 while the file keeps them: once anything writes the file again it is a picture, until a
 cell saves it as a figure again. A file outside the project is not kept, nor one a session on
-a server saved. A file written with `png()` or `pdf()` and `print()` is not found, because
-nothing names its file.
+a server saved.
+
+A page drawn on a file the code opened itself (`png()`, `jpeg()`, `tiff()`, `bmp()`, `svg()`,
+`pdf()`, `cairo_pdf()`) and closed with `dev.off()` is kept the same way: DESeq2's `plotMA`,
+a ComplexHeatmap's `draw()` or a ggplot's `print()` written to `results/ma.png`. The Notebook's
+runner names the file and records the page as it is drawn; the extension describes the
+recorded page (base graphics, a heatmap) or the plot `page_object()` named (a ggplot) at the
+device's size. A file name numbered with `%d` is a figure for each page; a PDF of several pages
+is not described and says so; any other file keeps its last page. A device left open in one
+cell keeps drawing in the next, as in the R console, and its file is described in the cell
+that closes it. A page no describer knows (a lattice page) stays a picture without a problem.
 
 A page drawn with base graphics (`plot`, `points`, `text`, `barplot`, `abline`, `image` and
 the functions built on them) is described from its recording. gridGraphics makes the page
@@ -51,8 +60,15 @@ bound. Points, labels and lines whose x and y are two columns of a table in the 
 data frame, a Bioconductor `DataFrame`, a numeric matrix or a named vector) are bound to its
 rows, value for value and in the table's order. Rows that were not drawn are skipped. The
 layer's `mapping` names the two columns, and its `notes` count marks drawn at another
-value, such as points clipped to the axis limit. A part drawn from computed values matches
-no table and keeps only its drawn values.
+value, such as points clipped to the axis limit. A position drawn through `-log10`, `log10`,
+`log2`, `log2(x + 1)` or `log1p` of a column is matched through it, and the mapping says so:
+`plot(res$log2FoldChange, -log10(res$padj))` is bound as `y: -log10(padj)`. Columns drawn as
+they are come first, and a value that is not finite (`-log10(0)`) matches only itself. When an
+earlier layer of the same plot draws the same column on the same axis through another
+transform, the later layer's note says so: points added at `log2(res$baseMean)` over
+`plotMA`, whose x axis draws `baseMean` on a log scale, are placed on another scale than the
+plot's own points. A part drawn from other computed values matches no table and keeps only its
+drawn values.
 
 A ComplexHeatmap is described from the heatmap list it laid out. `draw()` starts the page
 before it lays the heatmaps out, so the describer keeps the frame of its method when the
@@ -142,12 +158,12 @@ The protected resource is the session's time and the project's state folder.
 
 | Limit | Value | When it is exceeded |
 | --- | --- | --- |
-| Marks in a figure (`maxMarks`) | 30 000 | The plot stays a picture; `figureProblem` says why. |
+| Marks in a figure (`maxMarks`) | 50 000 | The plot stays a picture; `figureProblem` says why. |
 | Time to describe (`maxSeconds`) | 20 s | Describing stops; the plot stays a picture. |
 | Record size (`maxBytes`, kernel `maxFigureBytes`) | 16 MiB | The record is not kept; `figureProblem` says how large it was. |
 | Columns kept for a source or a layer (`maxColumns`) | 40 | Later columns are left out of the record. |
 | Session tables compared with a base graphics or matplotlib layer (`maxTables`) | 64 | Later tables are not compared; the layer keeps its drawn values. |
-| Numeric columns of one table compared with a matplotlib layer (`maxComparedColumns`) | 64 | Later columns are not compared. A table with fewer rows than the layer's marks is not compared. |
+| Numeric columns of one table compared with a layer (`maxComparedColumns`) | 64 | Later columns are not compared. A table with fewer rows than the layer's marks is not compared. |
 | Cells of one compared table (`maxTableCells`) | 5 000 000 | A larger table is not compared. |
 | Characters of a text value (`maxCellChars`) | 160 | The value is cut and ends with `…`. |
 | Marks in a selection | 5 000 | The selection is refused. |
@@ -164,8 +180,9 @@ npm run test:figures
 It describes real ggplot2 and patchwork plots, base graphics pages and a ComplexHeatmap in
 R, and matplotlib and seaborn figures in Python, through the Notebook and reads, matches and
 selects their marks. It saves plots with
-`ggsave()` as PNG and PDF and reads them by path and by bytes until the file is written
-again. Without R and ggplot2, svglite, xml2 and jsonlite the checks are skipped, not passed;
+`ggsave()` as PNG and PDF, and writes base graphics, ggplot and heatmap pages to files the
+cell opens with `png()`, `pdf()` and `svg()`, and reads them by path and by bytes until the
+file is written again. Without R and ggplot2, svglite, xml2 and jsonlite the checks are skipped, not passed;
 so are the base graphics check without gridGraphics and the heatmap check without
 ComplexHeatmap. The Python checks run `RHO_PYTHON` (else `python3`) and are skipped without
 matplotlib, numpy and pandas; the seaborn check without seaborn.

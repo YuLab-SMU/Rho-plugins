@@ -26,8 +26,14 @@ PNG. A page the code saves to a project file on a device of its own (`ggsave`) i
 the extension's `saved_page()` and described when the cell ends, at the size it was saved
 at; the cell's `saved` names each such file with its bytes and SHA-256 and the figure's
 summary or `figureProblem`, and `savedFigure(sha256)` returns the record of the newest cell
-that saved those bytes. A file written again since has other bytes and no record. A file
-written with `png()` or `pdf()` and `print()` is not found: nothing names its file.
+that saved those bytes. A file written again since has other bytes and no record. A device
+the code opens on a file (`png()`, `jpeg()`, `tiff()`, `bmp()`, `svg()`, `pdf()`, `cairo_pdf()`)
+is noted with its file: the runner traces those functions and `dev.off()` in grDevices, so
+`png` prints as a traced function. Its pages are recorded as they are drawn, and when
+`dev.off()` closes it the last page (each page, for a name numbered with `%d`) is offered to
+the extension like a ggsave page; a PDF of several pages is named with a `figureProblem`. A
+device the code left open stays the current device in the next cell. A device opened through a
+copy a package imported before the session started is not seen.
 In Python, `Figure.savefig` (and so `plt.savefig`) is watched once `matplotlib.figure` is
 imported: a figure saved to a file in the project is described as savefig wrote it and named
 in `saved` when the cell ends, also when the cell closed the figure. Python closes its

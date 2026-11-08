@@ -176,12 +176,70 @@ page_object <- NULL
 # size, and the page is described when the cell ends, once the file is written. A file saved twice
 # keeps its last page.
 saving <- list()
+absolute <- function(file) if (grepl("^(/|~|[A-Za-z]:[/\\\\])", file)) path.expand(file) else file.path(getwd(), file)
+# A device the code opens on a file (png(), pdf(), svg() and the others grDevices names) is noted
+# with its file. Each page drawn there is recorded as it is drawn: before the next page starts,
+# after each top-level expression and before dev.off() closes it. When it closes, its last page (or
+# each page, for a file name numbered with %d) is described as a figure of its file, as a page
+# ggsave() saved is. The runner's own devices are not noted. A device opened through a function a
+# package imported before the session started is not seen; its file stays a picture.
+drawing <- list(); closed <- list(); own_devices <- FALSE
+numbered <- function(file) grepl("%[#0 +-]*[0-9]*d", file)
+file_snapshot <- function(d) {
+  key <- as.character(d); f <- drawing[[key]]
+  if (is.null(f) || !length(f$pages) || !(d %in% grDevices::dev.list())) return()
+  current <- grDevices::dev.cur(); if (current != d) grDevices::dev.set(d)
+  p <- tryCatch(grDevices::recordPlot(), error = function(e) NULL); size <- grDevices::dev.size("in")
+  if (current != d) grDevices::dev.set(current)
+  if (!is.null(p) && length(drawn(p[[1]]))) drawing[[key]]$pages[[length(f$pages)]] <<- c(f$pages[[length(f$pages)]][c("object")], list(recorded = p, width = size[1], height = size[2]))
+}
+file_page <- function(d, grid) {
+  key <- as.character(d)
+  if (is.null(drawing[[key]])) return()
+  file_snapshot(d)
+  grDevices::dev.control("enable")
+  # A file that is not numbered keeps only its last page: earlier ones are counted, not kept.
+  n <- length(drawing[[key]]$pages)
+  if (n && !numbered(drawing[[key]]$file)) drawing[[key]]$pages[[n]] <<- list(object = NULL)
+  object <- NULL
+  if (grid) for (env in extensions) if (is.function(env$page_object)) {
+    found <- tryCatch(env$page_object(), error = function(e) NULL)
+    if (!is.null(found)) { object <- list(env = env, object = found); break }
+  }
+  drawing[[key]]$pages[[n + 1L]] <<- list(object = object)
+}
+device_opening <- function(env) assign(".rho_devices", grDevices::dev.list(), envir = env)
+device_opened <- function(env) tryCatch({
+  d <- grDevices::dev.cur(); before <- get0(".rho_devices", envir = env, inherits = FALSE)
+  if (d == 1L || d %in% before) return(invisible())
+  # A device number is used again once its device is closed; the runner's own device is never noted.
+  drawing[[as.character(d)]] <<- NULL
+  file <- get0("filename", envir = env, inherits = FALSE) %||% get0("file", envir = env, inherits = FALSE)
+  if (own_devices || identical(d, device) || !is.character(file) || length(file) != 1L || !nzchar(file)) return(invisible())
+  drawing[[as.character(d)]] <<- list(file = absolute(file), pages = list())
+  invisible()
+}, error = function(e) invisible())
+device_closing <- function(which) tryCatch({
+  d <- as.integer(which); key <- as.character(d)
+  if (length(d) != 1L || is.na(d) || is.null(drawing[[key]])) return(invisible())
+  file_snapshot(d)
+  closed[[length(closed) + 1L]] <<- drawing[[key]]; drawing[[key]] <<- NULL
+  invisible()
+}, error = function(e) invisible())
+invisible(utils::capture.output(suppressMessages(tryCatch(
+  for (where in list(asNamespace("grDevices"), as.environment("package:grDevices"))) {
+    for (f in intersect(c("png", "jpeg", "tiff", "bmp", "svg", "pdf", "cairo_pdf"), ls(where)))
+      trace(f, tracer = substitute(F(environment()), list(F = device_opening)), exit = substitute(F(environment()), list(F = device_opened)), where = where, print = FALSE)
+    trace("dev.off", tracer = substitute(F(which), list(F = device_closing)), where = where, print = FALSE)
+  }, error = function(e) NULL))))
 started_page <- function(grid) {
-  if (grid && !is.null(device) && grDevices::dev.cur() != device) {
-    for (env in extensions) if (is.function(env$saved_page)) {
+  current <- grDevices::dev.cur()
+  if (!is.null(device) && current != device) {
+    if (grid) for (env in extensions) if (is.function(env$saved_page)) {
       found <- tryCatch(env$saved_page(), error = function(e) NULL)
-      if (!is.null(found)) { found$env <- env; saving[[if (grepl("^(/|~|[A-Za-z]:[/\\\\])", found$file)) path.expand(found$file) else file.path(getwd(), found$file)]] <<- found; return() }
+      if (!is.null(found)) { found$env <- env; saving[[absolute(found$file)]] <<- found; drawing[[as.character(current)]] <<- NULL; return() }
     }
+    file_page(current, grid)
     return()
   }
   if (is.null(device) || grDevices::dev.cur() != device) return()
@@ -193,6 +251,8 @@ started_page <- function(grid) {
   }
 }
 recording <- function() {
+  # A file the code opened and has not closed stays where it draws, as in the R console.
+  if (!is.null(drawing[[as.character(grDevices::dev.cur())]])) return()
   if (!is.null(device) && device %in% grDevices::dev.list()) { grDevices::dev.set(device); return() }
   grDevices::pdf(NULL, width = 7, height = 5); grDevices::dev.control("enable")
   device <<- grDevices::dev.cur(); seen <<- NULL
@@ -207,8 +267,12 @@ snapshot <- function() {
 setHook("before.plot.new", function() { snapshot(); started_page(FALSE) })
 setHook("before.grid.newpage", function() { snapshot(); started_page(TRUE) })
 
+# A page drawn on a file, ready to be described as that file: the object an extension named when
+# the page started, else the page as it was recorded.
+drawn_page <- function(p) list(env = p$object$env %||% Find(function(env) is.function(env$describe_page), extensions),
+  object = p$object$object %||% p$recorded, width = p$width, height = p$height, recorded = p$recorded, quiet = TRUE)
 run <- function(msg) {
-  id <- msg$id; plots <<- list(); saving <<- list(); ok <- TRUE; interrupted <- FALSE
+  id <- msg$id; plots <<- list(); saving <<- list(); closed <<- list(); own_devices <<- FALSE; ok <- TRUE; interrupted <- FALSE
   known <- ls(globalenv()); seen <- lineage_of(msg$code); files <- project_paths(seen$strings)
   recording()
   tryCatch({
@@ -224,10 +288,13 @@ run <- function(msg) {
         warning = function(w) { say(list(id = id, kind = "warning", text = paste0("Warning", call_text(w), ": ", conditionMessage(w), "\n"))); invokeRestart("muffleWarning") },
         message = function(m) { say(list(id = id, kind = "stderr", text = conditionMessage(m))); invokeRestart("muffleMessage") })
       snapshot()
+      for (key in names(drawing)) file_snapshot(as.integer(key))
       if (!went) break
     }
   }, interrupt = function(e) { interrupted <<- TRUE; ok <<- FALSE; cat("\n") })
   # A session on a server draws in its own temporary folder and sends each plot with its answer.
+  # The devices drawn on from here are the runner's own.
+  own_devices <<- TRUE
   shown <- final_plots(plots); plots <<- list()
   for (i in seq_along(shown)) {
     if (i > msg$maxPlots) break
@@ -248,6 +315,17 @@ run <- function(msg) {
   }
   # A page saved to a file in the project is described at the size it was saved at; its record is
   # kept with the cell's plots. A session on a server keeps none: its files are not here.
+  # Files the code drew to and closed, or whose device is gone, join them: a file numbered with %d
+  # holds each page, a PDF of several pages is not described, any other file holds its last page.
+  for (key in names(drawing)) if (!(as.integer(key) %in% grDevices::dev.list())) { closed[[length(closed) + 1L]] <<- drawing[[key]]; drawing[[key]] <<- NULL }
+  for (f in closed) {
+    n <- length(f$pages)
+    if (!n) next
+    if (numbered(f$file)) { for (j in seq_len(n)) if (!is.null(f$pages[[j]]$recorded)) saving[[sprintf(f$file, j)]] <<- drawn_page(f$pages[[j]]) }
+    else if (n > 1L && grepl("[.]pdf$", f$file, ignore.case = TRUE)) saving[[f$file]] <<- list(problem = sprintf("The file holds %d pages; only a file of one page is described.", n))
+    else if (!is.null(f$pages[[n]]$recorded)) saving[[f$file]] <<- drawn_page(f$pages[[n]])
+  }
+  closed <<- list()
   saved <- saving; saving <<- list()
   if (!isTRUE(msg$inline) && !is.null(msg$plots)) {
     root <- normalizePath(getwd(), winslash = "/")
@@ -258,14 +336,18 @@ run <- function(msg) {
       if (!file.exists(named)) next
       full <- normalizePath(named, winslash = "/")
       if (!startsWith(full, paste0(root, "/"))) next
+      described <- if (!is.null(page$problem)) list(problem = page$problem) else if (is.function(page$env$describe_page))
+        tryCatch(page$env$describe_page(page$object, full, page$width, page$height, file.path(msg$plots, paste0(id, "-s", k + 1L, ".figure.json")), recorded = page$recorded),
+          error = function(e) list(problem = conditionMessage(e)))
+      # A page drawn on a file that no extension describes (a lattice page) stays a picture without a word.
+      if (is.null(described) && isTRUE(page$quiet)) next
       k <- k + 1L
       out <- list(id = id, kind = "saved", path = substring(full, nchar(root) + 2), number = k)
-      described <- tryCatch(page$env$describe_page(page$object, full, page$width, page$height, file.path(msg$plots, paste0(id, "-s", k, ".figure.json"))),
-        error = function(e) list(problem = conditionMessage(e)))
       if (!is.null(described$problem)) out$figureProblem <- as.character(described$problem)[1] else if (!is.null(described)) out$figure <- described
       say(out)
     }
   }
+  own_devices <<- FALSE
   say(list(id = id, kind = "done", ok = ok, interrupted = interrupted, variables = variables(msg$maxVariables),
     used = I(intersect(seen$mentioned, known)), assigned = I(seen$assigned), files = touched(files)))
 }

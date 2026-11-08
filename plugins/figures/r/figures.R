@@ -4,7 +4,9 @@
 #   page_object()   when a grid page starts on the session's recording device: the plot object
 #                   being drawn there, if a describer knows how to find it (NULL otherwise);
 #   saved_page()    when a page starts on another device: the plot, the file it is being saved to
-#                   and the page's size in inches, if a describer knows them (NULL otherwise);
+#                   and the page's size in inches, if a describer knows them (NULL otherwise). A
+#                   page drawn on a file the code opened itself (png(), pdf()) is found by the
+#                   runner, which asks page_object() when that page starts;
 #   describe_page(object, file, width, height, into, recorded)
 #                   after that page's picture is written to `file`: writes the figure record
 #                   (by default beside it, <file without .png>.figure.json) and returns a short
@@ -23,9 +25,10 @@
 # the random number stream is restored, and a failure leaves the page as a picture with the
 # reason. The protected resources are the session's time and the state folder: a description
 # stops after maxSeconds, refuses more than maxMarks drawn marks and writes at most maxBytes.
-# A volcano of every gene with a p-value (22,415 marks with its labels) took 2.8 s and 7.8 MB.
-limits <- list(maxMarks = 30000L, maxColumns = 40L, maxCellChars = 160L, maxSeconds = 20, maxBytes = 16L * 1024L * 1024L,
-  maxTables = 64L, maxTableCells = 5e6)
+# A volcano of every gene with a p-value (22,415 marks with its labels) took 2.8 s and 7.8 MB, and
+# DESeq2's plotMA of every gene with a count (33,469 points, written with png()) 2.5 s and 8.5 MB.
+limits <- list(maxMarks = 50000L, maxColumns = 40L, maxCellChars = 160L, maxSeconds = 20, maxBytes = 16L * 1024L * 1024L,
+  maxTables = 64L, maxTableCells = 5e6, maxComparedColumns = 64L)
 schema <- "rho.figure/1"
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
@@ -481,10 +484,17 @@ axis_ticks <- function(forced) {
 # A drawn part is bound to a table of the session (a data frame, a Bioconductor DataFrame, a
 # numeric matrix or a named vector) when its x and y are two of the table's columns, value for
 # value, over the table's rows in order; rows that were not drawn (missing values, rows filtered
-# out first) are skipped. A part drawn from computed values matches no table and keeps only the
-# values it was drawn at. The protected resource is the session's time: at most maxTables tables
-# of at most maxTableCells cells each are compared.
-near <- function(a, b) !is.na(a) & !is.na(b) & abs(a - b) <= 1e-9 * pmax(abs(a), abs(b))
+# out first) are skipped. A position drawn through a common transform of a column (-log10, log10,
+# log2, log2(x + 1), log1p) is matched through it, and the layer's mapping says so
+# (y: -log10(padj)); columns drawn as they are come first. A part drawn from other computed values
+# matches no table and keeps only the values it was drawn at. The protected resource is the
+# session's time: at most maxTables tables of at most maxTableCells cells each, with fewer rows
+# than the marks skipped, and at most maxComparedColumns numeric columns of each are compared.
+transforms <- list(`%s` = function(v) v, `-log10(%s)` = function(v) -log10(v), `log10(%s)` = log10, `log2(%s)` = log2,
+  `log2(%s + 1)` = function(v) log2(v + 1), `log1p(%s)` = log1p)
+# Equal, or within 1e-9 of each other relative to their size. A value that is not finite matches
+# only itself: -log10(0) is Inf, and Inf is not near every number.
+near <- function(a, b) !is.na(a) & !is.na(b) & (a == b | (is.finite(a) & is.finite(b) & abs(a - b) <= 1e-9 * pmax(abs(a), abs(b))))
 rows_of <- function(drawn, column, sorted) {
   j <- findInterval(column, sorted)
   member <- near(column, sorted[pmax(j, 1L)]) | near(column, sorted[pmin(j + 1L, length(sorted))])
@@ -516,18 +526,35 @@ match_table <- function(cols, tables) {
   if (!is.numeric(cols$x) || !is.numeric(cols$y)) return(NULL)
   n <- length(cols$x); best <- NULL
   sorted <- lapply(cols[c("x", "y")], function(v) sort(unique(v)))
-  for (name in names(tables)) {
-    d <- tables[[name]]; numeric_ <- names(d)[vapply(d, is.numeric, TRUE)]
-    for (a in c("x", "y")) for (cn in numeric_) {
-      rows <- rows_of(cols[[a]], d[[cn]], sorted[[a]]); if (is.null(rows)) next
-      b <- setdiff(c("x", "y"), a)
-      fit <- vapply(numeric_, function(c2) sum(near(d[[c2]][rows], cols[[b]])), 0)
-      if (!length(fit) || max(fit) < 0.99 * n) next
-      found <- list(table = name, rows = rows, mapping = stats::setNames(list(cn, names(fit)[which.max(fit)]), c(a, b)), other = b, differ = n - max(fit))
-      found$mapping <- found$mapping[c("x", "y")]
-      if (is.null(best) || found$differ < best$differ || (found$differ == best$differ && is.null(key_column(tables[[best$table]])) && !is.null(key_column(d)))) best <- found
-      if (best$differ == 0L) break
+  through <- function(f, v) suppressWarnings(f(v))
+  for (allowed in list(transforms[1], transforms)) {
+    for (name in names(tables)) {
+      d <- tables[[name]]
+      # A table with fewer rows than the marks drawn cannot hold them.
+      if (nrow(d) < n) next
+      numeric_ <- utils::head(names(d)[vapply(d, is.numeric, TRUE)], limits$maxComparedColumns)
+      for (a in c("x", "y")) for (cn in numeric_) for (form in names(allowed)) {
+        if (!is.null(best) && best$differ == 0L) break
+        rows <- rows_of(cols[[a]], through(allowed[[form]], d[[cn]]), sorted[[a]]); if (is.null(rows)) next
+        b <- setdiff(c("x", "y"), a)
+        fit <- 0; how <- NULL
+        for (c2 in numeric_) {
+          for (form2 in names(transforms)) {
+            k <- sum(near(through(transforms[[form2]], d[[c2]][rows]), cols[[b]]))
+            if (k > fit) { fit <- k; how <- c(c2, form2) }
+            if (fit == n) break
+          }
+          if (fit == n) break
+        }
+        if (fit < 0.99 * n) next
+        found <- list(table = name, rows = rows, mapping = stats::setNames(list(sprintf(form, cn), sprintf(how[2], how[1])), c(a, b)), other = b, differ = n - fit,
+          how = stats::setNames(list(c(cn, form), how), c(a, b)))
+        found$mapping <- found$mapping[c("x", "y")]
+        if (is.null(best) || found$differ < best$differ || (found$differ == best$differ && is.null(key_column(tables[[best$table]])) && !is.null(key_column(d)))) best <- found
+      }
+      if (!is.null(best) && best$differ == 0L) break
     }
+    if (!is.null(best)) break
   }
   best
 }
@@ -564,7 +591,7 @@ describe_graphics <- function(p, width, height, ...) {
   r <- render(page, width, height, tag)
   s <- bind(r$svg, r$units)
   units <- r$units[s$kept]
-  tables <- NULL; used <- list(); sources <- list()
+  tables <- NULL; used <- list(); sources <- list(); hows <- list(); bound_to <- list()
   out_layers <- list(); out_marks <- list()
   for (L in seq_along(layers)) {
     l <- layers[[L]]; n <- l$n
@@ -577,6 +604,13 @@ describe_graphics <- function(p, width, height, ...) {
         source <- found$table; rows <- found$rows; mapping <- found$mapping
         used[[source]] <- sort(unique(c(used[[source]], rows)))
         if (found$differ > 0L) notes <- sprintf("%d of %d marks are drawn at a %s other than their %s.", found$differ, n, found$other, mapping[[found$other]])
+        # A column an earlier layer of this plot draws on the same axis through another transform:
+        # the two layers place their marks on different scales.
+        for (M in rev(seq_along(hows))) if (!is.null(hows[[M]]) && layers[[M]]$plot == l$plot && identical(bound_to[[M]], source)) for (axis in c("x", "y")) {
+          mine <- found$how[[axis]]; theirs <- hows[[M]][[axis]]
+          if (mine[1] == theirs[1] && mine[2] != theirs[2]) notes <- c(notes, sprintf("Its %s is %s, while layer %d of this plot draws %s as %s on the same axis.", axis, sprintf(mine[2], mine[1]), M - 1L, axis, sprintf(theirs[2], theirs[1])))
+        }
+        hows[[L]] <- found$how; bound_to[[L]] <- source
       }
     }
     constant <- names(cols)[grepl(style_columns, names(cols)) & vapply(cols, function(v) n > 1L && length(unique(v)) == 1L, TRUE)]

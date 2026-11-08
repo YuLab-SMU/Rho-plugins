@@ -180,6 +180,22 @@ text(res$baseMean[2:3], res$lfc[2:3], rownames(res)[2:3])`);
     const barFig = await record(host, bars.cell.cellId);
     assert.equal(barFig.figure.layers[0].geom, 'rect');
     assert.deepEqual([0, 1, 2].map(m => [markRow(barFig, { layer: 0, mark: m }).built.label, markRow(barFig, { layer: 0, mark: m }).built.ymax]), [['alpha', 3], ['beta', 5], ['gamma', 2]]);
+
+    // A position drawn through a transform of a column is bound through it; a p-value of 0 (drawn at
+    // Inf, so not drawn) is not near every value.
+    const volcano = await run(`res$padj <- 10^-runif(300, 0, 20); res$padj[5] <- 0; plot(res$lfc, -log10(res$padj), pch = 20)`);
+    const volFig = await record(host, volcano.cell.cellId);
+    assert.deepEqual([volFig.figure.layers[0].marks, volFig.figure.layers[0].source, volFig.figure.layers[0].mapping], [299, 'res', { x: 'lfc', y: '-log10(padj)' }]);
+    for (let m = 0; m < 299; m++) {
+      const row = markRow(volFig, { layer: 0, mark: m });
+      assert.ok(Math.abs(row.built.y + Math.log10(row.values.padj)) <= 1e-6 * Math.abs(row.built.y), 'each point is its own row\'s -log10(padj), to the 7 digits a record keeps');
+    }
+    // Drawn over an MA plot at log2 of the column the plot draws on its log axis, the overlay is
+    // bound, and its note says the two layers place their marks on different scales.
+    const overlay = await run(`plot(res$baseMean, res$lfc, log = "x"); up <- res$baseMean > 2 & res$lfc > 1; points(log2(res$baseMean[up]), res$lfc[up], col = "red")`);
+    const overFig = await record(host, overlay.cell.cellId);
+    const over = overFig.figure.layers[1];
+    assert.deepEqual([over.source, over.mapping, over.notes], ['res', { x: 'log2(baseMean)', y: 'lfc' }, ['Its x is log2(baseMean), while layer 0 of this plot draws x as baseMean on the same axis.']]);
   } finally { await host.close(); }
 });
 
@@ -250,10 +266,61 @@ x <- 1`);
     }
 
     // Written again by something else, the file is a picture; the bytes the cell saved still name it.
-    await run(`png("results/cars.png"); plot(1:3); invisible(dev.off())`);
+    await run(`writeBin(charToRaw("written by something else"), "results/cars.png")`);
     await assert.rejects(figures.read({ path: 'results/cars.png' }), /No Notebook cell saved a figure as this file/);
     assert.equal((await figures.read({ sha256: saved.sha256 })).figure.path, 'results/cars.png');
     await assert.rejects(figures.read({ path: '../outside.png' }), /project-relative path/);
+  } finally { await host.close(); }
+});
+
+test('a page drawn on a file the cell opened is a figure of that file: base graphics, a ggplot, a heatmap, numbered pages and a device left open', { skip: skip || (!gridGraphics && 'gridGraphics is not available'), timeout: 180000 }, async () => {
+  const { root, host, figures, run } = await session();
+  const sha = async relative => createHash('sha256').update(await fs.readFile(path.join(root, relative))).digest('hex');
+  try {
+    await run(`set.seed(4); dir.create("results"); res <- data.frame(baseMean = 10^runif(300, 0, 4), lfc = rnorm(300), row.names = sprintf("G%03d", 1:300))`);
+    // Opened, drawn and closed as a script does, also inside a function; a file outside the project is not kept.
+    const ma = await run(`png("results/ma.png", width = 7, height = 5, units = "in", res = 100)
+plot(res$baseMean, res$lfc, log = "x"); abline(h = 0)
+invisible(dev.off())
+save_ma <- function(f) { pdf(f, width = 6, height = 4); plot(res$baseMean, res$lfc, log = "x"); invisible(dev.off()) }
+save_ma("results/ma.pdf")
+png(tempfile(fileext = ".png")); plot(1:3); invisible(dev.off())`);
+    assert.equal(ma.plots.length, 0, 'drawing to files draws nothing in the cell');
+    assert.deepEqual(ma.cell.saved.map(s => [s.path, s.figure?.describer, s.figure?.marks, s.figure?.bound]), [['results/ma.png', 'graphics', 301, 301], ['results/ma.pdf', 'graphics', 300, 300]]);
+    assert.equal(ma.cell.saved[0].sha256, await sha('results/ma.png'));
+    const read = await figures.read({ path: 'results/ma.png', form: 'view' });
+    assert.deepEqual([read.figure.cellId, read.record.size.width, read.record.size.height], [ma.cell.cellId, 7, 5]);
+    assert.deepEqual([read.record.figure.layers[0].source, read.record.figure.layers[0].mapping], ['res', { x: 'baseMean', y: 'lfc' }]);
+    assert.equal((await figures.read({ path: 'results/ma.png', marks: ['0.0'] })).rows[0].key.value, 'G001');
+
+    // A name numbered with %d holds each page; a PDF of several pages says why it is not described.
+    const pages = await run(`png("results/page%02d.png"); plot(1:3); plot(res$baseMean, res$lfc); invisible(dev.off())
+pdf("results/two.pdf"); plot(1:3); plot(4:6); invisible(dev.off())`);
+    assert.deepEqual(pages.cell.saved.map(s => [s.path, s.figure?.marks ?? s.figureProblem]),
+      [['results/page01.png', 3], ['results/page02.png', 300], ['results/two.pdf', 'The file holds 2 pages; only a file of one page is described.']]);
+
+    // A ggplot printed to a file is described from its object; a lattice page no describer knows stays a picture.
+    const gg = await run(`library(ggplot2); p <- ggplot(res, aes(baseMean, lfc)) + geom_point()
+png("results/gg.png", 600, 400); print(p); invisible(dev.off())
+png("results/lattice.png"); print(lattice::xyplot(lfc ~ baseMean, res)); invisible(dev.off())`);
+    assert.deepEqual(gg.cell.saved.map(s => [s.path, s.figure.describer, s.figure.bound]), [['results/gg.png', 'ggplot', 300]]);
+
+    // A device left open keeps drawing in the next cell, as in the R console; its file is described when it closes.
+    assert.equal((await run(`svg("results/later.svg", 5, 4)`)).cell.saved, undefined);
+    assert.equal((await run(`plot(res$baseMean, res$lfc, log = "x")`)).plots.length, 0, 'the open file is still where the session draws');
+    const closing = await run(`invisible(dev.off())`);
+    assert.deepEqual(closing.cell.saved.map(s => [s.path, s.figure.marks]), [['results/later.svg', 300]]);
+    assert.equal((await run(`plot(1:5)`)).plots.length, 1, 'once it is closed, plots are shown in the cell again');
+
+    if (complexHeatmap) {
+      const heat = await run(`suppressPackageStartupMessages(library(ComplexHeatmap)); set.seed(1)
+mat <- matrix(rnorm(48), 12, dimnames = list(paste0("g", 1:12), paste0("s", 1:4)))
+png("results/heat.png", 6, 5, units = "in", res = 100); draw(Heatmap(mat, name = "z")); invisible(dev.off())`);
+      assert.deepEqual(heat.cell.saved.map(s => [s.path, s.figure.describer, s.figure.marks, s.figure.bound]), [['results/heat.png', 'ComplexHeatmap', 48, 48]]);
+      assert.equal((await figures.read({ path: 'results/heat.png', form: 'view' })).record.figure.layers[0].source, 'mat');
+    }
+    const names = (await host.read()).sessions.at(-1).variables.map(v => v.name).sort();
+    assert.deepEqual(names, [...(complexHeatmap ? ['mat'] : []), 'p', 'res', 'save_ma'], 'noting the files adds no variables');
   } finally { await host.close(); }
 });
 

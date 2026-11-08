@@ -30,7 +30,7 @@
 import contextlib, io, json, math, os, platform, re, sys, time, uuid, warnings
 import xml.etree.ElementTree as ET
 
-limits = {'maxMarks': 30000, 'maxSeconds': 20, 'maxBytes': 16 * 1024 * 1024, 'maxColumns': 40,
+limits = {'maxMarks': 50000, 'maxSeconds': 20, 'maxBytes': 16 * 1024 * 1024, 'maxColumns': 40,
           'maxTables': 64, 'maxTableCells': 5000000, 'maxComparedColumns': 64, 'maxCellChars': 160}
 schema = 'rho.figure/1'
 SVG, XLINK = 'http://www.w3.org/2000/svg', 'http://www.w3.org/1999/xlink'
