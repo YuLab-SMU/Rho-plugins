@@ -49,6 +49,13 @@ test('observed CSV captures exact bytes through Files and preserves lexical valu
     await assert.rejects(activityOutputs(root, '../outside'), /inside/);
     await assert.rejects(activityOutputs(root, path.join(root, 'outputs')), /inside/);
     assert.throws(() => lexicalCsvDeclaration(Buffer.from('a,a\n1,2\n'), 'bad.csv'), /unique/);
+    // pandas' to_csv() and R's write.csv() write the index or row names under an empty header.
+    await fs.writeFile(path.join(root, 'outputs/pandas.csv'), ',baseMean,padj\nENSG01,997.4,4.1e-159\nENSG02,2341.8,\n');
+    const pandas = await captureActivityArtifact(root, 'p', 'outputs/pandas.csv', undefined, files, lexicalCsvDeclaration);
+    assert.deepEqual((await new Tables(files).page(pandas, 0, 20)).rows, [{ row: 'ENSG01', baseMean: '997.4', padj: '4.1e-159' }, { row: 'ENSG02', baseMean: '2341.8', padj: '' }]);
+    await fs.writeFile(path.join(root, 'outputs/r.csv'), '"","row","x",""\n"a","1","2","3"\n');
+    const r = await captureActivityArtifact(root, 'p', 'outputs/r.csv', undefined, files, lexicalCsvDeclaration);
+    assert.deepEqual((await new Tables(files).page(r, 0, 20)).rows, [{ 'row 2': 'a', row: '1', x: '2', 'column 4': '3' }]);
     // One file is observed on its own: at the project root, beside more files than an
     // output scan reads, and without a digest it is the current bytes.
     await fs.writeFile(path.join(root, 'top.csv'), 'id,value\n9,9\n');

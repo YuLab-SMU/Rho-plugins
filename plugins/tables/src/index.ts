@@ -7,12 +7,25 @@ import type { TableFormat } from './contract.js';
 const declaredSkill = (id: string, content: string, version = '1.0') => ({ id, version, content, digest: digest(content) });
 export type { TableFormat } from './contract.js';
 export const tableLimits = { maxRows: 100000, maxPageRows: 1000 };
+// A column a CSV leaves unnamed is named: R's write.csv() and pandas' to_csv() write row names
+// or the index under an empty header, which is "row"; another unnamed column is "column N". A name
+// the header already uses is not taken twice. The row reader names the header the same way.
+export function csvColumnNames(header: string[]): string[] {
+  const taken = new Set(header.filter(Boolean));
+  return header.map((name, i) => {
+    if (name) return name;
+    const base = i === 0 ? 'row' : `column ${i + 1}`;
+    let named = base;
+    for (let k = 2; taken.has(named); k++) named = `${base} ${k}`;
+    taken.add(named); return named;
+  });
+}
 // Opening an observed CSV supplies a lexical view, with no guessed numeric,
 // missing-value or entity semantics. The usual table reader validates all rows.
 export function lexicalCsvDeclaration(data: Buffer, relative: string): Declaration {
   requireThat(data.length <= 8 * 1024 * 1024, 'limit', 'CSV preview exceeds 8 MiB.');
   const records: string[][] = parse(data, { bom: true, skip_empty_lines: true, max_record_size: 1024 * 1024, to: 1 });
-  const declaration: Declaration = { path: relative, kind: 'table', format: { encoding: 'csv', columns: (records[0] ?? []).map(name => ({ name, type: 'string', nullValues: [] })), key: null } };
+  const declaration: Declaration = { path: relative, kind: 'table', format: { encoding: 'csv', columns: csvColumnNames(records[0] ?? []).map(name => ({ name, type: 'string', nullValues: [] })), key: null } };
   validateTableDeclaration(declaration); return declaration;
 }
 export function validateTableDeclaration(d: Declaration) {
@@ -45,7 +58,7 @@ export class Tables {
     } else {
       const records: string[][] = parse(data, { bom: true, skip_empty_lines: true, max_record_size: 1024 * 1024 });
       const header = records.shift() ?? [];
-      requireThat(canonical(header) === canonical(f.columns.map(c => c.name)), 'condition', 'CSV headers do not match the declared columns.');
+      requireThat(canonical(csvColumnNames(header)) === canonical(f.columns.map(c => c.name)), 'condition', 'CSV headers do not match the declared columns.');
       requireThat(records.length <= this.limits.maxRows, 'limit', 'Table exceeds the row reader budget.', { limit: 'maxRows' });
       rows = records.map(values => Object.fromEntries(f.columns.map((c, i) => {
         const value = values[i]!;
@@ -140,6 +153,6 @@ const tablesSkill = {
   ],
   verify: { command: 'npm run test:tables', description: 'Declared types keep leading zeros and literal NA, joins retain nulls, namespaces and both input versions, and unkeyed tables never fabricate keys.' }
 };
-export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.5.1', requires: ['files'], capabilities: ['tables'], presentation,
+export const plugin = { entryVersion: '1.0', id: 'tables', package: '@rho-workspace/plugin-tables', version: '0.5.2', requires: ['files'], capabilities: ['tables'], presentation,
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })), skills: [{ ...tablesSkill, presentation: skillPresentation }],
   components: [{ id: 'rho.table', version: '0.2.0', owner: 'rho-plugins.table', bindings: { data: 'table' }, ui: './ui', presentation: viewPresentation, propsSchema: { type: 'object', additionalProperties: false, properties: { title: { type: 'string', minLength: 1 } }, required: ['title'] } }] };

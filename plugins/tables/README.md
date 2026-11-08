@@ -13,6 +13,11 @@ Selected services: Only the root, bytes, resolve and register ports of Files; no
 
 Only this plugin depends on csv-parse. No scientific column assumptions or chart renderer.
 
+A CSV opened as observed is read lexically, every value as text. A column its header leaves
+unnamed is named: R's `write.csv()` and pandas' `to_csv()` write row names or the index under an
+empty header, which becomes `row`; another unnamed column becomes `column N`, and a name the
+header already uses is not taken twice.
+
 The package depends on `@rho-workspace/plugin-contracts` 0.4.0 for generic envelopes and service ports
 and ordinary file primitives; that package contains no capability implementation.
 Service ports do not install or start other plugins. Rho explicitly selects and
