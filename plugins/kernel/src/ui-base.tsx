@@ -48,13 +48,15 @@ export interface SessionScope { principal: string | null; since: number | null; 
 
 // A plot whose marks an extension bound to their rows, as the page that shows the Notebook draws
 // it: the page owns how it is drawn and what asking about it does; the picture stands in for it.
+// It is a plot a cell drew (cellId, plot), or a file a cell saved one as (file).
 export interface FigureSlot {
-  client: UiClient; projectId: string; cellId: string; plot: number; width: number; height: number; label: string;
+  client: UiClient; projectId: string; cellId?: string; plot?: number; file?: { path?: string; sha256: string }; width?: number; height?: number; label: string;
   // A short name for the plot where it is mentioned elsewhere: "R cell 4, plot 1".
   name?: string; fit?: boolean; cursor?: number; fallback: ReactNode; author?: (by: string) => { name: string; mine: boolean };
 }
 export interface KernelShell {
   highlight?(code: string, language: string): Promise<DocumentFragment | null>;
+  openPath?(path: string): void;
   markdown?(text: string): ReactNode;
   figure?(slot: FigureSlot): ReactNode;
 }

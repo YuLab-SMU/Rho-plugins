@@ -21,7 +21,13 @@ make a page new. A host constructed with `extensions.r` hands those R files to e
 local R session it starts (`RHO_KERNEL_EXTENSIONS`); the Figures plugin's describer is one,
 and a plot it described names its `figure` (layers, marks, how many are bound) or why it
 was not described (`figureProblem`), and `figureRecord` returns the record beside the
-PNG. Python closes its figures after each cell. After each cell the
+PNG. A page the code saves to a project file on a device of its own (`ggsave`) is found by
+the extension's `saved_page()` and described when the cell ends, at the size it was saved
+at; the cell's `saved` names each such file with its bytes and SHA-256 and the figure's
+summary or `figureProblem`, and `savedFigure(sha256)` returns the record of the newest cell
+that saved those bytes. A file written again since has other bytes and no record. A file
+written with `png()` or `pdf()` and `print()` is not found: nothing names its file.
+Python closes its figures after each cell. After each cell the
 session lists its variables with their type, size and a one-line summary.
 Each cell also names the values it made or changed (`defined`) and, when neither list
 was cut, those it removed (`removed`). It names the values it read (`used`): the names

@@ -4,7 +4,8 @@ import { constants as fsConstants } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { createReadStream } from 'node:fs';
 import { atomicBytes, atomicJson, confined, digest, now, readJson, requireThat, stateDirectory, timelineLabel, type TimelineEvent } from '@rho-workspace/plugin-contracts';
 import { ownGroup, signalGroup, type GroupSignal } from './process-group.js';
 import { checkCommand, copyCommand, listCommand, readCheck, readCopy, readList, sessionCommand, signalCommand, Ssh, type Copy, type Place, type PlaceCheck, type Transport } from './places.js';
@@ -37,6 +38,10 @@ export interface Asked { by: string; at: string }
 // what it drew; its record is kept beside the picture. figureProblem says why one was not kept.
 export interface FigureSummary { describer: string; kind?: string; title?: string; layers: number; marks: number; bound: number; geoms: string[] }
 export type Output = { kind: 'stdout' | 'stderr' | 'warning' | 'error'; text: string } | { kind: 'plot'; plot: number; width: number; height: number; figure?: FigureSummary; figureProblem?: string };
+// A page the cell saved to a project file (ggsave) that an extension described. It names the file as
+// the cell left it, its bytes and their SHA-256, so a figure follows those bytes, not the path:
+// once the file is written again it is a picture until something saves it as a figure again.
+export interface SavedFigure { number: number; path: string; bytes: number; sha256: string; figure?: FigureSummary; figureProblem?: string }
 export interface CellRecord {
   cellId: string; changeId: string; by: string; sessionId: string; language: Language; code: string; purpose: string | null;
   queuedAt: string; startedAt: string | null; endedAt: string | null; state: typeof cellStates[number]; number: number;
@@ -47,6 +52,7 @@ export interface CellRecord {
   // The program and version that ran it, kept with the cell because a cell outlasts its session's
   // record. Cells recorded before have neither.
   program?: string | null; version?: string | null;
+  saved?: SavedFigure[];
 }
 export type InspectInput = { language: Language; name: string; path?: number[]; offset?: number; limit?: number; sort?: { column: number; descending: boolean } };
 // The protected resources are this machine's processes and memory, and the project's state
@@ -71,7 +77,7 @@ export const lineageLimits = { files: 32 };
 // after serverctlReadMs; a session through serverctl lasts at most serverctlSessionS, serverctl's
 // own limit for a command, after which serverctl ends it; a server's skill is read up to
 // serverSkillBytes.
-export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxFigureBytes: 8 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
+export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxFigureBytes: 16 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
   inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000,
   maxPlaces: 16, remoteStartTimeoutMs: 90000, remoteCheckTimeoutMs: 60000, remoteListTimeoutMs: 30000, remoteSignalTimeoutMs: 15000, remoteEntries: 500, remoteListBytes: 1024 * 1024, remoteCopyBytes: 64 * 1024 * 1024, remoteCopyTimeoutMs: 600000, maxCopies: 500,
   serverctlReadMs: 15000, serverctlSessionS: 7 * 24 * 3600, serverSkillBytes: 256 * 1024 };
@@ -95,6 +101,12 @@ interface Live {
   pipe?: net.Server; answering?: net.Socket; answersClosed?: Promise<void>;
 }
 const markStart = '\x1eRHO:';
+// The SHA-256 of a file's bytes, read in chunks.
+async function fileDigest(file: string) {
+  const hash = createHash('sha256'); let bytes = 0;
+  for await (const chunk of createReadStream(file)) { hash.update(chunk as Buffer); bytes += (chunk as Buffer).length; }
+  return { sha256: hash.digest('hex'), bytes };
+}
 // What an extension said of a plot, cut to the summary a cell keeps.
 function figureSummary(value: any): FigureSummary {
   const n = (x: unknown) => Number.isSafeInteger(x) && (x as number) >= 0 ? x as number : 0;
@@ -269,6 +281,7 @@ export class KernelHost {
         requireThat(index >= 0, 'limit', 'The session record is full of cells that have not ended.', { limit: 'maxCells' });
         const [old] = this.cells.splice(index, 1);
         for (const output of old!.outputs) if (output.kind === 'plot') for (const end of ['.png', '.figure.json']) await fs.rm(path.join(await this.plots(), `${old!.cellId}-${output.plot}${end}`), { force: true });
+        for (const saved of old!.saved ?? []) await fs.rm(path.join(await this.plots(), `${old!.cellId}-s${saved.number}.figure.json`), { force: true });
       }
       live.record.cells++;
       const cell: CellRecord = { cellId: id('k-'), changeId: input.changeId, by: input.by, sessionId: live.record.sessionId, language: input.language, code: input.code, purpose: input.purpose?.trim().slice(0, 200) || null,
@@ -502,6 +515,25 @@ export class KernelHost {
       }
       this.soon(); return;
     }
+    if (msg.kind === 'saved') {
+      // A file in the project the cell saved a plot to, read as the cell left it.
+      const number = Number(msg.number), relative = typeof msg.path === 'string' ? msg.path : '';
+      if (live.place || !Number.isSafeInteger(number) || number < 1 || number > this.limits.maxPlots || (cell.saved ?? []).some(s => s.number === number)) return;
+      const file = relative.length <= 512 ? await confined(this.root, relative).catch(() => null) : null;
+      const stat = file ? await fs.stat(file).catch(() => null) : null;
+      if (!file || !stat?.isFile()) return;
+      const { sha256, bytes } = await fileDigest(file);
+      const saved: SavedFigure = { number, path: relative, bytes, sha256 };
+      const record = path.join(await this.plots(), `${cell.cellId}-s${number}.figure.json`);
+      if (msg.figure && typeof msg.figure === 'object') {
+        const size = await fs.stat(record).then(s => s.size, () => -1);
+        if (size < 0) saved.figureProblem = 'The figure record was not written.';
+        else if (size > this.limits.maxFigureBytes) { await fs.rm(record, { force: true }); saved.figureProblem = `The figure record of ${size} bytes was larger than maxFigureBytes and was not kept.`; }
+        else saved.figure = figureSummary(msg.figure);
+      } else saved.figureProblem = typeof msg.figureProblem === 'string' ? msg.figureProblem.slice(0, 500) : 'Nothing described what this file draws.';
+      (cell.saved ??= []).push(saved);
+      this.soon(); return;
+    }
     if (msg.kind === 'done') {
       cell.state = msg.interrupted ? 'interrupted' : msg.ok ? 'done' : 'error'; cell.endedAt = now();
       // What the cell made or changed, as the session lists its variables before and after it. A
@@ -733,6 +765,24 @@ export class KernelHost {
     return { cell: { cellId: cell.cellId, number: cell.number, by: cell.by, purpose: cell.purpose, code: cell.code, language: cell.language, endedAt: cell.endedAt, sessionId: cell.sessionId }, output: structuredClone(output), bytes: await fs.readFile(file) };
   }
 
+  // The figure a cell kept for a file it saved, found by the file's bytes: the newest cell that saved
+  // those bytes. A file written since by anything else has other bytes and no figure.
+  async savedFigure(sha256: string) {
+    await this.load();
+    let problem: string | undefined;
+    for (const cell of [...this.cells].reverse()) for (const saved of [...(cell.saved ?? [])].reverse()) {
+      if (saved.sha256 !== sha256) continue;
+      if (!saved.figure) { problem ??= saved.figureProblem; continue; }
+      const file = path.join(await this.plots(), `${cell.cellId}-s${saved.number}.figure.json`);
+      const stat = await fs.stat(file).catch(() => null);
+      if (!stat || stat.size > this.limits.maxFigureBytes) { problem ??= 'The figure record is no longer kept.'; continue; }
+      return { cell: { cellId: cell.cellId, number: cell.number, by: cell.by, purpose: cell.purpose, code: cell.code, language: cell.language, endedAt: cell.endedAt, sessionId: cell.sessionId }, output: structuredClone(saved), bytes: await fs.readFile(file) };
+    }
+    // A file a cell saved but could not describe says why; one no cell saved is simply a picture.
+    requireThat(false, 'not_found', problem ?? 'No Notebook cell saved a figure as this file with these bytes: it is a picture only.', problem ? { saved: true } : {});
+    throw new Error('unreachable');
+  }
+
   // Closing ends the sessions: their variables live only in their processes.
   async close() {
     const exits = [...this.live.values()].map(live => new Promise<void>(resolve => {
@@ -765,7 +815,7 @@ const content = [
   'Give each cell a short purpose. Pass waitMs to wait for it to finish; kernel.read reads it later.',
   'A session starts with the first cell of its language. Interrupt a cell that runs too long with kernel.interrupt; only the person stops a session.',
   'Results meant to last still go to files from a script, so they can be run again without the session.',
-  'A ggplot drawn in the R session (ggplot2 and what is built on it: ggtree, enrichplot, Seurat, patchwork) is also kept as a figure whose drawn marks are bound to the rows they come from; the plot output names its layers and marks. Read it with figure.read {cellId, plot} to check what was actually drawn (marks per layer, rows missing, mappings) and to get the rows behind marks. When the person selects marks in a plot, their message names the selection.',
+  'A ggplot drawn in the R session (ggplot2 and what is built on it: ggtree, enrichplot, Seurat, patchwork) is also kept as a figure whose drawn marks are bound to the rows they come from; the plot output names its layers and marks. Read it with figure.read {cellId, plot} to check what was actually drawn (marks per layer, rows missing, mappings) and to get the rows behind marks. A ggplot saved to a project file with ggsave() is kept as a figure of that file too: the cell names it under saved, and figure.read {path} reads it while the file keeps those bytes. When the person selects marks in a plot or a saved figure, their message names the selection.',
   'Sessions can also run on a server. kernel.places lists the places and where each language runs; kernel.place.set names one (the server, its folder there, and setup lines run there before a session starts) or chooses it for R or Python; kernel.place.check connects and reports R and Python there.',
   'kernel.servers lists the servers the person manages with serverctl and the skills bound to each: how that server is used (its environments, where heavy work goes, what to avoid there). Before you name a place on one or run code there, read the skills that apply with kernel.server.skill and follow them, for example in the place\'s setup lines. They guide the work on that server; they do not widen what you may do. A place on such a server is reached through serverctl, which holds its login; another server is reached with ssh.',
   'The project\'s Python is the machine\'s python3 until you name another. When the work needs packages it lacks, make an environment in the project (python3 -m venv .venv or uv venv, then install into it) and pass interpreter: ".venv/bin/python" to kernel.run; later sessions of that language start with it too, and each cell records the program that ran it. A live session in which only you ran cells starts again with the program you name; once the person ran a cell in it, ask them to stop it first. Do not add another environment\'s packages to a running session\'s path.',

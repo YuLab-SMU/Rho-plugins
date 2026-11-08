@@ -130,6 +130,21 @@ function Printed({ output }: { output: Output }) {
   </>;
 }
 
+// A plot the cell saved to a project file (ggsave): the file is named, and its figure is drawn from
+// the record kept for the bytes the cell saved, though the file may have been written again since.
+type SavedFigure = NonNullable<Cell['saved']>[number];
+function Saved({ client, projectId, cell, saved }: { client: UiClient; projectId: string; cell: Cell; saved: SavedFigure }) {
+  const { figure, openPath } = useShell(), facts = useContext(FigureFacts);
+  const name = saved.path.split('/').at(-1)!;
+  const head = <p className="nb-saved"><span>Saved</span>{openPath ? <button className="text-button" title={'Show ' + saved.path} onClick={() => openPath(saved.path)}>{saved.path}</button> : <code>{saved.path}</code>}
+    {saved.figure ? <span className="nb-saved-what">{saved.figure.bound.toLocaleString()} {saved.figure.bound === 1 ? 'mark' : 'marks'} bound to their rows</span>
+      : saved.figureProblem ? <span className="nb-saved-what">kept as a picture: {saved.figureProblem}</span> : null}</p>;
+  if (!saved.figure || !figure) return head;
+  return <>{head}{figure({ client, projectId, file: { path: saved.path, sha256: saved.sha256 }, width: 1008, label: `${name}, saved by ${cell.purpose ?? 'this cell'}`, name: `${name} (${languageName[cell.language]} cell ${cell.number})`,
+    cursor: facts.cursor, fallback: <div className="nb-plot-wait" style={{ maxWidth: 504, aspectRatio: '7 / 5' }} aria-label="Reading the figure" />,
+    author: facts.who && (by => ({ name: facts.who!(by).name, mine: by === me })) })}</>;
+}
+
 function Outputs({ cell, client, projectId }: { cell: Cell; client: UiClient; projectId: string }) {
   let plots = 0;
   const purpose = cell.purpose ?? 'this cell';
@@ -137,6 +152,7 @@ function Outputs({ cell, client, projectId }: { cell: Cell; client: UiClient; pr
     {cell.outputs.map((output, i) => output.kind === 'plot'
       ? <Plot key={i} client={client} projectId={projectId} cell={cell} output={output} label={`Plot ${++plots} drawn by ${purpose}`} />
       : <Printed key={i} output={output} />)}
+    {(cell.saved ?? []).map(saved => <Saved key={saved.number} client={client} projectId={projectId} cell={cell} saved={saved} />)}
     {cell.cut && <p className="nb-note">Only the first {sizeText(cell.kept)} of the {sizeText(cell.bytes)} it printed were kept.</p>}
   </>;
 }
@@ -396,6 +412,7 @@ function ConsoleCell({ cell, author, who, client, projectId, now, plotsBeside, p
     {cell.outputs.map((output, i) => output.kind === 'plot'
       ? <ConsolePlot key={i} client={client} projectId={projectId} cell={cell} output={output} number={plotNumber(cell.cellId, output.plot!)} beside={plotsBeside} />
       : <pre key={i} className={'nbc-out ' + output.kind}>{(output.text ?? '').replace(/\n$/, '')}</pre>)}
+    {(cell.saved ?? []).map(saved => <p key={saved.number} className="nbc-quiet"># Saved {saved.path}{saved.figure ? ` · ${saved.figure.bound.toLocaleString()} marks bound` : saved.figureProblem ? ` · kept as a picture: ${saved.figureProblem}` : ''}</p>)}
     {cell.cut && <p className="nbc-quiet">Only the first {sizeText(cell.kept)} of the {sizeText(cell.bytes)} it printed were kept.</p>}
     {cell.state === 'running' && <p className="nbc-state running"><span className="pulse-dot" aria-hidden="true" />Running {durationText(now - Date.parse(cell.startedAt ?? cell.queuedAt))}</p>}
     {cell.state === 'queued' && <p className="nbc-state">Waiting for the cell before it</p>}

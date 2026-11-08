@@ -1,6 +1,6 @@
 # Figures
 
-`@rho-workspace/plugin-figures` 0.1.0 keeps the plots a project's live R session draws as
+`@rho-workspace/plugin-figures` 0.2.0 keeps the plots a project's live R session draws as
 figures whose marks know the rows they were drawn from. It is built into Rho and needs the
 Notebook (`kernel`).
 
@@ -31,6 +31,16 @@ compositions, ggrepel labels). Nothing in the describer knows a package or a dom
 - The session is left as the cell left it: the random number state is restored, and the
   describer's own output, messages and warnings are discarded.
 
+A ggplot saved to a project file with `ggsave()` in a Notebook cell is kept as a figure of
+that file. When the page starts on ggsave's device, `saved_page()` names the plot, ggsave's
+file and the device's size; when the cell ends the page is described at that size and the
+record is kept with the cell's plots. The cell's `saved` list names the file with its bytes
+and SHA-256. A page that shows the file names it by those bytes, so the figure holds only
+while the file keeps them: once anything writes the file again it is a picture, until a
+cell saves it as a figure again. A file outside the project is not kept, nor one a session on
+a server saved. A file written with `png()` or `pdf()` and `print()` is not found, because
+nothing names its file.
+
 Base graphics, grid drawings that are not ggplots (ComplexHeatmap) and Python plots stay
 pictures. Their plot output has neither `figure` nor `figureProblem`: nothing failed,
 nothing described them.
@@ -47,12 +57,17 @@ nothing described them.
 
 ## Operations
 
-`figure.read {cellId, plot, form?, marks?, selection?, where?, limit?}` returns the summary
+A figure is named by `{cellId, plot}`, a plot a cell drew, or by a file a cell saved it as:
+`{path}` reads the file as it is now, `{sha256}` names exact bytes (a page passes the
+version it shows).
+
+`figure.read {cellId, plot | path | sha256, form?, marks?, selection?, where?, limit?}` returns the summary
 of a figure (or, with `form: 'view'`, the whole record for drawing it), the selections kept
 for it, and rows for marks named directly, by a kept selection or by a condition.
 
-`figure.select {cellId, plot, marks, note?, changeId}` keeps a selection. It is immutable and
-named by the figure, the principal and its `changeId`: the same request returns the same
+`figure.select {cellId, plot | path | sha256, marks, note?, changeId}` keeps a selection. It is
+immutable and named by the figure, the principal and its `changeId`; a saved file's selections
+follow its bytes: the same request returns the same
 selection, and the same `changeId` with other marks is refused.
 
 ## Limits
@@ -61,12 +76,13 @@ The protected resource is the R session's time and the project's state folder.
 
 | Limit | Value | When it is exceeded |
 | --- | --- | --- |
-| Marks in a figure (`maxMarks`) | 20 000 | The plot stays a picture; `figureProblem` says why. |
+| Marks in a figure (`maxMarks`) | 30 000 | The plot stays a picture; `figureProblem` says why. |
 | Time to describe (`maxSeconds`) | 20 s | Describing stops; the plot stays a picture. |
-| Record size (`maxBytes`, kernel `maxFigureBytes`) | 8 MiB | The record is not kept; `figureProblem` says how large it was. |
+| Record size (`maxBytes`, kernel `maxFigureBytes`) | 16 MiB | The record is not kept; `figureProblem` says how large it was. |
 | Columns kept for a source or a layer (`maxColumns`) | 40 | Later columns are left out of the record. |
 | Characters of a text value (`maxCellChars`) | 160 | The value is cut and ends with `…`. |
 | Marks in a selection | 5 000 | The selection is refused. |
+| Saved files described per cell (kernel `maxPlots`) | 8 | Later files stay pictures. |
 | Selections kept per figure | 32 | The oldest are removed. |
 | Rows in one read | 500 (50 by default) | The rest are counted in `rowsTotal`. |
 
@@ -77,5 +93,6 @@ npm run test:figures
 ```
 
 It describes real ggplot2 and patchwork plots in R through the Notebook and reads, matches
-and selects their marks. Without R and ggplot2, svglite, xml2 and jsonlite the checks are
+and selects their marks, and saves plots with `ggsave()` as PNG and PDF and reads them by
+path and by bytes until the file is written again. Without R and ggplot2, svglite, xml2 and jsonlite the checks are
 skipped, not passed.

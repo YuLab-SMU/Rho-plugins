@@ -172,7 +172,18 @@ for (file in strsplit(Sys.getenv("RHO_KERNEL_EXTENSIONS"), .Platform$path.sep, f
   if (!inherits(tryCatch(sys.source(file, envir = env), error = function(e) e), "error")) extensions[[length(extensions) + 1]] <- env
 }
 page_object <- NULL
+# Pages the code saved to files of its own (ggsave): an extension names the plot, the file and the
+# size, and the page is described when the cell ends, once the file is written. A file saved twice
+# keeps its last page.
+saving <- list()
 started_page <- function(grid) {
+  if (grid && !is.null(device) && grDevices::dev.cur() != device) {
+    for (env in extensions) if (is.function(env$saved_page)) {
+      found <- tryCatch(env$saved_page(), error = function(e) NULL)
+      if (!is.null(found)) { found$env <- env; saving[[if (grepl("^(/|~|[A-Za-z]:[/\\\\])", found$file)) path.expand(found$file) else file.path(getwd(), found$file)]] <<- found; return() }
+    }
+    return()
+  }
   if (is.null(device) || grDevices::dev.cur() != device) return()
   page_object <<- NULL
   if (!grid) return()
@@ -197,7 +208,7 @@ setHook("before.plot.new", function() { snapshot(); started_page(FALSE) })
 setHook("before.grid.newpage", function() { snapshot(); started_page(TRUE) })
 
 run <- function(msg) {
-  id <- msg$id; plots <<- list(); ok <- TRUE; interrupted <- FALSE
+  id <- msg$id; plots <<- list(); saving <<- list(); ok <- TRUE; interrupted <- FALSE
   known <- ls(globalenv()); seen <- lineage_of(msg$code); files <- project_paths(seen$strings)
   recording()
   tryCatch({
@@ -232,6 +243,26 @@ run <- function(msg) {
     }
     if (isTRUE(msg$inline)) { plot$data <- jsonlite::base64_enc(readBin(file, "raw", file.info(file)$size)); unlink(file) }
     say(plot)
+  }
+  # A page saved to a file in the project is described at the size it was saved at; its record is
+  # kept with the cell's plots. A session on a server keeps none: its files are not here.
+  saved <- saving; saving <<- list()
+  if (!isTRUE(msg$inline) && !is.null(msg$plots)) {
+    root <- normalizePath(getwd(), winslash = "/")
+    k <- 0L
+    for (named in names(saved)) {
+      if (k >= msg$maxPlots) break
+      page <- saved[[named]]
+      if (!file.exists(named)) next
+      full <- normalizePath(named, winslash = "/")
+      if (!startsWith(full, paste0(root, "/"))) next
+      k <- k + 1L
+      out <- list(id = id, kind = "saved", path = substring(full, nchar(root) + 2), number = k)
+      described <- tryCatch(page$env$describe_page(page$object, full, page$width, page$height, file.path(msg$plots, paste0(id, "-s", k, ".figure.json"))),
+        error = function(e) list(problem = conditionMessage(e)))
+      if (!is.null(described$problem)) out$figureProblem <- as.character(described$problem)[1] else if (!is.null(described)) out$figure <- described
+      say(out)
+    }
   }
   say(list(id = id, kind = "done", ok = ok, interrupted = interrupted, variables = variables(msg$maxVariables),
     used = I(intersect(seen$mentioned, known)), assigned = I(seen$assigned), files = touched(files)))

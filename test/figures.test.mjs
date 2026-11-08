@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { KernelHost } from '@rho-workspace/plugin-kernel';
 import { Figures, rExtension, parseRecord, elementMarks, markRow, plugin } from '@rho-workspace/plugin-figures';
@@ -18,7 +19,7 @@ const patchwork = have[4] === true;
 async function session() {
   const root = await fs.mkdtemp(path.join(tmpdir(), 'rho-figures-'));
   const host = new KernelHost(root, { rscript, extensions: { r: [rExtension] } });
-  const figures = new Figures(root, { record: (cellId, plot) => host.figureRecord(cellId, plot) });
+  const figures = new Figures(root, { record: (cellId, plot) => host.figureRecord(cellId, plot), saved: sha256 => host.savedFigure(sha256) });
   let n = 0;
   const run = async (code, by = 'browser:local') => {
     const { cell } = await host.run({ language: 'r', code, changeId: 'c' + ++n, by, waitMs: 120000 });
@@ -83,7 +84,7 @@ ggplot(res, aes(log2FoldChange, -log10(padj), colour = significant)) + geom_poin
     assert.notEqual(other.selection.selectionId, selection.selectionId, 'another principal\'s change is its own selection');
     const bySelection = await figures.read({ cellId: cell.cellId, plot: 1, selection: selection.selectionId });
     assert.deepEqual(bySelection.rows.map(r => r.mark), marks);
-    const brief = await figures.brief(cell.cellId, 1, selection.selectionId, 3);
+    const brief = await figures.brief({ cellId: cell.cellId, plot: 1 }, selection.selectionId, 3);
     assert.equal(brief.count, marks.length);
     assert.equal(brief.rows.length, 3);
     assert.equal(brief.note, 'Strongest');
@@ -142,6 +143,56 @@ test('a composition numbers its layers across its plots; plots other systems dra
     assert.equal(base.plots[0].figure, undefined);
     assert.equal(base.plots[0].figureProblem, undefined, 'a plot nothing describes is a picture, not a failure');
     await assert.rejects(host.figureRecord(base.cell.cellId, 1), /picture only/);
+  } finally { await host.close(); }
+});
+
+test('a ggplot saved with ggsave is a figure of the file while the file keeps the bytes the cell saved', { skip, timeout: 180000 }, async () => {
+  const { root, host, figures, run } = await session();
+  const sha = async relative => createHash('sha256').update(await fs.readFile(path.join(root, relative))).digest('hex');
+  try {
+    const saving = await run(`library(ggplot2); dir.create("results")
+p <- ggplot(mtcars, aes(wt, mpg, colour = factor(cyl))) + geom_point()
+ggsave("results/cars.png", p, width = 6, height = 4, dpi = 100)
+ggsave(tempfile(fileext = ".png"), p)
+x <- 1`);
+    assert.equal(saving.plots.length, 0, 'saving draws nothing in the cell');
+    assert.equal(saving.cell.saved?.length, 1, 'a file outside the project is not kept');
+    const [saved] = saving.cell.saved;
+    assert.deepEqual([saved.path, saved.number, saved.sha256], ['results/cars.png', 1, await sha('results/cars.png')]);
+    assert.ok(saved.figure, saved.figureProblem);
+    assert.equal(saved.figure.marks, 32);
+    assert.deepEqual((await host.read()).sessions.at(-1).variables.map(v => v.name).sort(), ['p', 'x'], 'describing the saved page adds no variables');
+
+    // Read by path, as the file is now: drawn at the size it was saved at, rows by mark.
+    const read = await figures.read({ path: 'results/cars.png', form: 'view' });
+    assert.deepEqual([read.figure.path, read.figure.sha256, read.figure.cellId], ['results/cars.png', saved.sha256, saving.cell.cellId]);
+    assert.deepEqual([read.record.size.width, read.record.size.height], [6, 4]);
+    const row = await figures.read({ path: 'results/cars.png', marks: ['0.0'] });
+    assert.equal(row.rows[0].key.value, 'Mazda RX4');
+
+    // A selection on the file's figure follows its bytes; a message's brief names the file.
+    const { selection } = await figures.select({ sha256: saved.sha256, marks: ['0.0', '0.1'], note: 'Two cars', changeId: 'pick-file' }, 'agent:a');
+    assert.deepEqual([selection.cellId, selection.sha256, selection.plot], [saving.cell.cellId, saved.sha256, undefined]);
+    assert.deepEqual((await figures.read({ path: 'results/cars.png', selection: selection.selectionId })).rows.map(r => r.mark), ['0.0', '0.1']);
+    const brief = await figures.brief({ path: 'results/cars.png' }, selection.selectionId, 5);
+    assert.deepEqual([brief.path, brief.sha256, brief.count, brief.plot], ['results/cars.png', saved.sha256, 2, undefined]);
+    await assert.rejects(figures.read({ cellId: saving.cell.cellId, plot: 1, path: 'results/cars.png' }), /Name a figure by cellId and plot, or by path/);
+
+    // Saved with path= into a folder, as a PDF of a composition, while also printed in the cell.
+    if (patchwork) {
+      const both = await run(`library(patchwork); q <- p + (ggplot(mtcars, aes(factor(gear))) + geom_bar()); print(q); ggsave("two.pdf", q, path = "results", width = 20, height = 10, units = "cm")`);
+      assert.equal(both.plots.length, 1);
+      assert.equal(both.cell.saved[0].path, 'results/two.pdf');
+      assert.equal(both.cell.saved[0].figure.kind, 'patchwork');
+      const pdf = await figures.read({ path: 'results/two.pdf', form: 'view' });
+      assert.ok(Math.abs(pdf.record.size.width - 20 / 2.54) < 0.01, 'the figure is drawn at the size it was saved at');
+    }
+
+    // Written again by something else, the file is a picture; the bytes the cell saved still name it.
+    await run(`png("results/cars.png"); plot(1:3); invisible(dev.off())`);
+    await assert.rejects(figures.read({ path: 'results/cars.png' }), /No Notebook cell saved a figure as this file/);
+    assert.equal((await figures.read({ sha256: saved.sha256 })).figure.path, 'results/cars.png');
+    await assert.rejects(figures.read({ path: '../outside.png' }), /project-relative path/);
   } finally { await host.close(); }
 });
 

@@ -79,6 +79,9 @@ export const sessionSchema = obj({
 // A described plot names what it drew: its describer, layers, marks and how many are bound to rows.
 export const figureSummarySchema = obj({ describer: text, kind: { type: 'string' }, title: { type: 'string' }, layers: { type: 'integer', minimum: 0 }, marks: { type: 'integer', minimum: 0 }, bound: { type: 'integer', minimum: 0 }, geoms: { type: 'array', items: { type: 'string' } } }, ['describer', 'layers', 'marks', 'bound', 'geoms']);
 export const outputSchema = obj({ kind: { enum: ['stdout', 'stderr', 'warning', 'error', 'plot'] }, text: { type: 'string' }, plot: { type: 'integer', minimum: 1 }, width: { type: 'integer' }, height: { type: 'integer' }, figure: figureSummarySchema, figureProblem: { type: 'string' } }, ['kind']);
+// A page the cell saved to a project file (ggsave) that an extension described: the file as the
+// cell left it, and the figure's summary or why it has none.
+export const savedFigureSchema = obj({ number: { type: 'integer', minimum: 1 }, path: text, bytes: { type: 'integer', minimum: 0 }, sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' }, figure: figureSummarySchema, figureProblem: { type: 'string' } }, ['number', 'path', 'bytes', 'sha256']);
 export const cellSchema = obj({
   cellId, changeId, by: text, sessionId, language, code: { type: 'string' }, purpose: maybe({ type: 'string' }),
   queuedAt: time, startedAt: maybe(time), endedAt: maybe(time), state: { enum: [...cellStates] },
@@ -98,6 +101,8 @@ export const cellSchema = obj({
   used: { type: 'array', items: text }, files: { type: 'array', items: obj({ path: text, how: { enum: ['read', 'wrote'] } }) },
   // The program and version that ran it. Cells recorded before have neither.
   program: maybe({ type: 'string' }), version: maybe({ type: 'string' }),
+  // Plots the code saved to project files, each kept as a figure of the file's bytes.
+  saved: { type: 'array', items: savedFigureSchema },
 }, ['cellId', 'changeId', 'by', 'sessionId', 'language', 'code', 'purpose', 'queuedAt', 'startedAt', 'endedAt', 'state', 'number', 'outputs', 'bytes', 'kept', 'cut', 'interrupt', 'problem']);
 
 // One value of a live session as its session describes it: the kind of thing it is, short facts,

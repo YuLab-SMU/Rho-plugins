@@ -1,11 +1,14 @@
 # Semantic figures for a live R session. The Notebook's runner sources this file into an
-# environment of its own and calls two functions:
+# environment of its own and calls three functions:
 #
 #   page_object()   when a page starts on the session's recording device: the plot object being
 #                   drawn there, if a describer knows how to find it (NULL otherwise);
-#   describe_page(object, file, width, height)
+#   saved_page()    when a page starts on another device: the plot, the file it is being saved to
+#                   and the page's size in inches, if a describer knows them (NULL otherwise);
+#   describe_page(object, file, width, height, into)
 #                   after that page's picture is written to `file`: writes the figure record
-#                   beside it (<file without .png>.figure.json) and returns a short summary.
+#                   (by default beside it, <file without .png>.figure.json) and returns a short
+#                   summary.
 #
 # A describer recognizes one kind of plot object and binds what it draws to the data behind it.
 # The first is ggplot2's: any plot built on ggplot2 layers (ggtree, enrichplot, Seurat, ggpubr,
@@ -16,7 +19,8 @@
 # the random number stream is restored, and a failure leaves the page as a picture with the
 # reason. The protected resources are the session's time and the state folder: a description
 # stops after maxSeconds, refuses more than maxMarks drawn marks and writes at most maxBytes.
-limits <- list(maxMarks = 20000L, maxColumns = 40L, maxCellChars = 160L, maxSeconds = 20, maxBytes = 8L * 1024L * 1024L)
+# An airway volcano of every gene with a p-value (22,415 marks with its labels) took 2.8 s and 7.8 MB.
+limits <- list(maxMarks = 30000L, maxColumns = 40L, maxCellChars = 160L, maxSeconds = 20, maxBytes = 16L * 1024L * 1024L)
 schema <- "rho.figure/1"
 `%||%` <- function(a, b) if (is.null(a)) b else a
 
@@ -40,6 +44,21 @@ page_object <- function() {
       x <- tryCatch(get("x", envir = sys.frame(i), inherits = FALSE), error = function(e) NULL)
       if (inherits(x, "ggplot")) return(x)
     }
+  }
+  NULL
+}
+# ggsave() opens a device for its file and draws the plot there: the page's plot is found as above,
+# its file is ggsave's own (with its path already joined) and its size is the device's, whatever
+# units, scale or dpi it was given.
+saved_page <- function() {
+  object <- page_object()
+  if (is.null(object)) return(NULL)
+  save <- utils::getFromNamespace("ggsave", "ggplot2")
+  for (i in rev(seq_len(sys.nframe()))) if (identical(sys.function(i), save)) {
+    file <- get0("filename", envir = sys.frame(i), inherits = FALSE)
+    if (!is.character(file) || length(file) != 1L || !nzchar(file)) return(NULL)
+    size <- grDevices::dev.size("in")
+    return(list(object = object, file = file, width = size[1], height = size[2]))
   }
   NULL
 }
@@ -349,7 +368,7 @@ describe_ggplot <- function(p, width, height) {
 describers <- list(ggplot = list(accepts = function(x) inherits(x, "ggplot"), describe = describe_ggplot,
   packages = c("ggplot2", "svglite", "xml2", "jsonlite")))
 
-describe_page <- function(object, file, width, height) {
+describe_page <- function(object, file, width, height, into = sub("\\.png$", ".figure.json", file)) {
   name <- names(Filter(function(d) d$accepts(object), describers))[1]
   if (is.na(name)) return(NULL)
   d <- describers[[name]]
@@ -377,7 +396,7 @@ describe_page <- function(object, file, width, height) {
     versions = as.list(c(R = as.character(getRversion()), versions)), seconds = round(as.numeric(Sys.time() - started, units = "secs"), 2)), result)
   json <- jsonlite::toJSON(record, auto_unbox = TRUE, null = "null", na = "null", digits = NA)
   if (nchar(json, type = "bytes") > limits$maxBytes) return(list(problem = sprintf("The figure record would take %.1f MB, more than %d MB.", nchar(json, type = "bytes") / 1048576, limits$maxBytes / 1048576)))
-  out <- sub("\\.png$", ".figure.json", file)
+  out <- into
   tmp <- paste0(out, ".tmp")
   writeLines(json, tmp, useBytes = TRUE)
   file.rename(tmp, out)

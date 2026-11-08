@@ -40,6 +40,10 @@ const styles = `/* The Notebook: cells in the order they ran beside the live ses
 .nb-plot img { display: block; width: 100%; height: auto; border: 1px solid var(--color-hairline); border-radius: 6px; background: #fff; }
 .nb-plot-wait { display: block; width: 100%; border-radius: 6px; background: var(--color-well); }
 .nb-note { color: var(--color-meta); font-size: 12px; }
+.nb-saved { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin: 6px 0; font-size: 12px; color: var(--color-meta); }
+.nb-saved > span:first-child { font-weight: 600; color: var(--color-ink); }
+.nb-saved .text-button { font-family: var(--font-mono, ui-monospace, monospace); font-size: 12px; overflow-wrap: anywhere; }
+.nb-saved-what { overflow-wrap: anywhere; }
 .nb-body > .nb-note { padding-left: 12px; }
 .nb-problem { padding-left: 12px; color: var(--color-amber-text); font-size: 12.5px; }
 .nb-actions { display: flex; gap: 16px; padding-left: 12px; }

@@ -9,11 +9,19 @@ import { ensureFigureStyles } from './ui-styles.js';
 
 export interface UiClient { call(method: string, input: any, signal?: AbortSignal): Promise<any> }
 export interface FigureSelection { selectionId: string; by: string; at: string; note: string; count: number; layers: Array<{ layer: number; geom: string; marks: number }>; marks?: string[] }
-// What Ask hands the page: the kept selection, named so a message can carry it.
-export interface FigureAsk { selectionId: string; cellId: string; plot: number; count: number; label: string }
+// A figure saved to a project file, named by the SHA-256 of the bytes shown, with the file's path
+// where the page knows it (else the path the cell saved it at is used).
+export interface FigureFile { path?: string; sha256: string }
+// What Ask hands the page: the kept selection, named so a message can carry it, with the figure as
+// it was named: a cell's plot or a saved file.
+export interface FigureAsk { selectionId: string; cellId?: string; plot?: number; file?: FigureFile; count: number; label: string }
 export interface FigureProps {
-  client: UiClient; projectId: string; cellId: string; plot: number;
-  // The picture's size in device pixels (drawn at twice the size it is shown at).
+  client: UiClient; projectId: string;
+  // A plot a Notebook cell drew, or a file a cell saved a plot as. A file that no cell saved with
+  // these bytes shows its fallback and says nothing: most pictures are not saved figures.
+  cellId?: string; plot?: number; file?: FigureFile;
+  // The picture's size in device pixels (drawn at twice the size it is shown at); a saved file's
+  // figure takes the width it is given unless told.
   width?: number; height?: number; label: string;
   // A short name for the plot where Ask mentions it: "R cell 4, plot 1".
   name?: string;
@@ -30,11 +38,14 @@ export const figureViewLimits = { tableRows: 50, tableColumns: 8, tipColumns: 6,
 
 interface Loaded { record: FigureRecord; selections: FigureSelection[]; svg: SVGSVGElement }
 const records = new Map<string, Promise<{ record: FigureRecord; selections: FigureSelection[] }>>();
-function readView(client: UiClient, projectId: string, cellId: string, plot: number) {
-  const key = projectId + ':' + cellId + ':' + plot;
+type Ref = { cellId?: string; plot?: number; path?: string; sha256?: string };
+const refOf = (cellId?: string, plot?: number, file?: FigureFile): Ref => file ? { path: file.path, sha256: file.sha256 } : { cellId, plot };
+const refKey = (ref: Ref) => ref.sha256 ? 'file:' + ref.sha256 : ref.cellId + ':' + ref.plot;
+function readView(client: UiClient, projectId: string, ref: Ref) {
+  const key = projectId + ':' + refKey(ref);
   let pending = records.get(key);
   if (!pending) {
-    pending = client.call('figure.read', { projectId, cellId, plot, form: 'view' }).then(v => ({ record: parseRecord(JSON.stringify(v.record)), selections: v.selections ?? [] }));
+    pending = client.call('figure.read', { projectId, ...ref, form: 'view' }).then(v => ({ record: parseRecord(JSON.stringify(v.record)), selections: v.selections ?? [] }));
     records.set(key, pending); pending.catch(() => records.delete(key));
     while (records.size > figureViewLimits.cachedRecords) records.delete(records.keys().next().value!);
   }
@@ -86,10 +97,34 @@ function rowFields(record: FigureRecord, row: MarkRow, max: number): Array<[stri
 const title = (row: MarkRow) => row.key ? (typeof row.key.value === 'number' ? `${row.key.column} ${fmt(row.key.value)}` : fmt(row.key.value))
   : row.built.label !== undefined && row.built.label !== null ? fmt(row.built.label) : null;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : /(s|x|sh|ch)$/.test(word) ? 'es' : 's'}`;
-const markWord = (geom: string) => /point|text|label|repel/i.test(geom) ? 'point' : /bar|col|histogram|rect|tile/i.test(geom) ? 'bar' : /box/i.test(geom) ? 'box' : /line|path|smooth|step/i.test(geom) ? 'line' : /violin|density|area|ribbon|polygon/i.test(geom) ? 'shape' : 'mark';
+const markWord = (geom: string) => /text|label|repel/i.test(geom) ? 'label' : /point/i.test(geom) ? 'point' : /bar|col|histogram|rect|tile/i.test(geom) ? 'bar' : /box/i.test(geom) ? 'box' : /line|path|smooth|step/i.test(geom) ? 'line' : /violin|density|area|ribbon|polygon/i.test(geom) ? 'shape' : 'mark';
 
-export function SemanticFigure({ client, projectId, cellId, plot, width = 1008, height = 720, label, name, fit, fallback, cursor, author, onAsk }: FigureProps) {
+// Selected marks by layer, largest first. Layers that draw the same keyed rows (every point, a
+// highlighted subset, its labels) are one group: told once, by the first layer's word, with its
+// rows listed once and the other layers named.
+interface MarkGroup { layer: number; rows: MarkRow[]; also: number[]; keys: string | null }
+function groupsOf(record: FigureRecord, marks: string[]): MarkGroup[] {
+  const byLayer = new Map<number, MarkRow[]>();
+  for (const m of marks) { const r = markRow(record, parseMark(m)!); if (r) byLayer.set(r.layer, [...(byLayer.get(r.layer) ?? []), r]); }
+  const groups: MarkGroup[] = [];
+  for (const [layer, rows] of [...byLayer].sort((a, b) => b[1].length - a[1].length)) {
+    const keys = rows.every(r => r.key) ? rows.map(r => String(r.key!.value)).sort().join('\u0000') : null;
+    const same = keys !== null && groups.find(g => g.keys === keys);
+    if (same) same.also.push(layer); else groups.push({ layer, rows, also: [], keys });
+  }
+  return groups;
+}
+// Groups of different rows drawn the same way are counted together: "7 points", not "5 points, 2 points".
+function groupsText(record: FigureRecord, groups: MarkGroup[]) {
+  const counts = new Map<string, number>();
+  for (const g of groups) { const word = markWord(record.figure.layers[g.layer]!.geom); counts.set(word, (counts.get(word) ?? 0) + g.rows.length); }
+  return [...counts].map(([word, n]) => plural(n, word)).join(', ');
+}
+
+export function SemanticFigure({ client, projectId, cellId, plot, file, width = file ? undefined : 1008, label, name, fit, fallback, cursor, author, onAsk }: FigureProps) {
   ensureFigureStyles();
+  const ref = useMemo(() => refOf(cellId, plot, file), [cellId, plot, file?.path, file?.sha256]); // eslint-disable-line react-hooks/exhaustive-deps
+  const key = refKey(ref);
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [problem, setProblem] = useState('');
   const [selections, setSelections] = useState<FigureSelection[]>([]);
@@ -116,21 +151,21 @@ export function SemanticFigure({ client, projectId, cellId, plot, width = 1008, 
     if (!near) return;
     let live = true;
     setLoaded(null); setProblem(''); setSelected(new Set()); setFrom(null); seen.current = null;
-    readView(client, projectId, cellId, plot).then(v => {
+    readView(client, projectId, ref).then(v => {
       if (!live) return;
       try { setLoaded({ record: v.record, selections: v.selections, svg: svgElement(v.record.svg) }); setSelections(v.selections); }
       catch (e) { setProblem((e as Error).message); }
-    }, e => { if (live) setProblem(e?.error?.message ?? e?.message ?? 'The figure could not be read.'); });
+    }, e => { if (live && !(ref.sha256 && e?.error?.kind === 'not_found' && !e?.error?.details?.saved)) setProblem(e?.error?.message ?? e?.message ?? 'The figure could not be read.'); });
     return () => { live = false; };
-  }, [client, projectId, cellId, plot, near]);
+  }, [client, projectId, key, near]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Marks people and Agents pointed to arrive with the page's events.
   useEffect(() => {
     if (!loaded || cursor === undefined) return;
     let live = true;
-    client.call('figure.read', { projectId, cellId, plot, form: 'selections' }).then(v => { if (live) setSelections(v.selections ?? []); }, () => {});
+    client.call('figure.read', { projectId, ...ref, form: 'selections' }).then(v => { if (live) setSelections(v.selections ?? []); }, () => {});
     return () => { live = false; };
-  }, [cursor, loaded, client, projectId, cellId, plot]);
+  }, [cursor, loaded, client, projectId, key]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Each drawn element and the marks it stands for.
   const elements = useMemo(() => {
@@ -221,16 +256,15 @@ export function SemanticFigure({ client, projectId, cellId, plot, width = 1008, 
     if (!onAsk || !selected.size) return;
     setAsking(true);
     try {
-      const { selection } = await client.call('figure.select', { projectId, cellId, plot, marks: [...selected].slice(0, 5000), changeId: 'ask-' + crypto.randomUUID() });
-      const main = [...selection.layers].sort((a: { marks: number }, b: { marks: number }) => b.marks - a.marks)[0];
-      onAsk({ selectionId: selection.selectionId, cellId, plot, count: selection.count, label: `${plural(selection.count, selection.layers.length === 1 && main ? markWord(main.geom) : 'mark')} · ${name ?? label}` });
+      const { selection } = await client.call('figure.select', { projectId, ...ref, marks: [...selected].slice(0, 5000), changeId: 'ask-' + crypto.randomUUID() });
+      onAsk({ selectionId: selection.selectionId, ...(file ? { file } : { cellId, plot }), count: selection.count, label: `${groupsText(record, groupsOf(record, selection.marks ?? [...selected]))} · ${name ?? label}` });
     } catch (e: any) { setProblem(e?.error?.message ?? e?.message ?? 'The selection could not be kept.'); }
     finally { setAsking(false); }
   };
 
   const bound = record.figure.layers.filter(l => l.bound !== 'none').length;
   const agentShown = !!from && !(author?.(from.by).mine ?? false);
-  return <figure className={'fig' + (fit ? ' fit' : '')} style={fit ? undefined : { maxWidth: Math.round(width / 2) }}
+  return <figure className={'fig' + (fit ? ' fit' : '')} style={fit || !width ? undefined : { maxWidth: Math.round(width / 2) }}
     onKeyDown={event => { if (event.key === 'Escape' && selected.size) { event.stopPropagation(); setSelected(new Set()); setFrom(null); } }}>
     {agentMarks.length > 0 && <div className="fig-marks" role="group" aria-label="Marks the Agent pointed to">
       {agentMarks.slice(0, 4).map(s => <button key={s.selectionId} type="button" className="fig-mark-chip" aria-pressed={from?.selectionId === s.selectionId}
@@ -267,24 +301,21 @@ function Tip({ record, tip, box }: { record: FigureRecord; tip: { x: number; y: 
 function Selected({ record, marks, from, who, agent, asking, onAsk, onClear }: {
   record: FigureRecord; marks: string[]; from: FigureSelection | null; who?: string; agent: boolean; asking: boolean; onAsk?: () => void; onClear: () => void;
 }) {
-  const rows = useMemo(() => marks.map(m => markRow(record, parseMark(m)!)).filter((r): r is MarkRow => !!r), [record, marks]);
-  const byLayer = useMemo(() => {
-    const groups = new Map<number, MarkRow[]>();
-    for (const r of rows) groups.set(r.layer, [...(groups.get(r.layer) ?? []), r]);
-    return [...groups].sort((a, b) => b[1].length - a[1].length);
-  }, [rows]);
-  const what = byLayer.map(([layer, rs]) => plural(rs.length, markWord(record.figure.layers[layer]!.geom))).join(', ');
+  const groups = useMemo(() => groupsOf(record, marks), [record, marks]);
+  const what = groupsText(record, groups);
+  const origin = (layer: number) => { const l = record.figure.layers[layer]!; return l.source ? `rows of ${l.source === 'data' ? 'the plot\'s data' : l.source}` : `computed by ${l.stat.toLowerCase()}`; };
+  const drawnAgain = groups.filter(g => g.also.length).map(g => `the ${plural(g.rows.length, markWord(record.figure.layers[g.layer]!.geom))} ${g.rows.length === 1 ? 'is' : 'are'} also drawn as ${g.also.map(l => markWord(record.figure.layers[l]!.geom) + 's').join(' and ')}`);
   return <section className={'fig-sel' + (agent ? ' agent' : '')} aria-label="Selected marks">
     <div className="fig-sel-head">
       <h4>{agent ? `${who} marked ${what}` : `${what} selected`}</h4>
-      <p>{byLayer.map(([layer]) => { const l = record.figure.layers[layer]!; return l.source ? `rows of ${l.source === 'data' ? 'the plot\'s data' : l.source}` : `computed by ${l.stat.toLowerCase()}`; }).filter((t, i, a) => a.indexOf(t) === i).join(' · ')}</p>
+      <p>{[...groups.map(g => origin(g.layer)).filter((t, i, a) => a.indexOf(t) === i), ...drawnAgain].join(' · ')}</p>
       <div className="fig-sel-actions">
         {onAsk && <button type="button" className="primary" disabled={asking} onClick={onAsk}>{asking ? 'Keeping…' : 'Ask the Agent'}</button>}
         <button type="button" className="secondary" onClick={onClear}>Clear</button>
       </div>
     </div>
     {from?.note && <p className="fig-sel-note">{from.note}</p>}
-    {byLayer.slice(0, 3).map(([layer, rs]) => <Rows key={layer} record={record} layer={layer} rows={rs} />)}
+    {groups.slice(0, 3).map(g => <Rows key={g.layer} record={record} layer={g.layer} rows={g.rows} />)}
   </section>;
 }
 
