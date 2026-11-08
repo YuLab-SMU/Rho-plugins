@@ -6,9 +6,9 @@ import { spawnSync } from 'node:child_process';
 import { parseArgs } from 'node:util';
 const root = fileURLToPath(new URL('..', import.meta.url));
 const ids = ['documents', 'files', 'r', 'requirements', 'tables', 'media', 'charts', 'agent', 'annotations', 'markdown', 'console', 'kernel', 'figures', 'skills'];
-// The live session's own runners, and the R file it sources to describe plots, are runtime inputs,
+// The live session's own runners, and the R and Python files it loads to describe plots, are runtime inputs,
 // not project recipes.
-const runners = { kernel: ['runners/runner.R', 'runners/runner.py'], figures: ['r/figures.R'] };
+const runners = { kernel: ['runners/runner.R', 'runners/runner.py'], figures: ['r/figures.R', 'py/figures.py'] };
 const { values } = parseArgs({ options: { destination: { type: 'string' }, plugins: { type: 'string' } } });
 const selected = values.plugins === undefined ? ids : values.plugins.split(',').filter(Boolean);
 if (new Set(selected).size !== selected.length || selected.some(id => !ids.includes(id))) throw new Error('Select unique known plugin IDs.');
