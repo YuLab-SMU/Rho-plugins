@@ -408,6 +408,17 @@ fig.tight_layout()`);
     assert.equal(maFig.figure.plots[0].positions.x.transform, 'log-10');
     const first = markRow(maFig, { layer: 0, mark: 0 });
     assert.ok(Math.abs(first.built.x - first.values.baseMean) <= 1e-9 * first.built.x);
+    // Significant genes drawn again at log2 of their mean, over points drawn at the mean on a log
+    // axis, are bound through the transform, and the later layer says the two scales differ.
+    const over = await run(`sig = res[res.padj < 1e-6]
+fig, ax = plt.subplots(); ax.scatter(res.baseMean, res.log2FoldChange, s=2, c='grey'); ax.set_xscale('log')
+ax.scatter(np.log2(sig.baseMean), sig.log2FoldChange, s=4, c='red')`);
+    const scaleNote = 'Its x is log2(baseMean), while layer 0 of this plot draws x as baseMean on the same axis.';
+    const overFig = await record(host, over.cell.cellId);
+    assert.deepEqual(overFig.figure.layers.map(l => [l.source, l.mapping, l.bound, l.notes ?? null]), [
+      ['res', { x: 'baseMean', y: 'log2FoldChange' }, 'mark', null],
+      ['res', { x: 'log2(baseMean)', y: 'log2FoldChange' }, 'mark', [scaleNote]]]);
+    assert.deepEqual(over.plots[0].figure.notes, [scaleNote], 'the cell\'s plot output carries the note');
 
     // Rasterized points are drawn as points for the figure, and left rasterized. Genes not tested
     // are drawn at 0 and bound by their fold change. A count of 0 is not "near" every value through

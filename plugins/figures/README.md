@@ -95,9 +95,12 @@ for the figure; the figure and its picture are left as the code made them.
   (a DataFrame, a numeric Series with its index, a 2-D numeric array), they are bound to its
   rows in the table's order, skipping rows not drawn. A position drawn through `-log10`,
   `log10`, `log2`, `log2(x + 1)` or `log1p` of a column is matched through it, and the
-  layer's mapping says so (`y: -log10(padj)`). Marks all drawn at one value of the other axis
-  (genes not tested, drawn at 0) are bound by their own axis alone, and noted. Tables the
-  cell's code assigns, then those it reads, are compared first. A DataFrame is keyed by its
+  layer's mapping says so (`y: -log10(padj)`). When an earlier layer of the same Axes draws
+  the same column on the same axis through another transform, the later layer's note says so,
+  as in R: points added at `np.log2(sig.baseMean)` over an MA plot whose x axis draws
+  `baseMean` on a log scale. Marks all drawn at one value of the other axis (genes not
+  tested, drawn at 0) are bound by their own axis alone, and noted. Tables the cell's code
+  assigns, then those it reads, are compared first. A DataFrame is keyed by its
   text index (named after the index's name), else a unique text column.
 - A label (`ax.text`, `ax.annotate`) drawn at a bound point's position names that point's row,
   whatever order the labels were drawn in; otherwise one whose text names rows of a table
@@ -115,9 +118,9 @@ for the figure; the figure and its picture are left as the code made them.
   keep their intercept. Segments and polygons keep their ends and extents.
 - The legend and colour bar are the plot's scales; a seaborn facet's title (`dex = trt`) is
   its facet.
-- What the describer notices (marks drawn elsewhere than their values, labels naming other
-  rows) is kept as the layer's `notes`, carried in the cell's plot output for the Agent and
-  shown under the figure.
+- What the describer notices (marks drawn elsewhere than their values, a column drawn on
+  another scale than an earlier layer draws it, labels naming other rows) is kept as the
+  layer's `notes`, carried in the cell's plot output for the Agent and shown under the figure.
 
 A figure saved with `savefig()` to a file in the project is kept as a figure of that file,
 like a ggplot saved with `ggsave()`: the Notebook's runner watches `Figure.savefig`, the figure

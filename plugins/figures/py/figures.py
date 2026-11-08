@@ -20,9 +20,11 @@
 # numeric Series with its index, a 2-D numeric array) are bound to its rows, value for value and in
 # the table's order; rows that were not drawn are skipped. A position drawn from a column through a
 # common transform (-log10, log10, log2, log2(x + 1), log1p) is matched through it, and the layer's
-# mapping says so. A label that names rows of a table another layer of the same plot is bound to is
-# bound by its text. A heatmap's cells name their row, column and value, and the row of the session
-# table drawn when one holds the same values.
+# mapping says so; when an earlier layer of the same Axes draws that column on the same axis through
+# another transform, the later layer's note says the two place their marks on different scales. A
+# label that names rows of a table another layer of the same plot is bound to is bound by its text.
+# A heatmap's cells name their row, column and value, and the row of the session table drawn when
+# one holds the same values.
 #
 # A describer never changes the session: the ids it gives artists are taken back, and its output and
 # warnings are discarded. The protected resources are the session's time and the state folder: it
@@ -717,7 +719,8 @@ def describe(fig, namespace, saving, deadline, prefer=()):
 
     # Bind points, lines and labels to the session's tables, then labels by their text.
     tables = None
-    for l in layers:
+    form = lambda how: how[1].format('row' if how[0] == '.index' else how[0])
+    for i, l in enumerate(layers):
         if l.kind in ('points', 'lines', 'text') and l.n and 'x' in l.columns and np.isfinite(l.columns['x']).all() and np.isfinite(l.columns['y']).all():
             if tables is None: tables = session_tables(namespace, prefer)
             # A table another layer of the same plot is bound to is compared first.
@@ -727,6 +730,14 @@ def describe(fig, namespace, saving, deadline, prefer=()):
                 l.source, l.table, l.rows, l.mapping, l.how = found['table'].name, found['table'], found['rows'], found['mapping'], found.get('how')
                 if 'at' in found: l.notes.append('All %d marks are drawn at %s = %s.' % (l.n, found['other'], ('%.6g' % found['at'])))
                 elif found['differ']: l.notes.append('%d of %d marks are drawn at a %s other than their %s.' % (found['differ'], l.n, found['other'], l.mapping[found['other']]))
+                # A column an earlier layer of this plot draws on the same axis through another
+                # transform: the two layers place their marks on different scales.
+                for j in range(i - 1, -1, -1) if l.how else ():
+                    o = layers[j]
+                    if o.plot != l.plot or getattr(o, 'how', None) is None or o.table is not l.table: continue
+                    for a in ('x', 'y'):
+                        if l.how[a][0] == o.how[a][0] and l.how[a][1] != o.how[a][1]:
+                            l.notes.append('Its %s is %s, while layer %d of this plot draws %s as %s on the same axis.' % (a, form(l.how[a]), j, a, form(o.how[a])))
     # A label drawn at a bound point's position names that point's row, in whatever order the labels
     # were drawn: each is looked up through the point layer's own columns.
     for l in layers:
