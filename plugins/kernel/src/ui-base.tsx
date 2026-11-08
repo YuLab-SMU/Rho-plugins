@@ -44,7 +44,7 @@ export interface UiSnapshot {
 }
 // One conversation's share of the sessions, as its Studio shows them: the cells its Agent and the
 // person ran since it began, up to `at` during a replay (null for now).
-export interface SessionScope { principal: string | null; since: number | null; at: number | null }
+export type { SessionScope } from './session-scope.js';
 
 // A plot whose marks an extension bound to their rows, as the page that shows the Notebook draws
 // it: the page owns how it is drawn and what asking about it does; the picture stands in for it.

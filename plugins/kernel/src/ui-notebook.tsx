@@ -5,6 +5,7 @@ import { CellScriptFlow } from './ui-flow.js';
 import { Icon } from './ui-icons.js';
 import { PlaceChip, usePlaces, whereOf } from './ui-servers.js';
 import { takeCell } from './ui-notebook-target.js';
+import { scopedCells } from './session-scope.js';
 import { call, refused, agentName, clock, durationText, useShell, withShell, versionOf, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
 export { versionOf };
 
@@ -555,13 +556,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   const { read, off, problem, again } = useKernel(client, projectId, snapshot.cursor);
   const { places, setPlaces } = usePlaces(client, projectId, snapshot.cursor);
   const who = useAuthors(snapshot);
-  const cells = useMemo(() => {
-    const all = read?.cells ?? [];
-    if (!scope) return all;
-    const theirs = new Set(all.filter(c => c.by === scope.principal).map(c => c.sessionId));
-    return all.filter(c => (theirs.has(c.sessionId) || (c.by === me && scope.since !== null && Date.parse(c.queuedAt) >= scope.since))
-      && (scope.at === null || Date.parse(c.queuedAt) <= scope.at));
-  }, [read, scope?.principal, scope?.since, scope?.at]);
+  const cells = useMemo(() => scopedCells(read?.cells ?? [], scope), [read, scope?.principal, scope?.since, scope?.at, scope?.cellIds]);
   const latest = useMemo(() => {
     const out: Partial<Record<Language, Session>> = {};
     for (const s of read?.sessions ?? []) if (!out[s.language] || s.startedAt > out[s.language]!.startedAt) out[s.language] = s;

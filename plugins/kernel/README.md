@@ -197,7 +197,11 @@ The page supplies the scoped client and the project's facts (`UiSnapshot`: the p
 the page's cursor and the conversations, so a cell names the Agent that ran it), and
 callbacks to open a value, a server's file or a conversation as it places them. Inside a
 conversation's record it passes a `SessionScope`: the cells that conversation's Agent and
-the person ran since it began, up to the moment shown. `KernelShell` takes the page's code
+the person ran since it began, up to the moment shown. Native clients sharing a connection
+can supply `cellIds` from their retained tool receipts; these select exact Agent cells
+instead of treating the connection principal as one conversation. An empty list claims
+no Agent cells. This selection does not reconstruct earlier output states.
+`KernelShell` takes the page's code
 highlighting and Markdown; without them code stays plain and a server's skill shows as
 written. The views add their own styles once, in the page's color and type variables, and
 use its base controls (`text-button`, `primary`, `secondary`, `inline-error`).
