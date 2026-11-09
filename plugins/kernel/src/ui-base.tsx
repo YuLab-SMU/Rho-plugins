@@ -59,6 +59,8 @@ export interface KernelShell {
   openPath?(path: string): void;
   markdown?(text: string): ReactNode;
   figure?(slot: FigureSlot): ReactNode;
+  // A project image file as a URL this page can show, or null when it cannot be read.
+  imageUrl?(path: string): Promise<string | null>;
 }
 const Shell = createContext<KernelShell>({});
 export const ShellProvider = Shell.Provider;

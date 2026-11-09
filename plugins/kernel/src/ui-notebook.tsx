@@ -134,6 +134,19 @@ function Printed({ output }: { output: Output }) {
 // A plot the cell saved to a project file (ggsave): the file is named, and its figure is drawn from
 // the record kept for the bytes the cell saved, though the file may have been written again since.
 type SavedFigure = NonNullable<Cell['saved']>[number];
+// The file's picture stands in while its figure is read, and stays when the figure cannot be drawn.
+function SavedPicture({ path, label }: { path: string; label: string }) {
+  const { imageUrl } = useShell();
+  const [src, setSrc] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true; setSrc(undefined);
+    if (!imageUrl) { setSrc(null); return; }
+    imageUrl(path).then(url => { if (live) setSrc(url); }, () => { if (live) setSrc(null); });
+    return () => { live = false; };
+  }, [imageUrl, path]);
+  if (src === null) return null;
+  return <figure className="nb-plot" style={{ maxWidth: 504 }}>{src ? <img src={src} alt={label} /> : <div className="nb-plot-wait" style={{ aspectRatio: '7 / 5' }} aria-label="Reading the figure" />}</figure>;
+}
 function Saved({ client, projectId, cell, saved }: { client: UiClient; projectId: string; cell: Cell; saved: SavedFigure }) {
   const { figure, openPath } = useShell(), facts = useContext(FigureFacts);
   const name = saved.path.split('/').at(-1)!;
@@ -141,8 +154,9 @@ function Saved({ client, projectId, cell, saved }: { client: UiClient; projectId
     {saved.figure ? <span className="nb-saved-what">{saved.figure.bound.toLocaleString()} {saved.figure.bound === 1 ? 'mark' : 'marks'} bound to their rows</span>
       : saved.figureProblem ? <span className="nb-saved-what">kept as a picture: {saved.figureProblem}</span> : null}</p>;
   if (!saved.figure || !figure) return head;
-  return <>{head}{figure({ client, projectId, file: { path: saved.path, sha256: saved.sha256 }, width: 1008, label: `${name}, saved by ${cell.purpose ?? 'this cell'}`, name: `${name} (${languageName[cell.language]} cell ${cell.number})`,
-    cursor: facts.cursor, fallback: <div className="nb-plot-wait" style={{ maxWidth: 504, aspectRatio: '7 / 5' }} aria-label="Reading the figure" />,
+  const label = `${name}, saved by ${cell.purpose ?? 'this cell'}`;
+  return <>{head}{figure({ client, projectId, file: { path: saved.path, sha256: saved.sha256 }, width: 1008, label, name: `${name} (${languageName[cell.language]} cell ${cell.number})`,
+    cursor: facts.cursor, fallback: <SavedPicture path={saved.path} label={label} />,
     author: facts.who && (by => ({ name: facts.who!(by).name, mine: by === me })) })}</>;
 }
 

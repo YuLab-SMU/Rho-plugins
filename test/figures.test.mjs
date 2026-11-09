@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { KernelHost } from '@rho-workspace/plugin-kernel';
-import { Figures, rExtension, pythonExtension, parseRecord, elementMarks, markRow, plugin } from '@rho-workspace/plugin-figures';
+import { Figures, rExtension, pythonExtension, parseRecord, elementMarks, markRow, plugin, svgSource } from '@rho-workspace/plugin-figures';
 
 // Real R sessions describe real plots here. The describer needs ggplot2, svglite, xml2 and
 // jsonlite; patchwork is used where present. Without them these checks are skipped, not passed.
@@ -53,6 +53,12 @@ ggplot(res, aes(log2FoldChange, -log10(padj), colour = significant)) + geom_poin
     assert.equal(fig.figure.layers[0].bound, 'mark');
     const labelled = Number(spawnSync(rscript, ['-e', 'set.seed(1); n <- 400; x <- rnorm(n, 0, 2); cat(sum(10^-runif(n, 0, 12) < 1e-11))'], { encoding: 'utf8' }).stdout);
     assert.equal(fig.figure.layers[1].marks, labelled, 'the label layer has one mark for each labelled row');
+
+    // xml2 writes an XML declaration before an svg tag that names its namespace: the page keeps
+    // that one xmlns, as a second is an error to libxml2 (Safari, Electron 37).
+    assert.match(fig.svg, /^<\?xml/);
+    assert.equal(svgSource(fig.svg).match(/<svg\b[^>]*>/)[0].match(/\sxmlns=/g).length, 1);
+    assert.equal(svgSource('<svg width="1"/>'), '<svg xmlns="http://www.w3.org/2000/svg" width="1"/>');
 
     // Each drawn element names marks of this figure; together they cover every point.
     const svg = fig.svg;

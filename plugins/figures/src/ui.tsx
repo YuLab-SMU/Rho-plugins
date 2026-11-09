@@ -4,7 +4,7 @@
 // to show with its note. The page that shows a figure supplies the client and, optionally, how to
 // name a principal and what Ask does.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { elementMarks, markName, markRow, parseMark, parseRecord, type Cell, type FigureRecord, type MarkRow } from './record.js';
+import { elementMarks, markName, markRow, parseMark, parseRecord, svgNamespace, svgSource, type Cell, type FigureRecord, type MarkRow } from './record.js';
 import { ensureFigureStyles } from './ui-styles.js';
 
 export interface UiClient { call(method: string, input: any, signal?: AbortSignal): Promise<any> }
@@ -54,11 +54,9 @@ function readView(client: UiClient, projectId: string, ref: Ref) {
 
 // The R device's SVG, as elements this page can hold: no scripts, handlers or outside links.
 function svgElement(text: string): SVGSVGElement {
-  const svgNs = 'http://www.w3.org/2000/svg';
-  const head = text.slice(0, text.indexOf('>') + 1);
-  const doc = new DOMParser().parseFromString(/xmlns=/.test(head) ? text : text.replace(/<svg\b/, `<svg xmlns="${svgNs}"`), 'image/svg+xml');
+  const doc = new DOMParser().parseFromString(svgSource(text), 'image/svg+xml');
   const svg = doc.documentElement;
-  if (svg.localName !== 'svg' || svg.namespaceURI !== svgNs || doc.querySelector('parsererror')) throw new Error('The figure\'s picture could not be read.');
+  if (svg.localName !== 'svg' || svg.namespaceURI !== svgNamespace || doc.querySelector('parsererror')) throw new Error('The figure\'s picture could not be read.');
   doc.querySelectorAll('script, foreignObject').forEach(e => e.remove());
   doc.querySelectorAll('*').forEach(e => {
     for (const a of [...e.attributes]) {

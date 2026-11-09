@@ -8,7 +8,7 @@ import { operationContracts } from './operations.js';
 import { operationPresentation, presentation, skillPresentation } from './presentation.js';
 import { figureSummary, markName, markRow, matchMarks, parseMark, parseRecord, type MarkRef, type Where } from './record.js';
 
-export { parseRecord, figureSummary, markRow, matchMarks, markName, parseMark, elementMarks } from './record.js';
+export { parseRecord, figureSummary, markRow, matchMarks, markName, parseMark, elementMarks, svgSource } from './record.js';
 export type { FigureRecord, FigureLayer, FigureSource, MarkRef, MarkRow, Where } from './record.js';
 
 // The R file a live R session sources to describe what its plots draw (see r/figures.R), and the

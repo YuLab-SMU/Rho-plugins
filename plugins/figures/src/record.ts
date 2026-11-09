@@ -51,6 +51,16 @@ export function parseRecord(bytes: Uint8Array | string): FigureRecord {
   };
 }
 
+// A record's SVG as a browser parses it: an svg tag without its namespace is given it; one that
+// names it (xml2 writes it after an XML declaration) keeps the one it has. A second xmlns is an
+// error to libxml2, which parses XML in Safari and in Chromium before its Rust parser (Electron 37
+// and the apps built on it).
+export const svgNamespace = 'http://www.w3.org/2000/svg';
+export function svgSource(text: string): string {
+  const tag = /<svg\b[^>]*>/.exec(text)?.[0] ?? '';
+  return /\sxmlns\s*=/.test(tag) ? text : text.replace(/<svg\b/, `<svg xmlns="${svgNamespace}"`);
+}
+
 export interface MarkRef { layer: number; mark: number }
 export const markName = (m: MarkRef) => `${m.layer}.${m.mark}`;
 export function parseMark(name: string): MarkRef | null {
