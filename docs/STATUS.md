@@ -141,6 +141,9 @@ Notebook 0.5.16 lets several notebooks share a project's sessions: `kernel.run` 
 an identity its cell keeps, and a Notebook view given one lists the cells run in it and runs its
 own there, while the view without one lists every cell and names the notebook of each. There is
 still one session per language, with one numbering and one set of values.
+Console 0.3.2 adds the person's terminal (`TerminalHost`, `console.terminal.*`): their shell on a
+pseudo-terminal that a few lines of Python open on macOS and Linux, with the last 1 MiB of output
+kept for the page that draws it. It ends with Rho, and Windows has none yet.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

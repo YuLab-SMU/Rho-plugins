@@ -156,3 +156,69 @@ test('on Windows a command runs in cmd.exe unless a shell is named, and Stop end
   assert.equal((await ended(runner, long.commandId, 20000)).state, 'stopped');
   await runner.close();
 });
+
+// The terminal: the person's shell on a pseudo-terminal. Python opens it on macOS and Linux.
+import { TerminalHost, terminalLimits } from '@rho-workspace/plugin-console';
+const noPty = windows && 'Rho does not open a pseudo-terminal on Windows yet';
+// Reads until the text printed so far matches, or the shell ends.
+async function until(host, terminalId, pattern, state = { at: 0, text: '' }, ms = 15000) {
+  const end = Date.now() + ms;
+  for (;;) {
+    const read = await host.read(terminalId, state.at, 200);
+    state.at = read.nextOffset; state.text += Buffer.from(read.data, 'base64').toString('utf8'); state.terminal = read.terminal;
+    if (pattern.test(state.text) || (read.terminal.endedAt && !read.more)) return state;
+    if (Date.now() > end) throw new Error('The terminal did not print ' + pattern + ': ' + JSON.stringify(state.text.slice(-300)));
+  }
+}
+
+test('a terminal is a shell on a real terminal: it has a size, takes keys and Ctrl+C, and says how it ended', { skip: noPty }, async t => {
+  const root = await project(), host = new TerminalHost(root, { shell: '/bin/sh' });
+  t.after(() => host.shutdown());
+  const { terminal } = await host.open({ cols: 80, rows: 24, by: 'browser:local' });
+  assert.match(terminal.terminalId, /^t-[a-f0-9]{16}$/);
+  const seen = { at: 0, text: '' };
+  host.write(terminal.terminalId, 'test -t 0 && stty size && echo "term=$TERM" && pwd\n');
+  await until(host, terminal.terminalId, /24 80\r\nterm=xterm-256color\r\n.*rho-console-/s, seen);
+  host.resize(terminal.terminalId, 100, 30);
+  host.write(terminal.terminalId, 'stty size\n');
+  await until(host, terminal.terminalId, /30 100\r\n/, seen);
+  // Ctrl+C reaches the running program through the terminal, and the shell goes on.
+  host.write(terminal.terminalId, 'sleep 30\n');
+  await new Promise(r => setTimeout(r, 300));
+  host.write(terminal.terminalId, '\x03');
+  host.write(terminal.terminalId, 'echo "after=$?"\n');
+  await until(host, terminal.terminalId, /after=130\r\n/, seen);
+  assert.deepEqual(host.list().terminals.map(t => [t.terminalId, t.cols, t.rows, t.endedAt]), [[terminal.terminalId, 100, 30, null]]);
+  host.write(terminal.terminalId, 'exit 3\n');
+  const last = await until(host, terminal.terminalId, /never printed/, seen);
+  assert.deepEqual(last.terminal.exit, { code: 3, signal: null });
+  await assert.rejects(async () => host.write(terminal.terminalId, 'x'), e => e.kind === 'condition');
+  host.close(terminal.terminalId);
+  await assert.rejects(host.read(terminal.terminalId, 0), e => e.kind === 'not_found');
+});
+
+test('terminal limits: how many are open, the scrollback kept, and one write', { skip: noPty }, async t => {
+  const root = await project(), host = new TerminalHost(root, { shell: '/bin/sh', limits: { maxTerminals: 1, scrollbackBytes: 4096, maxWriteBytes: 16 } });
+  t.after(() => host.shutdown());
+  const { terminal } = await host.open({ cols: 80, rows: 24, by: 'browser:local' });
+  await assert.rejects(host.open({ cols: 80, rows: 24, by: 'browser:local' }), e => e.kind === 'limit' && e.details.limit === 'maxTerminals');
+  await assert.rejects(host.open({ cols: 1, rows: 24, by: 'browser:local' }), e => e.kind === 'invalid');
+  await assert.rejects(async () => host.write(terminal.terminalId, 'x'.repeat(17)), e => e.kind === 'limit' && e.details.limit === 'maxWriteBytes');
+  // Far more than the scrollback: a reader from the start is told how much is gone.
+  host.write(terminal.terminalId, 'seq 1 9999\n');
+  await until(host, terminal.terminalId, /9998\r\n9999\r\n/);
+  const read = await host.read(terminal.terminalId, 0);
+  assert.ok(read.dropped > 30000, 'older output is counted, not returned');
+  assert.equal(read.offset, read.terminal.kept);
+  assert.ok(read.terminal.bytes - read.terminal.kept < 4096 + 65536, 'about the scrollback is kept');
+  await assert.rejects(host.read(terminal.terminalId, 0, 0, terminalLimits.maxReadBytes + 1), e => e.kind === 'limit');
+  // Its shell ended, the terminal makes room for another.
+  host.write(terminal.terminalId, 'exit\n');
+  await until(host, terminal.terminalId, /never printed/);
+  const next = await host.open({ cols: 80, rows: 24, by: 'browser:local' });
+  assert.notEqual(next.terminal.terminalId, terminal.terminalId);
+  // Rho closing hangs up what is open.
+  assert.equal(host.list().terminals.length, 1);
+  host.shutdown();
+  assert.deepEqual(host.list().terminals, []);
+});

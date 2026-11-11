@@ -67,6 +67,7 @@ const names = {
   'annotation.decide': 'Record decision', 'annotation.create': 'Create', 'annotation.list': 'List', 'annotation.read': 'Read', 'annotation.reply': 'Reply',
   'context.create': 'Share and read context', 'context.read': 'Share and read context',
   'console.run': 'Run a command', 'console.list': 'List commands', 'console.events': 'Read who ran what', 'console.output': 'Read output', 'console.stop': 'Stop a command',
+  'console.terminal.open': 'Open a terminal', 'console.terminal.list': 'List terminals', 'console.terminal.read': 'Read a terminal', 'console.terminal.write': 'Type in a terminal', 'console.terminal.resize': 'Size a terminal', 'console.terminal.close': 'Close a terminal',
   'binding.list': 'Open and close views', 'binding.open': 'Open and close views', 'binding.close': 'Open and close views', 'binding.activity': 'Activity', 'binding.activity.append': 'Activity',
 };
 const views = { 'rho.editor': 'Editor', 'rho.object': 'Object', 'rho.table': 'Table', 'rho.scatter': 'Scatter', 'rho.media': 'Media', 'rho.feedback': 'Feedback', 'rho.agent-note': 'Agent note' };
@@ -88,7 +89,7 @@ test('all ten headless descriptors ship the Paper U1-06d copy and independent ef
     for (const operation of plugin.operations) {
       seen.push(operation.method);
       assert.equal(operation.presentation.displayName, names[operation.method], operation.method);
-      assert.equal(operation.presentation.runsCode, ['action.submit', 'requirements.prepare', 'console.run'].includes(operation.method));
+      assert.equal(operation.presentation.runsCode, ['action.submit', 'requirements.prepare', 'console.run', 'console.terminal.open', 'console.terminal.write'].includes(operation.method));
       assert.equal(operation.presentation.readOnly, operation.effect === 'read', operation.method);
       assert.equal(operation.presentation.readOnly && operation.presentation.runsCode, false);
     }

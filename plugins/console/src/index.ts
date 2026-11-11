@@ -10,6 +10,7 @@ import { operationPresentation, presentation } from './presentation.js';
 import type { commandStates } from './contract.js';
 
 export type CommandState = typeof commandStates[number];
+export { TerminalHost, terminalLimits, type TerminalLimits, type TerminalRecord } from './terminal.js';
 export interface ConsoleRecord {
   commandId: string; changeId: string; command: string; cwd: string; by: string;
   startedAt: string; endedAt: string | null; state: CommandState;
@@ -205,6 +206,7 @@ export class ConsoleRunner {
 const content = [
   'The Console records commands the person at this machine runs in the project folder.',
   'Agents run their own commands with their own tools; an Agent may read this record with console.list and console.output.',
+  'The person may also keep a terminal open here, their own shell. It is theirs alone: an Agent cannot open, read or type in it, and what is run there is not in this record.',
   'Use capability.list to see whether those reads are enabled for you.',
   'A command keeps its changeId: repeating it returns the same record and never runs it twice.',
   'How a command ended is what Rho observed: an exit code or signal, a requested stop, or unknown.',

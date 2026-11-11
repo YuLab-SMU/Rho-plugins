@@ -18,3 +18,15 @@ export const recordSchema = obj({
   stop: { anyOf: [obj({ requestedAt: time, by: text }), { type: 'null' }] },
   problem: { anyOf: [{ type: 'string' }, { type: 'null' }] },
 });
+
+// A terminal: the person's own shell on a pseudo-terminal, for as long as Rho runs. `bytes` is
+// what it has printed so far and `kept` the offset of the oldest byte a read can still return.
+export const terminalId = { type: 'string', pattern: '^t-[a-f0-9]{16}$' };
+export const terminalSize = { cols: { type: 'integer', minimum: 2, maximum: 500 }, rows: { type: 'integer', minimum: 1, maximum: 300 } };
+export const terminalSchema = obj({
+  terminalId, by: text, shell: text, cwd: { type: 'string' }, ...terminalSize,
+  startedAt: time, endedAt: { anyOf: [time, { type: 'null' }] },
+  exit: { anyOf: [obj({ code: { anyOf: [{ type: 'integer' }, { type: 'null' }] }, signal: { anyOf: [{ type: 'string' }, { type: 'null' }] } }), { type: 'null' }] },
+  bytes: { type: 'integer', minimum: 0 }, kept: { type: 'integer', minimum: 0 },
+  problem: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+});

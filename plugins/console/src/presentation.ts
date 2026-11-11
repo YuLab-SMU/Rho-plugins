@@ -26,4 +26,10 @@ export const operationPresentation = {
   'console.events': { order: 25, displayName: 'Read who ran what', description: "Lists the commands run here, newest first: who ran each, when, in which folder and how it ended.", readOnly: true, runsCode: false },
   'console.output': { order: 30, displayName: 'Read output', description: "Reads what a command printed, page by page.", readOnly: true, runsCode: false },
   'console.stop': { order: 40, displayName: 'Stop a command', description: "Asks a running command and the processes it started to stop.", readOnly: false, runsCode: false },
+  'console.terminal.open': { order: 50, displayName: 'Open a terminal', description: "Starts your shell on a terminal in the project folder. Only you can open, read or type in it.", readOnly: false, runsCode: true },
+  'console.terminal.list': { order: 52, displayName: 'List terminals', description: "Lists your open terminals.", readOnly: true, runsCode: false },
+  'console.terminal.read': { order: 54, displayName: 'Read a terminal', description: "Reads what a terminal printed since the last read, for the page that draws it.", readOnly: true, runsCode: false },
+  'console.terminal.write': { order: 56, displayName: 'Type in a terminal', description: "Sends what you type to the terminal's shell.", readOnly: false, runsCode: true },
+  'console.terminal.resize': { order: 57, displayName: 'Size a terminal', description: "Tells the terminal how many columns and rows the page shows.", readOnly: false, runsCode: false },
+  'console.terminal.close': { order: 58, displayName: 'Close a terminal', description: "Hangs up the terminal's shell, as closing a terminal window does.", readOnly: false, runsCode: false },
 } satisfies Record<string, EntryPresentation>;
