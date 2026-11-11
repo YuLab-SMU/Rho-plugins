@@ -122,6 +122,8 @@ export const objectSchema = obj({
   facts: { type: 'array', items: obj({ label: { type: 'string' }, value: { type: 'string' } }) },
   table: tableSchema, values: valuesSchema, children: obj({ total: count, offset: count, items: { type: 'array', items: childSchema } }),
   text: obj({ label: { type: 'string' }, text: { type: 'string' }, cut: { type: 'boolean' } }),
+  // What an R value draws when printed, as a PNG in base64, when the reading asked for it; or why it is left out.
+  picture: obj({ data: { type: 'string' }, width: count, height: count }), pictureProblem: { type: 'string' },
 }, ['name', 'expression', 'trail', 'kind', 'type', 'size', 'bytes', 'facts']);
 // shown: described; busy: a cell is running or waiting; none: no live session of that language;
 // missing: no such value or part; timeout: reading it took too long and was stopped; failed: the

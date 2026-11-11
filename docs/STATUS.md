@@ -87,7 +87,12 @@ cell and stop names a session; sessions end with their host and are recorded so.
 `kernel.inspect` reads one value as its session describes it (table, model, vector,
 list, function) with a page of it and the code that reaches each part, without
 starting, waiting for or changing a session, and each cell names the values it made,
-changed and removed. Notebook 0.4.0 draws its own views: `./ui` holds the Notebook, Variables,
+changed and removed. While a cell runs, a local R session on macOS or Linux is read from a
+copy of itself forked when the cell started (as it was then, `runningCell` naming the cell),
+unless its values take more than a quarter of the machine's memory; Windows, servers and
+Python still answer `busy` until the cell ends. A reading asked for it carries a PNG of what
+an R value draws when printed; a plot object read by its parts (lattice, an older ggplot2, a
+heatmap) and a Python figure have none yet. Notebook 0.4.0 draws its own views: `./ui` holds the Notebook, Variables,
 Plots, Data flow, Servers and a value's view, registered as six components, and `./code` the
 statement, load-code and data-flow functions that moved from Rho. Notebook 0.5.0 adds
 `kernel.events`, who ran each cell, when, where and how it ended; the contracts package carries

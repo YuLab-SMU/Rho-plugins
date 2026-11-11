@@ -43,7 +43,7 @@ export function ObjectView({ client, snapshot, language, name, onUse }: { client
   useEffect(() => {
     if (!visible) return;
     let live = true;
-    call(client, 'kernel.inspect', { projectId, language, name, path, offset, limit: objectViewLimits.rows, ...(sort ? { sort } : {}) }).then(answer => {
+    call(client, 'kernel.inspect', { projectId, language, name, path, offset, limit: objectViewLimits.rows, picture: true, ...(sort ? { sort } : {}) }).then(answer => {
       if (!live) return;
       setReading(answer); setProblem('');
       if (answer.state === 'shown') setKept({ key, reading: answer });
@@ -53,14 +53,14 @@ export function ObjectView({ client, snapshot, language, name, onUse }: { client
   const go = (next: number[]) => { setPath(next); setOffset(0); setSort(null); };
   const shown = kept && JSON.parse(kept.key)[0] === at ? kept.reading : null, object = shown?.object ?? null;
   // What the newest reading says when it is not the value itself.
-  const note = !reading ? null : reading.state === 'shown' ? null
-    : reading.state === 'busy' ? (object ? `A cell is running. This is ${object.expression} as it was after cell ${shown!.afterCell}.` : 'A cell is running. The value shows when it ends.')
+  const note = !reading ? null : reading.state === 'shown' ? (reading.runningCell && object ? `Cell ${reading.runningCell} is running. This is ${object.expression} as it was when the cell started.` : null)
+    : reading.state === 'busy' ? (object ? `A cell is running. This is ${object.expression} as it was after cell ${shown!.afterCell}.` : reading.problem ?? 'A cell is running. The value shows when it ends.')
     : reading.state === 'none' ? `There is no live ${session} session${object ? `; this is ${object.expression} as it was after cell ${shown!.afterCell}, and it is gone now` : ''}. A cell of ${session} starts a new session.`
     : reading.state === 'missing' ? `${reading.problem ?? name + ' is not in the session.'}${object ? ` This is it as it was after cell ${shown!.afterCell}.` : ''}`
     : reading.state === 'ended' ? `The ${session} session ended while the value was read.`
     : reading.problem ?? 'The value could not be read.';
   const trail = object?.trail ?? [];
-  return <div className={'ov' + (note && object ? ' stale' : '')} ref={root}>
+  return <div className={'ov' + (note && object && reading?.state !== 'shown' ? ' stale' : '')} ref={root}>
     <header className="ov-head">
       <nav className="ov-trail" aria-label="Where in the value">
         <button className="ov-crumb" disabled={!path.length} onClick={() => go([])}>{name}</button>
@@ -71,7 +71,7 @@ export function ObjectView({ client, snapshot, language, name, onUse }: { client
       {object && <div className="ov-actions"><code className="ov-expression" title="The code that reaches this value">{object.expression}</code>
         {onUse && (reading?.state === 'shown' || reading?.state === 'busy') && <button className="secondary" onClick={() => onUse(object.expression)}>Use in Notebook</button>}</div>}
     </header>
-    {(note || problem) && <p className={'ov-note' + (reading?.state === 'busy' ? '' : ' problem')} role="status">{problem || note}
+    {(note || problem) && <p className={'ov-note' + (!problem && (reading?.state === 'busy' || reading?.state === 'shown') ? '' : ' problem')} role="status">{problem || note}
       {(problem || ['timeout', 'failed', 'ended'].includes(reading?.state ?? '')) && <button className="text-button" onClick={() => setAgain(n => n + 1)}>Read again</button>}</p>}
     {!object ? (!reading && !problem ? <p className="ov-empty">Reading {name}…</p> : null) : <Body object={object} sort={sort} onSort={column => { setSort(s => s?.column !== column ? { column, descending: false } : !s.descending ? { column, descending: true } : null); setOffset(0); }} onPage={setOffset} onPart={index => go([...path, index])} />}
   </div>;
@@ -79,14 +79,17 @@ export function ObjectView({ client, snapshot, language, name, onUse }: { client
 
 function Body({ object, sort, onSort, onPage, onPart }: { object: Described; sort: Sort | null; onSort: (column: number) => void; onPage: (offset: number) => void; onPart: (index: number) => void }) {
   const facts = object.facts.length > 0 && <dl className="ov-facts">{object.facts.map((f, i) => <div key={i}><dt>{f.label}</dt><dd>{f.value}</dd></div>)}</dl>;
-  const text = (open: boolean) => object.text && <Folded title={object.text.label} open={open}><pre className="ov-text">{object.text.text}</pre>{object.text.cut && <p className="ov-small">Only the first part is shown.</p>}</Folded>;
+  // What the value draws when R prints it, and what it prints; a value that only draws has no printed text to show.
+  const picture = <>{object.picture && <img className="ov-picture" alt={`${object.expression} as R draws it`} width={object.picture.width} height={object.picture.height} src={'data:image/png;base64,' + object.picture.data} />}
+    {object.pictureProblem && <p className="ov-small">{object.pictureProblem}</p>}</>;
+  const text = (open: boolean) => object.text && (object.text.text || !(object.picture || object.pictureProblem)) && <Folded title={object.text.label} open={open}><pre className="ov-text">{object.text.text}</pre>{object.text.cut && <p className="ov-small">Only the first part is shown.</p>}</Folded>;
   const parts = (open: boolean) => object.children && <Folded title={`Parts · ${object.children.total}`} open={open}><Parts children={object.children} onPart={onPart} onPage={object.kind === 'list' ? onPage : undefined} /></Folded>;
   if (object.kind === 'table') return <>{facts}{object.table && <TableSection table={object.table} sort={sort} onSort={onSort} onPage={onPage} noun="rows" />}</>;
   if (object.kind === 'model') return <>{facts}{object.table && <TableSection title="Coefficients" table={object.table} sort={sort} onSort={onSort} onPage={onPage} noun="terms" plain />}{text(false)}{parts(false)}</>;
   if (object.kind === 'vector') return <>{facts}{object.table && <TableSection title="Counts" table={object.table} noun="values" plain />}{object.values && <Values values={object.values} onPage={onPage} />}{parts(false)}</>;
   if (object.kind === 'value') return <p className="ov-value">{object.values?.items[0]?.value}</p>;
   if (object.kind === 'list') return <>{facts}{object.children ? <Parts children={object.children} onPart={onPart} onPage={onPage} /> : text(true)}</>;
-  return <>{facts}{text(true)}{parts(false)}</>;
+  return <>{facts}{picture}{text(true)}{parts(false)}</>;
 }
 
 function Folded({ title, open, children }: { title: string; open: boolean; children: ReactNode }) {

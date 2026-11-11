@@ -17,10 +17,12 @@ export interface KernelOutputs {
 // and the part of it asked for: a table's page of rows, a list's children, a vector's values.
 export interface Inspected {
   state: 'shown' | 'busy' | 'none' | 'missing' | 'timeout' | 'failed' | 'ended';
-  sessionId: string | null; afterCell: number; readAt: string; problem: string | null;
+  // runningCell: the cell that ran while the value was read from the session's copy, as it was when that cell started.
+  sessionId: string | null; afterCell: number; runningCell?: number | null; readAt: string; problem: string | null;
   object: {
     name: string; expression: string; kind: 'table' | 'model' | 'vector' | 'list' | 'function' | 'value' | 'other';
     type: string; size: string; bytes: number; facts: { label: string; value: string }[]; trail: { index: number; name: string }[];
+    picture?: { data: string; width: number; height: number }; pictureProblem?: string;
     children?: { items: { expression: string; index: number; name: string; size: string; summary: string; type: string }[]; offset: number; total: number };
     table?: {
       columns: { missing: number; name: string; numeric: boolean; summary: string; type: string; values: string[] }[];

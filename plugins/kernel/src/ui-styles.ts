@@ -533,6 +533,7 @@ button.nb-cell-link:hover { background: var(--color-hover); text-decoration: und
 
 .ov-fold > summary { padding: 3px 0; color: var(--color-meta); font-size: 12px; font-weight: 650; letter-spacing: .3px; text-transform: uppercase; cursor: pointer; }
 .ov-fold[open] > summary { margin-bottom: 6px; }
+.ov-picture { display: block; max-width: min(100%, 760px); height: auto; margin: 2px 0 10px; border: 1px solid var(--color-hairline); border-radius: 8px; background: #fff; }
 .ov-text { margin: 0; max-height: 26em; overflow: auto; padding: 9px 12px; border-radius: 8px; background: var(--color-well); font: 12.5px/1.45 var(--font-mono); white-space: pre; }
 
 @container (max-width: 520px) {

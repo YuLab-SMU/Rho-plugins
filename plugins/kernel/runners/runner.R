@@ -272,6 +272,7 @@ setHook("before.grid.newpage", function() { snapshot(); started_page(TRUE) })
 drawn_page <- function(p) list(env = p$object$env %||% Find(function(env) is.function(env$describe_page), extensions),
   object = p$object$object %||% p$recorded, width = p$width, height = p$height, recorded = p$recorded, quiet = TRUE)
 run <- function(msg) {
+  box <- keep_fork(msg); on.exit(drop_fork(box), add = TRUE)
   id <- msg$id; plots <<- list(); saving <<- list(); closed <<- list(); own_devices <<- FALSE; ok <- TRUE; interrupted <- FALSE
   known <- ls(globalenv()); seen <- lineage_of(msg$code); files <- project_paths(seen$strings)
   recording()
@@ -501,12 +502,25 @@ describe_value <- function(x, msg, name, code, trail) {
   out
 }
 `%||%` <- function(a, b) if (is.null(a) || !length(a) || identical(a, "")) b else a
+bytes_text <- function(n) if (n >= 1024^3) sprintf("%.1f GB", n / 1024^3) else sprintf("%.1f MB", n / 1024^2)
+forked <- FALSE
 inspect <- function(msg) {
   reply <- function(x) emit(c(list(id = msg$id, kind = "inspected"), x))
   # A value that draws when printed (a ggplot) draws on a device of the reading's own, so the
-  # session's plot is unchanged.
-  before <- grDevices::dev.cur(); grDevices::pdf(NULL); mine <- grDevices::dev.cur()
-  on.exit({ if (mine %in% grDevices::dev.list()) grDevices::dev.off(mine); if (before %in% grDevices::dev.list()) grDevices::dev.set(before) }, add = TRUE)
+  # session's plot is unchanged. A reading asked for the picture (msg$picture) has that device
+  # write a PNG file, and sends the page drawn last with its answer. Only a value that is
+  # printed to be described draws: a value read by its parts is not printed for a picture.
+  # Cairo draws without the window system, which a forked copy of the session must not touch on
+  # macOS (R's own PNG device there ends the copy): the copy draws a picture with Cairo or none.
+  before <- grDevices::dev.cur(); shot <- NULL; cairo <- isTRUE(msg$picture) && isTRUE(capabilities("cairo"))
+  if (isTRUE(msg$picture) && (cairo || !forked)) {
+    shot <- tempfile("rho-reading-", fileext = ".png")
+    opened <- tryCatch(if (cairo) grDevices::png(shot, width = 7, height = 5, units = "in", res = 144, type = "cairo") else grDevices::png(shot, width = 7, height = 5, units = "in", res = 144), error = function(e) e)
+    if (inherits(opened, "error")) shot <- NULL
+  }
+  if (is.null(shot)) grDevices::pdf(NULL)
+  mine <- grDevices::dev.cur()
+  on.exit({ if (mine %in% grDevices::dev.list()) grDevices::dev.off(mine); if (before %in% grDevices::dev.list()) grDevices::dev.set(before); if (!is.null(shot)) unlink(shot) }, add = TRUE)
   tryCatch({
     if (!exists(msg$name, envir = globalenv(), inherits = FALSE)) return(reply(list(state = "missing", problem = paste(msg$name, "is not in the session."))))
     x <- get(msg$name, envir = globalenv(), inherits = FALSE); code <- sym(msg$name); trail <- list()
@@ -516,9 +530,92 @@ inspect <- function(msg) {
       i <- step + 1; x <- p$get(i); code <- p$code(code, i)
       trail[[length(trail) + 1]] <- list(index = step, name = if (nzchar(p$names[i])) p$names[i] else paste0("[[", i, "]]"))
     }
-    reply(list(state = "shown", object = suppressWarnings(suppressMessages(describe_value(x, msg, msg$name, code, trail)))))
+    object <- suppressWarnings(suppressMessages(describe_value(x, msg, msg$name, code, trail)))
+    if (isTRUE(msg$picture) && is.null(shot) && forked && !is.null(object$text) && !nzchar(object$text$text)) object$pictureProblem <- "What it draws shows when the cell ends: a picture read while a cell runs needs R's Cairo graphics, which this R does not have."
+    if (!is.null(shot)) {
+      # The device writes its file when it closes, and none when nothing was drawn on it.
+      grDevices::dev.off(mine)
+      bytes <- if (file.exists(shot)) file.info(shot)$size else 0
+      if (bytes > msg$limits$maxPicture) object$pictureProblem <- sprintf("Its drawing takes %s as a picture, more than the %s a reading keeps.", bytes_text(bytes), bytes_text(msg$limits$maxPicture))
+      else if (bytes > 0) object$picture <- list(data = jsonlite::base64_enc(readBin(shot, "raw", bytes)), width = 1008, height = 720)
+    }
+    reply(list(state = "shown", object = object))
   }, interrupt = function(e) reply(list(state = "timeout", problem = "Reading the value took too long and was stopped.")),
      error = function(e) reply(list(state = "failed", problem = conditionMessage(e))))
+}
+
+# Reading a value while a cell runs. This process runs one thing at a time, so when a cell
+# starts it forks a copy of itself (msg$fork, on Unix): the operating system shares the
+# session's memory with the copy, and only the pages either of them changes afterwards are held
+# twice. The copy holds every value as it was when the cell started. It runs nothing of the
+# cell, prints nothing, lets go of the session's output and answers, and is not among the
+# session's own parallel children (children(), mccollect()). A reading is left for it as a file
+# in the cell's folder, q-ID.json, and it answers in a-ID.json. It ends when the session ends the
+# cell, which renames that folder away, or when the session is gone.
+# Memory is what this protects: the cell may come to hold again what it changes of what the
+# session held when it started. A session whose values take more than msg$fork$maxBytes, by R's
+# own count after a collection of what is new, is not forked, and the folder's state.json says
+# so; a reading then waits for the cell as it did before.
+put_json <- function(file, x) {
+  tmp <- paste0(file, ".tmp")
+  ok <- tryCatch({ writeLines(jsonlite::toJSON(x, auto_unbox = TRUE, null = "null", digits = NA, force = TRUE), tmp, useBytes = TRUE); suppressWarnings(file.rename(tmp, file)) }, error = function(e) FALSE, warning = function(w) FALSE)
+  isTRUE(ok)
+}
+keep_fork <- function(msg) {
+  s <- msg$fork
+  if (is.null(s) || .Platform$OS.type != "unix" || !requireNamespace("parallel", quietly = TRUE)) return(NULL)
+  box <- file.path(s$dir, msg$id)
+  if (!dir.create(box, showWarnings = FALSE)) return(NULL)
+  none <- function(problem, ...) put_json(file.path(box, "state.json"), list(state = "none", problem = problem, ...))
+  held <- tryCatch(sum(gc(full = FALSE)[, 2]) * 1024^2, error = function(e) NA_real_)
+  if (is.na(held)) none("What the session's values take could not be measured, so the session is not copied for reading while a cell runs.")
+  else if (held > s$maxBytes) none(sprintf("The session's values take %s, more than the %s up to which the session is copied for reading while a cell runs.", bytes_text(held), bytes_text(s$maxBytes)), held = held)
+  else {
+    session <- Sys.getpid()
+    tryCatch(parallel::mcparallel(serve_fork(box, session, held), mc.set.seed = FALSE, silent = TRUE, detached = TRUE),
+      error = function(e) none(paste0("The session could not be copied for reading while the cell runs: ", conditionMessage(e))))
+  }
+  box
+}
+drop_fork <- function(box) {
+  if (is.null(box)) return(invisible())
+  # Renamed first: the copy and the reader stop finding the folder at once, and nothing new lands in it.
+  ended <- paste0(box, ".ended")
+  unlink(if (suppressWarnings(file.rename(box, ended))) ended else box, recursive = TRUE)
+}
+# Runs in the copy only.
+serve_fork <- function(box, session, held) {
+  ns <- asNamespace("parallel")
+  try(ns$closeStderr(TRUE), silent = TRUE)
+  try(close(answers), silent = TRUE)
+  try(ns$closeFD(3L), silent = TRUE)
+  said <- NULL; forked <<- TRUE
+  emit <<- function(x) said <<- x
+  say <<- function(x) invisible()
+  here <- function() dir.exists(box) && isTRUE(tools::pskill(session, 0L))
+  if (!put_json(file.path(box, "state.json"), list(state = "ready", pid = Sys.getpid(), held = held))) return(invisible())
+  one <- function(file) {
+    msg <- tryCatch(jsonlite::fromJSON(paste(readLines(file, warn = FALSE), collapse = "\n"), simplifyVector = FALSE), error = function(e) NULL)
+    if (is.null(msg)) return(unlink(file))
+    said <<- NULL
+    tryCatch(inspect(msg), error = function(e) NULL, interrupt = function(e) NULL)
+    if (is.null(said) || identical(said$state, "timeout")) {
+      # Interrupted. The reader takes its question back before it interrupts a reading that took
+      # too long. An interrupt with the question still there was for the cell: it is read again.
+      if (file.exists(file)) return(invisible())
+      said <<- list(id = msg$id, kind = "inspected", state = "timeout", problem = "Reading the value took too long and was stopped.")
+    }
+    put_json(file.path(box, paste0("a-", msg$id, ".json")), said); unlink(file)
+  }
+  again <- function(e) Sys.sleep(0.05)
+  repeat {
+    tryCatch({
+      if (!here()) break
+      asked <- list.files(box, pattern = "^q-.*[.]json$", full.names = TRUE)
+      for (file in asked) one(file)
+      if (!length(asked)) Sys.sleep(0.05)
+    }, interrupt = again, error = again)
+  }
 }
 
 emit(list(kind = "ready", version = R.version.string, executable = file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript"), pid = Sys.getpid(), host = Sys.info()[["nodename"]], folder = getwd(), variables = variables(200)))

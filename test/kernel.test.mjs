@@ -291,7 +291,8 @@ test('limits: code size, waiting cells, kept output and a program that is missin
 
 test('a value is read as its session describes it, without starting, waiting or changing anything', async t => {
   const root = await project();
-  const host = new KernelHost(root, { rscript, limits: { inspectTimeoutMs: 800 } });
+  // inspectForkShare 0: this session keeps no fork of itself, as none does on Windows, on a server or in Python.
+  const host = new KernelHost(root, { rscript, limits: { inspectTimeoutMs: 800, inspectForkShare: 0 } });
   t.after(() => host.close());
   assert.equal((await host.inspect({ language: 'r', name: 'd' })).state, 'none', 'reading starts no session');
   assert.deepEqual((await host.read()).sessions, []);
@@ -305,7 +306,12 @@ test('a value is read as its session describes it, without starting, waiting or 
   // A value that draws when printed (as a ggplot does) draws on the reading's own device: the
   // session's plot is unchanged, so the next cell shows none.
   await host.run({ language: 'r', code: 'print.drawn <- function(x, ...) { plot(1:3); invisible(x) }\nart <- structure(quote(f(a)), class = "drawn")', changeId: 'art', by: 'agent:a', waitMs: 30000 });
-  assert.equal((await host.inspect({ language: 'r', name: 'art' })).state, 'shown');
+  const art = await host.inspect({ language: 'r', name: 'art' });
+  assert.equal(art.state, 'shown'); assert.equal(art.object.picture, undefined, 'no picture unless asked');
+  // Asked for, what it draws comes with the reading as a PNG; a value that draws nothing has none.
+  const drawn = (await host.inspect({ language: 'r', name: 'art', picture: true })).object;
+  assert.match(drawn.picture.data, /^iVBORw0KGgo/); assert.deepEqual([drawn.picture.width, drawn.picture.height], [1008, 720]);
+  assert.equal((await host.inspect({ language: 'r', name: 'd', picture: true })).object.picture, undefined);
   assert.equal((await host.run({ language: 'r', code: 'k <- 1', changeId: 'after-art', by: 'agent:a', waitMs: 30000 })).cell.outputs.filter(o => o.kind === 'plot').length, 0);
   const model = (await host.inspect({ language: 'r', name: 'fit' })).object;
   assert.equal(model.kind, 'model');
@@ -338,6 +344,79 @@ test('a value is read as its session describes it, without starting, waiting or 
   assert.equal(reading.state, 'shown'); assert.equal(queued.cell.state, 'done');
   assert.match(text(queued.cell), /\[1\] 4/);
   assert.deepEqual((await host.inspect({ language: 'r', name: 'd' })).object.table.columns.map(c => c.name), ['x', 'g'], 'reading changed nothing');
+});
+
+// The R processes of a session's group, each as [pid, parent]: the session and its forks. On
+// Linux the group also holds the relay of the session's answers, which is not one.
+const group = (pid, all = false) => { const r = spawnSync('ps', ['-o', 'pid=,ppid=,comm=', '-g', String(pid)], { encoding: 'utf8' }); return r.stdout.trim().split('\n').filter(Boolean).map(line => line.trim().split(/\s+/)).filter(([, , name]) => all || path.basename(name) === 'R').map(([id, parent]) => [Number(id), Number(parent)]); };
+test('while a cell runs, a local R session is read as it was when the cell started', { skip: process.platform === 'win32' && 'a session is forked on Unix only' }, async t => {
+  const root = await project();
+  const host = new KernelHost(root, { rscript, limits: { inspectTimeoutMs: 800 } });
+  t.after(() => host.close());
+  await host.run({ language: 'r', code: 'd <- data.frame(x = c(3, 1, 2))\nl <- list(a = 1, b = list(c = "z"))\nslow <- structure(list(), class = "slow")\nprint.slow <- function(x, ...) Sys.sleep(30)\nprint.drawn <- function(x, ...) { plot(1:3); invisible(x) }\nart <- structure(quote(f(a)), class = "drawn")\nset.seed(7); seed <- .Random.seed', changeId: 'make', by: 'agent:a', waitMs: 30000 });
+  const pid = (await host.read()).sessions[0].pid;
+  // The cell changes d and makes a value at once, then goes on for a while.
+  const long = await host.run({ language: 'r', code: 'd$x <- d$x * 100\nmade <- 1\nSys.sleep(4)\nc(children = length(parallel:::children()), seed = identical(seed, .Random.seed), x = d$x[1])', changeId: 'long', by: 'agent:a' });
+  const during = await host.inspect({ language: 'r', name: 'd' });
+  assert.deepEqual([during.state, during.runningCell, during.afterCell], ['shown', 2, 1], 'read while cell 2 runs, as after cell 1');
+  assert.deepEqual(during.object.table.columns[0].values, ['3', '1', '2'], 'what the cell has changed since is not in it');
+  assert.equal((await host.inspect({ language: 'r', name: 'l', path: [1, 0] })).object.expression, 'l$b$c', 'a part is read the same way');
+  // What a value draws is drawn there too: with Cairo, as R's own PNG device ends a forked process on macOS.
+  const drawn = await host.inspect({ language: 'r', name: 'art', picture: true });
+  assert.deepEqual([drawn.state, drawn.runningCell], ['shown', 2]);
+  assert.ok(/^iVBORw0KGgo/.test(drawn.object.picture?.data ?? '') || /Cairo/.test(drawn.object.pictureProblem ?? ''), 'a picture, or why this R draws none while a cell runs');
+  const absent = await host.inspect({ language: 'r', name: 'made' });
+  assert.equal(absent.state, 'missing'); assert.match(absent.problem, /was not in the session when cell 2 started/);
+  // A reading that takes too long stops there; the cell is not interrupted and the next reading is answered.
+  const started = Date.now(), slow = await host.inspect({ language: 'r', name: 'slow' });
+  assert.deepEqual([slow.state, slow.runningCell], ['timeout', 2]); assert.ok(Date.now() - started < 4000);
+  assert.equal((await host.inspect({ language: 'r', name: 'd' })).state, 'shown');
+  assert.equal(group(pid).filter(([, parent]) => parent === pid).length, 1, 'the fork is the session\'s one child');
+  const ended = await settled(host, long.cell.cellId);
+  assert.equal(ended.state, 'done', 'the cell ran to its end');
+  assert.match(text(ended), /children\s+seed\s+x\s*\n\s*0\s+1\s+300/, 'the fork is not among the code\'s own parallel children, and the random numbers are where they were');
+  const after = await host.inspect({ language: 'r', name: 'd' });
+  assert.deepEqual([after.state, after.runningCell, after.afterCell, after.object.table.columns[0].values], ['shown', null, 2, ['300', '100', '200']], 'the session itself is read once the cell has ended');
+  await new Promise(r => setTimeout(r, 300));
+  assert.deepEqual(group(pid).map(([id]) => id), [pid], 'the fork ended with its cell');
+  // An interrupt is for the cell: it stops, and the session and its values stay.
+  const stopped = await host.run({ language: 'r', code: 'Sys.sleep(30)', changeId: 'stopped', by: 'agent:a' });
+  assert.equal((await host.inspect({ language: 'r', name: 'd' })).runningCell, 3);
+  await host.interrupt(stopped.cell.cellId, 'agent:a');
+  assert.equal((await settled(host, stopped.cell.cellId)).state, 'interrupted');
+  assert.deepEqual((await host.inspect({ language: 'r', name: 'd' })).object.table.columns[0].values, ['300', '100', '200']);
+  // Each of two cells in a row is read as it started.
+  const first = await host.run({ language: 'r', code: 'Sys.sleep(1); k <- 1', changeId: 'first', by: 'agent:a' });
+  const second = await host.run({ language: 'r', code: 'Sys.sleep(1); k <- 2', changeId: 'second', by: 'agent:a' });
+  assert.equal((await host.inspect({ language: 'r', name: 'k' })).state, 'missing');
+  await settled(host, first.cell.cellId);
+  const next = await host.inspect({ language: 'r', name: 'k' });
+  assert.deepEqual([next.state, next.runningCell, next.object.values.items[0].value], ['shown', 5, '1']);
+  await settled(host, second.cell.cellId);
+  // Stopping the session while a cell runs ends its fork too and leaves no folder of readings.
+  const last = await host.run({ language: 'r', code: 'Sys.sleep(30)', changeId: 'last', by: 'agent:a' });
+  assert.equal((await host.inspect({ language: 'r', name: 'd' })).state, 'shown');
+  const folders = async () => (await fs.readdir(tmpdir())).filter(name => name.startsWith('rho-kernel-forks-')).length, before = await folders();
+  await host.stop((await host.read()).sessions[0].sessionId, 'agent:a');
+  await settled(host, last.cell.cellId);
+  await new Promise(r => setTimeout(r, 300));
+  assert.deepEqual(group(pid, true), [], 'no process of the session is left');
+  assert.equal(await folders(), before - 1);
+});
+
+test('a session whose values take more than the limit is not forked, and a reading says why it waits', { skip: process.platform === 'win32' && 'a session is forked on Unix only' }, async t => {
+  const root = await project();
+  // A share of this machine's memory that any session is over.
+  const host = new KernelHost(root, { rscript, limits: { inspectForkShare: 1e-9 } });
+  t.after(() => host.close());
+  await host.run({ language: 'r', code: 'd <- 1', changeId: 'make', by: 'agent:a', waitMs: 30000 });
+  const running = await host.run({ language: 'r', code: 'Sys.sleep(1)', changeId: 'long', by: 'agent:a' });
+  const reading = await host.inspect({ language: 'r', name: 'd' });
+  assert.deepEqual([reading.state, reading.runningCell], ['busy', null]);
+  assert.match(reading.problem, /^Cell 2 is running\. The session's values take [\d.]+ MB, more than the 0\.0 MB up to which the session is copied for reading while a cell runs\. The value can be read when the cell ends\.$/);
+  assert.equal(group((await host.read()).sessions[0].pid).length, 1, 'no fork was made');
+  assert.equal((await settled(host, running.cell.cellId)).state, 'done');
+  assert.equal((await host.inspect({ language: 'r', name: 'd' })).state, 'shown');
 });
 
 test('Python values: a data frame, an array, a dict, an object and a value that takes too long', async t => {

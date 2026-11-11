@@ -73,9 +73,29 @@ type, missing count and summary, sorted by a column on request; a model's formul
 statistics and coefficients (R `lm`, `glm` and other fits with `coef`, `htest`;
 statsmodels results; scikit-learn estimators); a vector's elements and, when
 categorical, its counts; a list's parts; a function's code; and otherwise the value as
-printed. Reading never starts a session, answers `busy` while a cell runs or waits,
-runs nothing the person wrote except the value's own printing and changes nothing; a
-cell asked for during a reading waits for it.
+printed. With `picture: true`, an R value that draws when it is printed (a ggplot)
+comes with a PNG of what it drew last, drawn on a device of the reading's own with
+Cairo where R has it; the Notebook's value view asks for it, and a reading without it
+carries no picture. Reading never starts a session, waits for no cell, runs nothing the
+person wrote except the value's own printing and changes nothing; a cell asked for
+during a reading of the session itself waits for it.
+
+While a cell runs, a local R session on macOS or Linux is still read. When the cell
+starts, the session forks a copy of itself: the operating system shares the session's
+memory with the copy, and only what either changes afterwards is held twice. The copy
+answers readings left as files in a temporary folder of that cell, so a value is read
+as it was when the cell started: `runningCell` names the cell and `afterCell` the one
+before it, and a name the cell has made since answers `missing` and says so. The copy
+runs nothing of the cell, prints nothing and is not among the session's own parallel
+children (`parallel::mcparallel(detached = TRUE)`); the random number stream is where
+it was. It ends with the cell, with an interrupt's cell, and with the session. A
+reading of it that takes too long interrupts the copy alone, never the cell. The copy
+draws a picture with Cairo only: R's own PNG device on macOS ends a forked process, so
+an R without Cairo says the drawing shows when the cell ends. A session on Windows or
+on a server, a Python session, a cell that is still waiting, and a session too large
+to copy (below) answer `busy` with the reason until the cell ends. Measured on a Mac
+with R 4.5.2, the copy adds about 10 ms to a cell (2 ms of it the fork in a small
+session, 9 ms beside a 4 GB matrix), and a reading of it takes 30 to 130 ms.
 
 A cell keeps its `changeId` per caller: repeating the same identity returns the same
 cell and never runs it twice. Cells run one at a time in their session, in the order
@@ -184,7 +204,16 @@ limit. Reading a value shows at most 50 columns, pages of 50 rows, elements or p
 (at most 200 when asked), 200 parts beside a page, cells of 120 characters and 16 KiB
 of printed text, each marked when cut; a table of more than a million rows is not
 sorted, with the reason. A reading is interrupted after 10 seconds (`timeout`) and
-the session goes on. Memory and time used by the code itself are not bounded here.
+the session goes on. A value's picture is at most 1 MiB (`inspectPictureBytes`); a
+larger one is left out with both sizes and the rest of the reading stays. The copy
+read while a cell runs protects this machine's memory:
+a session whose values take more than a quarter of it (`inspectForkShare`, by R's own
+count after collecting what is new; 0 makes no copy at all) is not copied for that
+cell, and a reading then answers `busy` with both sizes. A copy that has not answered
+within 2 seconds of being asked whether it is there is not waited for, and one that
+does not come back from a reading 5 seconds after its interrupt is ended, after which
+that cell's readings answer `busy`. Memory and time used by the code itself are not
+bounded here.
 
 The R session needs R with the `jsonlite` package; the Python session needs Python
 3, and matplotlib for figures; on a server they need the same there, with `bash`,

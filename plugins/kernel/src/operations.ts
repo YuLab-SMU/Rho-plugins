@@ -25,12 +25,15 @@ export const operationContracts = {
     outputSchema: obj({ mediaType: { const: 'image/png' }, data: { type: 'string' }, width: { type: 'integer' }, height: { type: 'integer' } }),
     requires: [] as string[], effect: 'read' as const,
   },
-  // Reads one value without changing it. It never starts a session and waits for no cell: while
-  // one runs or waits, the answer is busy. path names parts by their index among the parts a
-  // reading listed; offset, limit and sort choose the page of rows, elements or parts.
+  // Reads one value without changing it. It never starts a session and waits for no cell. While
+  // a cell runs, a local R session on Unix answers from a copy of itself made when that cell
+  // started: runningCell is then that cell's number and afterCell the one before it. Any other
+  // session answers busy while a cell runs or waits. path names parts by their index among the
+  // parts a reading listed; offset, limit and sort choose the page of rows, elements or parts.
+  // picture asks for what an R value draws when it is printed, as a PNG beside its description.
   'kernel.inspect': {
-    inputSchema: obj({ language, name: { type: 'string', minLength: 1, maxLength: 256 }, path: { type: 'array', items: { type: 'integer', minimum: 0 }, maxItems: 16 }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200 }, sort: sortInput }, ['language', 'name']),
-    outputSchema: obj({ state: { enum: [...inspectStates] }, sessionId: { anyOf: [sessionId, { type: 'null' }] }, afterCell: { type: 'integer', minimum: 0 }, readAt: { type: 'string', minLength: 1 }, problem: { anyOf: [{ type: 'string' }, { type: 'null' }] }, object: { anyOf: [objectSchema, { type: 'null' }] } }),
+    inputSchema: obj({ language, name: { type: 'string', minLength: 1, maxLength: 256 }, path: { type: 'array', items: { type: 'integer', minimum: 0 }, maxItems: 16 }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200 }, sort: sortInput, picture: { type: 'boolean' } }, ['language', 'name']),
+    outputSchema: obj({ state: { enum: [...inspectStates] }, sessionId: { anyOf: [sessionId, { type: 'null' }] }, afterCell: { type: 'integer', minimum: 0 }, runningCell: { anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }] }, readAt: { type: 'string', minLength: 1 }, problem: { anyOf: [{ type: 'string' }, { type: 'null' }] }, object: { anyOf: [objectSchema, { type: 'null' }] } }),
     requires: [] as string[], effect: 'read' as const,
   },
   // Each names what it acts on, so a repeated request never reaches a later cell or session.

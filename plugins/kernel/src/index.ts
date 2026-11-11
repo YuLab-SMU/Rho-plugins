@@ -1,7 +1,8 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { execFile, spawn, type ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs/promises';
 import { constants as fsConstants } from 'node:fs';
 import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash, randomBytes } from 'node:crypto';
@@ -54,7 +55,7 @@ export interface CellRecord {
   program?: string | null; version?: string | null;
   saved?: SavedFigure[];
 }
-export type InspectInput = { language: Language; name: string; path?: number[]; offset?: number; limit?: number; sort?: { column: number; descending: boolean } };
+export type InspectInput = { language: Language; name: string; path?: number[]; offset?: number; limit?: number; sort?: { column: number; descending: boolean }; picture?: boolean };
 // The protected resources are this machine's processes and memory, and the project's state
 // folder. At most one session runs per language, and at most maxQueued cells wait in each. A
 // cell keeps its first maxOutputBytes of output (the rest is counted) and at most maxPlots
@@ -66,7 +67,16 @@ export type InspectInput = { language: Language; name: string; path?: number[]; 
 // parts (inspectRows unless asked), cells of inspectCellChars characters and a printed form of
 // inspectTextBytes; a table sorts only up to inspectSortRows rows. A reading that takes longer
 // than inspectTimeoutMs is interrupted, and the session waits for it no longer than
-// inspectGiveUpMs more before the caller is told.
+// inspectGiveUpMs more before the caller is told. A reading asked for the picture of what an R
+// value draws when it is printed keeps a PNG of at most inspectPictureBytes; a larger one is
+// left out with the reason, and the rest of the reading stays.
+// While a cell runs, a local R session on Unix answers readings from a fork of itself made when
+// the cell started. The fork shares the session's memory until either of them changes a page,
+// so the cell may come to hold a second time what it changes of what the session held: a
+// session whose values take more than inspectForkShare of this machine's memory, by R's own
+// count, is not forked (0: none ever is), and a reading then answers busy until the cell ends,
+// as it does for every other session. A fork that has not said within inspectForkStartMs
+// whether it is there is not waited for.
 // A cell names at most this many project files it read or wrote.
 export const lineageLimits = { files: 32 };
 // Places: at most maxPlaces are named. A session on a server that is not ready within
@@ -78,7 +88,7 @@ export const lineageLimits = { files: 32 };
 // own limit for a command, after which serverctl ends it; a server's skill is read up to
 // serverSkillBytes.
 export const kernelLimits = { maxCells: 500, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxFigureBytes: 16 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
-  inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000,
+  inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000, inspectForkShare: 0.25, inspectForkStartMs: 2000, inspectPictureBytes: 1024 * 1024,
   maxPlaces: 16, remoteStartTimeoutMs: 90000, remoteCheckTimeoutMs: 60000, remoteListTimeoutMs: 30000, remoteSignalTimeoutMs: 15000, remoteEntries: 500, remoteListBytes: 1024 * 1024, remoteCopyBytes: 64 * 1024 * 1024, remoteCopyTimeoutMs: 600000, maxCopies: 500,
   serverctlReadMs: 15000, serverctlSessionS: 7 * 24 * 3600, serverSkillBytes: 256 * 1024 };
 export type KernelLimits = typeof kernelLimits;
@@ -97,6 +107,9 @@ interface Live {
   answered: number; awaiting?: { seq: number; place: (text: string) => void; timer: NodeJS.Timeout };
   // The value being read now, and the readings waiting their turn.
   looking: { id: string; done: (msg: any) => void } | null; lookups: Promise<unknown>;
+  // Where a local R session on Unix leaves a folder per running cell for readings of its fork
+  // (runner.R, keep_fork), and the running cell whose fork is known not to answer, with why.
+  forks: string | null; forkGone: { cell: CellRecord; problem: string } | null;
   // On Windows an R session answers on a named pipe of its own (answerPipe), closed once it has.
   pipe?: net.Server; answering?: net.Socket; answersClosed?: Promise<void>;
 }
@@ -338,11 +351,12 @@ export class KernelHost {
     const source = place ? await fs.readFile(runners[language]) : null;
     const runner = source && `.cache/rho/kernel/runner-${digest(source).slice(0, 16)}${language === 'r' ? '.R' : '.py'}`;
     const pipe = windows && language === 'r' ? await answerPipe() : null;
+    const forks = !place && !windows && language === 'r' && this.limits.inspectForkShare > 0 ? await fs.mkdtemp(path.join(os.tmpdir(), 'rho-kernel-forks-')).catch(() => null) : null;
     const child = place ? await this.transport(place).spawn(place, sessionCommand(place, language === 'r' ? 'Rscript' : 'python3', runner!, source!.length), root)
       : spawn(program, [runners[language], root], { cwd: root, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe', 'pipe'], env: { ...(windows ? windowsEnvironment(process.env) : process.env), MPLBACKEND: 'Agg', PYTHONUNBUFFERED: '1', ...(pipe ? { RHO_KERNEL_ANSWERS: pipe.name } : {}), ...(this.options.extensions?.[language]?.length ? { RHO_KERNEL_EXTENSIONS: this.options.extensions[language]!.join(path.delimiter) } : {}) } });
     let settle = () => {};
     const ended = new Promise<void>(resolve => { settle = resolve; });
-    const live: Live = { started: selected, root, ended, settle, record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve(), pipe: pipe?.server };
+    const live: Live = { started: selected, root, ended, settle, record, child, place, remotePid: null, answers: '', early: '', order: Promise.resolve(), queue: [], current: null, stopping: false, printed: '', mark: 0, held: [], answered: 0, looking: null, lookups: Promise.resolve(), forks, forkGone: null, pipe: pipe?.server };
     this.live.set(language, live);
     record.pid = place ? null : child.pid ?? null;
     const startMs = place ? this.limits.remoteStartTimeoutMs : this.limits.startTimeoutMs;
@@ -466,7 +480,8 @@ export class KernelHost {
     live.current = cell; cell.state = 'running'; cell.startedAt = now(); live.record.state = 'busy';
     cell.program = live.record.program ?? null; cell.version = live.record.version;
     // A session on a server draws in its own temporary folder and sends each plot with its answer.
-    live.child.stdin!.write(JSON.stringify({ op: 'run', id: cell.cellId, number: cell.number, code: cell.code, plots: live.place ? null : await this.plots(), inline: !!live.place, maxPlots: this.limits.maxPlots, maxVariables: this.limits.maxVariables }) + '\n');
+    live.child.stdin!.write(JSON.stringify({ op: 'run', id: cell.cellId, number: cell.number, code: cell.code, plots: live.place ? null : await this.plots(), inline: !!live.place, maxPlots: this.limits.maxPlots, maxVariables: this.limits.maxVariables,
+      ...(live.forks ? { fork: { dir: live.forks, maxBytes: Math.floor(os.totalmem() * this.limits.inspectForkShare) } } : {}) }) + '\n');
     this.changed();
   }
 
@@ -561,6 +576,7 @@ export class KernelHost {
   private end(live: Live, code: number | null) {
     clearTimeout(live.timer);
     live.looking?.done({ state: 'ended', problem: 'The session ended while the value was read.' });
+    if (live.forks) void fs.rm(live.forks, { recursive: true, force: true }).catch(() => {});
     const record = live.record;
     // ssh ends with 255 when the connection, not the session, ended: the process on the server
     // was not seen to end, and what the running cell did there was not observed.
@@ -620,14 +636,25 @@ export class KernelHost {
     return { session: structuredClone(live.record) };
   }
 
-  // Reading a value never starts a session and never waits for a cell: while one runs or waits
-  // the answer is busy. Readings of one session go one at a time, and a cell queued meanwhile
-  // starts when the reading ends. The value is read as the session holds it now.
-  async inspect(input: InspectInput) {
+  // Reading a value never starts a session and never waits for a cell. While a cell runs, a
+  // session that keeps a fork of itself is read there, as it was when the cell started
+  // (runningCell names the cell); any other session answers busy while a cell runs or waits.
+  // Readings of one session go one at a time, and a cell queued meanwhile starts when a reading
+  // of the session itself ends. The value is read as the session holds it now.
+  async inspect(input: InspectInput, tries = 0): Promise<{ state: string; sessionId: string | null; afterCell: number; runningCell: number | null; readAt: string; problem: string | null; object: unknown }> {
     await this.load();
     const live = this.live.get(input.language);
-    const answer = (state: string, extra: { problem?: string | null; object?: unknown } = {}) => ({ state, sessionId: live?.record.sessionId ?? null, afterCell: live?.record.cells ?? 0, readAt: now(), problem: extra.problem ?? null, object: extra.object ?? null });
+    const answer = (state: string, extra: { problem?: string | null; object?: unknown } = {}) => ({ state, sessionId: live?.record.sessionId ?? null, afterCell: live?.record.cells ?? 0, runningCell: null as number | null, readAt: now(), problem: extra.problem ?? null, object: extra.object ?? null });
     if (!live || live.stopping) return answer('none', { problem: `There is no live ${input.language === 'r' ? 'R' : 'Python'} session.` });
+    const cell = live.current;
+    if (cell && live.forks && tries < 3) {
+      const reading = live.lookups.then(() => live.current === cell ? this.askFork(live, cell, input) : null).catch(() => null);
+      live.lookups = reading;
+      const got = await reading;
+      // The cell ended meanwhile: the session itself is read, or the next cell's fork.
+      if (!got) return this.inspect(input, tries + 1);
+      return got.state === 'busy' ? answer('busy', got) : { ...answer(got.state, got), afterCell: cell.number - 1, runningCell: cell.number };
+    }
     const busy = () => live.record.state === 'starting' ? 'The session is starting.' : live.current || live.queue.length ? 'A cell is running in the session; the value can be read when it ends.' : null;
     if (busy()) return answer('busy', { problem: busy() });
     const reading = live.lookups.then(() => {
@@ -640,12 +667,65 @@ export class KernelHost {
         const giveUp = setTimeout(() => tell({ state: 'timeout', problem: 'Reading the value took too long; the session has not answered yet.' }), limits.inspectTimeoutMs + limits.inspectGiveUpMs);
         // The session stays held until it answers, whatever the caller was told.
         live.looking = { id: lookId, done: msg => { clearTimeout(slow); clearTimeout(giveUp); if (live.looking?.id === lookId) live.looking = null; tell(msg); void this.pump(live); } };
-        live.child.stdin!.write(JSON.stringify({ op: 'inspect', id: lookId, name: input.name, path: input.path ?? [], offset: input.offset ?? 0, limit: Math.min(input.limit ?? limits.inspectRows, 200), sort: input.sort ?? null,
-          limits: { maxColumns: limits.inspectColumns, maxChildren: limits.inspectChildren, maxCellChars: limits.inspectCellChars, maxText: limits.inspectTextBytes, maxSortRows: limits.inspectSortRows } }) + '\n');
+        live.child.stdin!.write(JSON.stringify({ op: 'inspect', id: lookId, ...this.question(input) }) + '\n');
       });
     });
     live.lookups = reading.catch(() => {});
     return reading;
+  }
+  // What a reading asks its session, or the session's fork.
+  private question(input: InspectInput) {
+    const limits = this.limits;
+    return { name: input.name, path: input.path ?? [], offset: input.offset ?? 0, limit: Math.min(input.limit ?? limits.inspectRows, 200), sort: input.sort ?? null, picture: !!input.picture,
+      limits: { maxColumns: limits.inspectColumns, maxChildren: limits.inspectChildren, maxCellChars: limits.inspectCellChars, maxText: limits.inspectTextBytes, maxSortRows: limits.inspectSortRows, maxPicture: limits.inspectPictureBytes } };
+  }
+  // One reading of the fork a session made when this cell started. The reading is left as a file
+  // in the cell's folder and the fork answers in another; null says the cell ended meanwhile.
+  private async askFork(live: Live, cell: CellRecord, input: InspectInput): Promise<{ state: string; problem?: string | null; object?: unknown } | null> {
+    const box = path.join(live.forks!, cell.cellId), limits = this.limits;
+    const running = () => live.current === cell && !live.stopping && live.record.state !== 'ended';
+    const read = async (name: string) => { try { return JSON.parse(await fs.readFile(path.join(box, name), 'utf8')); } catch { return null; } };
+    const wait = async (name: string, ms: number, alive: () => boolean = () => true) => {
+      for (const end = Date.now() + ms;;) {
+        const got = await read(name);
+        if (got) return got;
+        if (!running() || !alive() || Date.now() >= end) return read(name);
+        await new Promise(resolve => setTimeout(resolve, 20));
+      }
+    };
+    const waits = (why: string) => ({ state: 'busy', problem: `Cell ${cell.number} is running. ${why} The value can be read when the cell ends.` });
+    const gone = (why: string) => { live.forkGone = { cell, problem: why }; return waits(why); };
+    if (live.forkGone?.cell === cell) return waits(live.forkGone.problem);
+    const state = await wait('state.json', limits.inspectForkStartMs);
+    if (!running()) return null;
+    if (!state) return gone('Its session made no copy of itself to read meanwhile.');
+    if (state.state !== 'ready') return gone(typeof state.problem === 'string' ? state.problem : 'Its session made no copy of itself to read meanwhile.');
+    const pid = Number(state.pid), alive = () => { try { process.kill(pid, 0); return true; } catch { return false; } };
+    const lookId = id('i-'), asked = path.join(box, `q-${lookId}.json`), answered = `a-${lookId}.json`;
+    try {
+      await fs.writeFile(asked + '.tmp', JSON.stringify({ id: lookId, ...this.question(input) }));
+      await fs.rename(asked + '.tmp', asked);
+    } catch { return running() ? gone('The copy its session kept to read meanwhile is gone.') : null; }
+    // A reading that takes too long is taken back and the fork alone interrupted: with the
+    // question gone it knows the interrupt was for the reading, not for the cell.
+    const slow = setTimeout(() => void fs.rm(asked, { force: true }).catch(() => {}).then(() => this.signalFork(live, pid, 'SIGINT')), limits.inspectTimeoutMs);
+    const got = await wait(answered, limits.inspectTimeoutMs + limits.inspectGiveUpMs, alive);
+    clearTimeout(slow);
+    void fs.rm(asked, { force: true }).catch(() => {}); void fs.rm(path.join(box, answered), { force: true }).catch(() => {});
+    if (got) return got.state === 'missing' && !(input.path ?? []).length ? { state: 'missing', problem: `${input.name} was not in the session when cell ${cell.number} started, and the cell is still running.` } : { state: String(got.state), problem: got.problem ?? null, object: got.object ?? null };
+    // A reading the fork did not come back from holds it for good, so it is ended: at once, or
+    // after the time a reading may take when the cell ended first.
+    if (!running()) { setTimeout(() => void this.signalFork(live, pid, 'SIGKILL'), limits.inspectTimeoutMs + limits.inspectGiveUpMs).unref(); return null; }
+    if (!alive()) return gone('The copy its session kept to read meanwhile has ended.');
+    void this.signalFork(live, pid, 'SIGKILL');
+    live.forkGone = { cell, problem: 'A reading of the copy its session kept took too long, and the copy was ended.' };
+    return { state: 'timeout', problem: 'Reading the value took too long.' };
+  }
+  // Signals a session's fork: only while it is still that session's child, as its number may
+  // name another process by now.
+  private async signalFork(live: Live, pid: number, signal: 'SIGINT' | 'SIGKILL') {
+    const parent = await new Promise<number>(resolve => execFile('ps', ['-o', 'ppid=', '-p', String(pid)], (error, stdout) => resolve(error ? NaN : Number(String(stdout).trim()))));
+    if (live.record.pid && parent === live.record.pid) try { process.kill(pid, signal); } catch { /* it ended meanwhile */ }
   }
 
   // The places a session can run in, where each language's next session starts (this machine
@@ -797,6 +877,7 @@ export class KernelHost {
     }));
     for (const live of [...this.live.values()]) {
       live.looking?.done({ state: 'ended', problem: 'Rho closed while the value was read.' });
+      if (live.forks) void fs.rm(live.forks, { recursive: true, force: true }).catch(() => {});
       Object.assign(live.record, { state: 'ended', endedAt: now(), ending: 'rho-closed', variables: [] });
       if (live.current) Object.assign(live.current, { state: 'unknown', endedAt: now(), problem: 'Rho closed while this cell ran.' });
       for (const cell of live.queue) Object.assign(cell, { state: 'not-run', endedAt: now(), problem: 'Rho closed before this cell ran.' });
