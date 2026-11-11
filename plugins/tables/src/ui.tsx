@@ -193,12 +193,13 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
   }, [client, projectId, resource?.id, resource?.version, meta?.entityKey, meta?.namespace, view.id, selectable, selectionScope?.id]);
 
   if (!resource) return <p style={{ padding: 12, fontSize: 12 }}>This view has no table.</p>;
-  const bar: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', padding: '4px 0 12px', fontSize: 13, color: 'var(--text-muted, #5f6873)', flexWrap: 'wrap' };
+  const bar: CSSProperties = { display: 'flex', gap: 8, alignItems: 'center', padding: '6px 12px 8px', fontSize: 13, color: 'var(--text-muted, #5f6873)', flexWrap: 'wrap' };
   const control: CSSProperties = { font: 'inherit', fontSize: 13, minHeight: 30, border: '1px solid var(--border, #d6dae0)', borderRadius: 8, padding: '0 10px', maxWidth: '100%', minWidth: 0, background: 'var(--surface, #fff)', color: 'var(--text, #1f2328)' };
   const count = meta ? (filter ? `${meta.filtered.toLocaleString()} of ${meta.total.toLocaleString()} rows` : `${meta.total.toLocaleString()} rows`) : 'Reading rows…';
   return <div ref={root} style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
     <div style={bar} role="toolbar" aria-label="Table">
-      <span>{count}</span>
+      {/* A table without a row key says so where its rows are counted, not as a standing sentence. */}
+      <span title={meta && !meta.entityKey && selectable ? 'This table has no row key, so its rows cannot be selected.' : undefined}>{count}</span>
       {selected > 0 && <span>· {selected} selected</span>}
       {selected > 0 && requestFeedback && <button style={control} onClick={() => { void selectionQueue.current.then(() => { if (selectionConfirmed.current) requestFeedback(); else setFailure('Confirm the selected rows before asking the Agent.'); }); }}>Ask Agent</button>}
       {filter && <span style={{ ...control, display: 'inline-flex', gap: 6, alignItems: 'center' }}>{filter.column} {opLabel[filter.op]}{filter.op !== 'isNull' && ' ' + String(filter.value)}
@@ -212,7 +213,6 @@ function BoundTable({ view, projectId, client, selectable = true, active, render
         {draft.op !== 'isNull' && <input aria-label="Value" style={control} value={draft.value} onChange={e => setDraft({ ...draft, value: e.target.value })} />}
         <button style={control} type="submit">Apply</button><button style={control} type="button" onClick={() => setDraft(null)}>Cancel</button>
       </form>}
-      {meta && !meta.entityKey && selectable && <span style={{ color: 'var(--text-muted, #5f6873)' }}>This table has no row key; row selection is unavailable.</span>}
     </div>
     {failure && <div role="alert" style={{ ...bar, color: 'var(--danger, #cf222e)' }}>{failure}<button style={control} onClick={() => { setAttempt(n => n + 1); api.current?.purgeInfiniteCache(); }}>Try again</button></div>}
     {observationFailure && <div role="status" style={bar}>{observationFailure}</div>}
