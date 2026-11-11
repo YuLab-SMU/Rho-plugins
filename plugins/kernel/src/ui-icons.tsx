@@ -1,5 +1,5 @@
 // The icons these views draw, in the same 24-pixel stroke style as the application's.
-export type IconName = 'back' | 'book' | 'braces' | 'chart' | 'check' | 'chevron' | 'code' | 'file' | 'folder' | 'grid' | 'link' | 'list' | 'monitor' | 'offline' | 'pencil' | 'plus' | 'refresh' | 'run' | 'server' | 'signal' | 'table' | 'updown';
+export type IconName = 'back' | 'book' | 'braces' | 'chart' | 'check' | 'chevron' | 'code' | 'file' | 'folder' | 'grid' | 'link' | 'list' | 'monitor' | 'offline' | 'pencil' | 'plus' | 'refresh' | 'run' | 'search' | 'server' | 'signal' | 'table' | 'updown';
 export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?: number; stroke?: number }) {
   const paths: Record<IconName, string> = {
     back: 'M15 5.25 8.25 12 15 18.75',
@@ -20,6 +20,7 @@ export function Icon({ name, size = 20, stroke = 1.6 }: { name: IconName; size?:
     plus: 'M12 4.5v15M4.5 12h15',
     refresh: 'M19.5 12a7.5 7.5 0 1 1-2.25-5.4M19.5 4.2v3.9h-3.9',
     run: 'M7 4.5v15l12-7.5z',
+    search: 'M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM15.25 15.25 20 20',
     server: 'M5 4h14a1.5 1.5 0 0 1 1.5 1.5v3A1.5 1.5 0 0 1 19 10H5a1.5 1.5 0 0 1-1.5-1.5v-3A1.5 1.5 0 0 1 5 4zM5 14h14a1.5 1.5 0 0 1 1.5 1.5v3A1.5 1.5 0 0 1 19 20H5a1.5 1.5 0 0 1-1.5-1.5v-3A1.5 1.5 0 0 1 5 14zM7.5 7h.01M7.5 17h.01',
     signal: 'M3 9.3a12.75 12.75 0 0 1 18 0M6.3 12.9a7.95 7.95 0 0 1 11.4 0M9.6 16.5a3.3 3.3 0 0 1 4.8 0M12 19.75h.01',
     table: 'M5 4h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2zM3 10h18M9 10v10',

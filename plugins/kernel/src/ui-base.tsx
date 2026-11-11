@@ -9,7 +9,7 @@ type Out<K extends keyof KernelHost> = KernelHost[K] extends (...args: any[]) =>
 // What each operation the views call returns, as the session host returns it.
 export interface KernelOutputs {
   'kernel.run': Out<'run'>; 'kernel.read': Out<'read'>; 'kernel.inspect': Inspected; 'kernel.plot': Out<'plot'>;
-  'kernel.interrupt': Out<'interrupt'>; 'kernel.stop': Out<'stop'>; 'kernel.places': Out<'places'>; 'kernel.place.set': Out<'setPlace'>;
+  'kernel.interrupt': Out<'interrupt'>; 'kernel.start': Out<'start'>; 'kernel.stop': Out<'stop'>; 'kernel.places': Out<'places'>; 'kernel.place.set': Out<'setPlace'>;
   'kernel.place.check': Out<'check'>; 'kernel.place.list': Out<'list'>; 'kernel.place.copy': Out<'copy'>;
   'kernel.servers': Out<'servers'>; 'kernel.server.skill': Out<'serverSkill'>;
 }

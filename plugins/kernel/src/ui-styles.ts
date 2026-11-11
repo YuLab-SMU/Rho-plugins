@@ -137,17 +137,17 @@ button.nb-cell-link:hover { background: var(--color-hover); text-decoration: und
 .nb-page.in-view { padding: 12px 18px 0; }
 .nb-page.in-view .nb-rail { top: 12px; max-height: none; overflow: visible; }
 .nb-compose-note { margin: 0; color: var(--color-meta); font-size: 12px; }
-.nb-page.compact .nb-compose-note { flex-basis: 100%; order: -1; }
+.nb-page.compact:not(.roomy) .nb-compose-note { flex-basis: 100%; order: -1; }
 /* Narrow: the cells fill the view, the sessions fold into one line above them. */
 .nb-page.compact { display: block; padding: 10px 14px 0; }
 .nb-page.compact .nb-cell { grid-template-columns: 2.6rem minmax(0, 1fr); gap: 10px; }
 .nb-page.compact .nb-mark { padding-left: calc(2.6rem + 10px); }
 /* There the person's cell is one line that grows as they write: language, code, Run. */
-.nb-page.compact .nb-composer { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; padding: 6px 6px 6px 8px; border-radius: 10px; }
-.nb-page.compact .nb-compose-bar label, .nb-page.compact .nb-compose-foot small { display: none; }
-.nb-page.compact .nb-composer textarea { flex: 1 1 8rem; width: auto; min-width: 0; }
-.nb-page.compact .nb-compose-foot button { min-height: 30px; padding: 4px 12px; }
-.nb-page.compact .nb-composer .inline-error { flex-basis: 100%; }
+.nb-page.compact:not(.roomy) .nb-composer { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; padding: 6px 6px 6px 8px; border-radius: 10px; }
+.nb-page.compact:not(.roomy) .nb-compose-bar label, .nb-page.compact:not(.roomy) .nb-compose-foot small { display: none; }
+.nb-page.compact:not(.roomy) .nb-composer textarea { flex: 1 1 8rem; width: auto; min-width: 0; }
+.nb-page.compact:not(.roomy) .nb-compose-foot button { min-height: 30px; padding: 4px 12px; }
+.nb-page.compact:not(.roomy) .nb-composer .inline-error { flex-basis: 100%; }
 .nb-strip { margin-bottom: 6px; border-bottom: 1px solid var(--color-divider); }
 .nb-strip > summary { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 0 8px; color: var(--color-meta); font-size: 12px; cursor: pointer; }
 .nb-strip-session { display: inline-flex; align-items: center; gap: 6px; }
@@ -156,16 +156,16 @@ button.nb-cell-link:hover { background: var(--color-hover); text-decoration: und
 .nb-strip > .nb-rail-section { padding-bottom: 10px; }
 /* A very narrow view puts the code on a line of its own, above its language and Run. */
 @container (max-width: 420px) {
-  .nb-page.compact .nb-composer textarea { flex-basis: 100%; }
-  .nb-page.compact .nb-compose-bar { order: 1; }
-  .nb-page.compact .nb-compose-foot { order: 2; margin-left: auto; }
+  .nb-page.compact:not(.roomy) .nb-composer textarea { flex-basis: 100%; }
+  .nb-page.compact:not(.roomy) .nb-compose-bar { order: 1; }
+  .nb-page.compact:not(.roomy) .nb-compose-foot { order: 2; margin-left: auto; }
 }
 @container (max-width: 820px) {
   .nb-page { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .nb-rail { position: static; order: -1; max-height: none; overflow: visible; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 16px; }
 }
 @container (max-width: 560px) {
-  .nb-cell { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .nb-cell, .nb-page.compact .nb-cell { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .nb-gutter { flex-direction: row; align-items: center; justify-content: flex-start; }
   .nb-head { grid-template-columns: minmax(0, 1fr) auto; }
   .nb-who { grid-row: 2; grid-column: 1 / -1; }
@@ -198,6 +198,95 @@ button.nb-cell-link:hover { background: var(--color-hover); text-decoration: und
 .nb-plots-strip { display: flex; flex: none; gap: 6px; overflow-x: auto; padding: 2px; }
 .nb-plots-thumb { flex: none; width: 72px; min-height: 0; padding: 2px; border: 1px solid var(--color-hairline); border-radius: 6px; background: var(--color-surface); }
 .nb-plots-thumb[aria-current="true"] { border-color: var(--color-accent); box-shadow: 0 0 0 1px var(--color-accent); }
+
+/* On a page of views the Notebook is the cells and the line to run one: a wide view leaves room
+   around them, a plot is a picture that opens in Plots, and the session's state opens Sessions. */
+.nb-page.compact.roomy { padding: 14px 24px 0; }
+.nb-page.compact.roomy .nb-main { max-width: 74rem; }
+.nb-plot-link { display: inline-flex; flex-direction: column; align-items: stretch; gap: 4px; width: 15rem; max-width: 100%; min-height: 0; margin: 4px 8px 2px 12px; padding: 4px; border: 1px solid var(--color-hairline); border-radius: 8px; background: var(--color-surface); color: var(--color-muted); font: 500 12px var(--font-ui); text-align: left; }
+.nb-plot-link + .nb-plot-link { margin-left: 0; }
+.nb-plot-link:hover { border-color: var(--color-accent); background: var(--color-surface); color: var(--color-accent-strong); }
+.nb-plot-link img, .nb-plot-link .nb-plot-wait { display: block; width: 100%; aspect-ratio: 7 / 5; object-fit: contain; border-radius: 5px; background: #fff; }
+.nb-plot-link .nb-plot-wait.gone { display: grid; place-content: center; color: var(--color-meta); }
+.nb-plot-link > span:last-child { display: inline-flex; align-items: center; gap: 5px; padding: 0 2px; }
+.nb-session-chip { display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 0; margin-left: auto; padding: 2px 8px; border: 1px solid var(--color-hairline); border-radius: 999px; background: none; color: var(--color-muted); font: 500 11.5px var(--font-ui); white-space: nowrap; }
+.nb-session-chip:hover { border-color: var(--color-hairline-strong); background: var(--color-hover); color: var(--color-ink); }
+.nb-session-chip.idle .nb-dot, .nb-env-state.idle .nb-dot, .nb-proc.idle .nb-dot { background: var(--color-verified); }
+.nb-session-chip.busy .nb-dot, .nb-env-state.busy .nb-dot, .nb-proc.busy .nb-proc-state .nb-dot { background: var(--color-accent); animation: pulse 1.6s ease-out infinite; }
+.nb-session-chip.starting .nb-dot, .nb-env-state.starting .nb-dot, .nb-proc.starting .nb-dot { background: var(--color-amber); }
+.nb-session-chip.off .nb-dot, .nb-proc.off .nb-dot { background: none; border: 1.5px solid var(--color-control-border); }
+.nb-page.compact:not(.roomy) .nb-session-chip { order: 3; margin-left: 0; }
+.nbc-bar-state { font-weight: 500 !important; }
+
+/* The values of a session as an environment pane: a table of them by kind, each unfolding in place. */
+.nb-env { gap: 8px; padding: 10px 12px; container-type: inline-size; }
+.nb-env-head { display: flex; flex: none; flex-wrap: wrap; align-items: center; gap: 8px; }
+.nb-env-state { display: inline-flex; align-items: center; gap: 7px; min-width: 0; min-height: 0; padding: 2px 4px; border: 0; border-radius: 6px; background: none; color: var(--color-muted); font: 600 12px var(--font-ui); text-align: left; }
+button.nb-env-state:hover { background: var(--color-hover); color: var(--color-ink); }
+.nb-env-find { display: flex; align-items: center; gap: 5px; flex: 0 1 11rem; min-width: 6rem; margin-left: auto; padding: 0 8px; border: 1px solid var(--color-hairline); border-radius: 7px; color: var(--color-meta); }
+.nb-env-find:focus-within { border-color: var(--color-accent); }
+.nb-env-find input { flex: 1; width: auto; min-width: 0; height: 26px; min-height: 26px; padding: 0; border: 0; outline: 0; background: none; box-shadow: none; font-size: 12.5px; }
+.nb-env-total { margin: 0; color: var(--color-meta); font-size: 11.5px; }
+.nb-env-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12.5px; }
+.nb-env-name-head { width: 34%; } th.nb-env-type { width: 6.5rem; } th.nb-env-bytes { width: 4.8rem; }
+.nb-env-table thead th { position: sticky; top: -10px; z-index: 1; padding: 0 6px 4px; border-bottom: 1px solid var(--color-hairline); background: var(--color-surface); text-align: left; }
+.nb-env-sort { display: inline-flex; align-items: center; gap: 3px; min-height: 0; padding: 2px 0; border: 0; background: none; color: var(--color-meta); font: 600 11px var(--font-ui); letter-spacing: .3px; text-transform: uppercase; }
+button.nb-env-sort:hover, .nb-env-sort.on { color: var(--color-ink); background: none; }
+.nb-env-group th { padding: 10px 6px 3px; color: var(--color-ink); font-size: 12px; font-weight: 650; text-align: left; }
+.nb-env-row td { padding: 3px 6px; border-top: 1px solid var(--color-divider); vertical-align: baseline; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-env-group + .nb-env-row td { border-top: 0; }
+.nb-env-row:hover td { background: var(--color-hover); }
+.nb-env-name { display: flex; align-items: baseline; gap: 2px; }
+.nb-env-twisty { flex: none; display: inline-grid; place-content: center; width: 16px; height: 16px; min-height: 0; padding: 0; border: 0; border-radius: 4px; background: none; color: var(--color-meta); }
+.nb-env-twisty[aria-expanded="true"] svg { transform: rotate(90deg); }
+.nb-env-twisty:hover { background: var(--color-well); color: var(--color-ink); }
+.nb-env-open { min-width: 0; min-height: 0; padding: 0; overflow: hidden; border: 0; background: none; color: var(--color-ink); font: 600 12.5px var(--font-mono); text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+button.nb-env-open { color: var(--color-accent-strong); }
+button.nb-env-open:hover { text-decoration: underline; background: none; }
+.nb-env-value code { color: var(--color-ink); font: 12px var(--font-mono); }
+.nb-env-value small, .nb-env-dims { color: var(--color-muted); font-size: 12px; }
+.nb-env-type { color: var(--color-meta); font-size: 12px; }
+.nb-env-bytes { color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; text-align: right !important; }
+th.nb-env-bytes .nb-env-sort { margin-left: auto; }
+.nb-env-detail td { padding: 2px 6px 8px 26px; }
+.nb-env-inside { display: flex; flex-direction: column; gap: 4px; }
+.nb-env-parts { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.nb-env-parts li { display: grid; grid-template-columns: minmax(5rem, max-content) minmax(3.5rem, max-content) minmax(0, 1fr); gap: 8px; align-items: baseline; font-size: 12px; }
+.nb-env-part { overflow: hidden; color: var(--color-ink); font: 600 11.5px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.nb-env-part-type { color: var(--color-meta); font-size: 11.5px; white-space: nowrap; }
+.nb-env-part-values, .nb-env-summary { overflow: hidden; color: var(--color-muted); font: 11.5px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.nb-env-summary { white-space: pre-wrap; overflow-wrap: anywhere; }
+.nb-env-made { margin: 2px 0 0; color: var(--color-meta); font-size: 11.5px; }
+.nb-env-table:not(:has(th.nb-env-type)) .nb-env-name-head { width: 42%; }
+
+/* The sessions' processes: one card for each language, then those that ended. */
+.nb-procs { gap: 12px; padding: 12px 14px; }
+.nb-proc { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); }
+.nb-proc.off { border-style: dashed; background: none; }
+.nb-proc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.nb-proc-head h2 { margin: 0; color: var(--color-ink); font-size: 13.5px; font-weight: 650; }
+.nb-proc-state { display: inline-flex; align-items: center; gap: 6px; color: var(--color-muted); font-size: 12px; }
+.nb-proc-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
+.nb-proc-actions button { min-height: 28px; padding: 3px 10px; font-size: 12px; }
+.nb-proc-stop { color: var(--color-meta); }
+.nb-proc-stop:hover:not(:disabled) { color: var(--color-failed); background: none; }
+.nb-proc-facts { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 14px; margin: 0; font-size: 12.5px; }
+.nb-proc-facts > div { display: contents; }
+.nb-proc-facts dt { color: var(--color-meta); }
+.nb-proc-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; color: var(--color-ink); }
+.nb-proc-facts dd small { color: var(--color-meta); font-size: 12px; }
+.nb-proc-facts code { font: 12px var(--font-mono); }
+.nb-proc-where { display: inline-flex; margin-left: 8px; vertical-align: middle; }
+.nb-proc-running { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; padding: 6px 8px; border-radius: 8px; background: var(--color-accent-soft); font-size: 12.5px; }
+.nb-proc-running .text-button { min-height: 0; padding: 0; color: var(--color-accent-strong); font: 600 12px var(--font-mono); }
+.nb-proc-running > span:nth-of-type(2) { min-width: 0; color: var(--color-ink); font-weight: 600; }
+.nb-proc-running small { color: var(--color-muted); font-size: 12px; }
+.nb-proc-off { margin: 0; color: var(--color-muted); font-size: 12.5px; }
+.nb-proc-ended summary { color: var(--color-meta); font-size: 12px; font-weight: 600; cursor: pointer; }
+.nb-proc-ended ul { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.nb-proc-ended li { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
+.nb-proc-ended-what { display: flex; flex-direction: column; min-width: 0; color: var(--color-ink); }
+.nb-proc-ended-what small { color: var(--color-meta); font-size: 12px; }
 .nb-plots-thumb img, .nb-plots-thumb .nb-plot-wait { display: block; width: 100%; aspect-ratio: 7 / 5; object-fit: contain; border-radius: 4px; background: #fff; }
 
 /* The console form: one transcript of prompts and what they printed, the prompt under it. */

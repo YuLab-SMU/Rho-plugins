@@ -144,6 +144,13 @@ still one session per language, with one numbering and one set of values.
 Console 0.3.2 adds the person's terminal (`TerminalHost`, `console.terminal.*`): their shell on a
 pseudo-terminal that a few lines of Python open on macOS and Linux, with the last 1 MiB of output
 kept for the page that draws it. It ends with Rho, and Windows has none yet.
+Notebook 0.5.17 gives the live sessions one set of views. Sessions (`rho.sessions`) shows each
+language's process, where it runs, who started it, its cells and what it holds, with Interrupt,
+Restart, Stop and Start; `kernel.start` starts a session without a cell, the person's alone like
+`kernel.stop`. Variables unfolds a value in place through `kernel.inspect`, grouped as Data,
+Values and Functions, sorted and found by name. Given the page's links, the Notebook shows each
+plot as a thumbnail that opens Plots and its session as a chip that opens Sessions, without its
+own strip or variables pane. Restart on a server and the Python session were not tried.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

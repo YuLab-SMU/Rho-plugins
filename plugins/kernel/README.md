@@ -233,10 +233,10 @@ application decides who may run, interrupt or stop.
 ## Views
 
 The optional browser entry `./ui` draws the sessions for a page that shows them; React is
-an optional peer. The descriptor registers six views, each version `1` and bound to
+an optional peer. The descriptor registers seven views, each version `1` and bound to
 nothing, since each reads the project's sessions itself: the Notebook (`rho.notebook`,
-with its `form`, notebook or console), Variables, Plots, Data flow, Servers and one value
-(`rho.object`, with its `language` and `name`). `kernelEntries` gives a page each view's
+with its `form`, notebook or console), Sessions, Variables, Plots, Data flow, Servers and one
+value (`rho.object`, with its `language` and `name`). `kernelEntries` gives a page each view's
 identity and the operations it needs to be readable; running a cell, stopping a session
 or naming a place are checked when the person does them.
 
@@ -258,6 +258,16 @@ read ("Read co from R 3"), and for each value it made the later cells that read 
 ("ratio read in R 6", at most three, the rest counted); a cell named there goes to that cell and
 marks it for a moment. Variables names the cell that made each value as it is now and the cells
 that read it; on the Notebook's page these go to the cells too.
+
+Variables lists a session's values as Data, Values and Functions, with a summary, type and size,
+sorted and found by name. A row unfolds in place through `kernel.inspect`: a data frame's columns
+(`$ name type values…`), a list's parts or the value's facts. Sessions shows one card per
+language: its version, state, place, program, process, who started it and when, its cells and
+queue and what it holds, the running cell, and earlier sessions folded below. It offers
+Interrupt, Restart and Stop, and Start when none is live (`kernel.start`, which starts a session
+without a cell). When the page passes `linked` (`plot`, `sessions`), the Notebook shows each plot
+as a thumbnail numbered as Plots numbers it and its session as a chip, and hands these to the
+page instead of drawing its own plot strip and variables pane.
 
 Data flow draws how each result came about as a graph of values, one node per value or file: the
 files read at the top, the results at the bottom (the files written and the plots drawn, else the

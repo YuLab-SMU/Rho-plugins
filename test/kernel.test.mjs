@@ -263,6 +263,26 @@ test('interrupt stops the running cell and keeps the session; stop ends it and w
   await host.close();
 });
 
+test('a session starts without a cell, a live one is kept, and one that is stopping is waited for', async () => {
+  const root = await project();
+  const host = new KernelHost(root, { rscript });
+  const first = await host.start({ language: 'python' }, 'browser:local');
+  assert.ok(['starting', 'idle'].includes(first.session.state), first.session.state);
+  assert.equal(first.session.startedBy, 'browser:local'); assert.equal(first.session.cells, 0);
+  assert.equal((await host.start({ language: 'python' }, 'browser:local')).session.sessionId, first.session.sessionId, 'a live session is returned as it is');
+  const cell = await host.run({ language: 'python', code: 'x = 1', changeId: 'a', by: 'agent:a', waitMs: 30000 });
+  assert.equal(cell.cell.sessionId, first.session.sessionId, 'the next cell runs in the session started');
+  // Restarting: stop, then start, which waits for the old session to end.
+  await host.stop(first.session.sessionId, 'browser:local');
+  const again = await host.start({ language: 'python' }, 'browser:local');
+  assert.notEqual(again.session.sessionId, first.session.sessionId);
+  assert.equal((await host.read()).sessions.find(s => s.sessionId === first.session.sessionId).state, 'ended');
+  const fresh = await host.run({ language: 'python', code: "'x' in globals()", changeId: 'b', by: 'agent:a', waitMs: 30000 });
+  assert.equal(fresh.cell.sessionId, again.session.sessionId);
+  assert.equal(text(fresh.cell), 'False\n', 'the values went with the old session');
+  await host.close();
+});
+
 test('after Rho closes, its sessions are recorded as ended and nothing runs again', async () => {
   const root = await project();
   const host = new KernelHost(root);

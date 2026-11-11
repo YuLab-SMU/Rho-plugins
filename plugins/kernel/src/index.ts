@@ -622,6 +622,17 @@ export class KernelHost {
     return { cell: structuredClone(cell) };
   }
 
+  // A session started without a cell, as the person starts or restarts one: the language's live
+  // session is returned as it is, and one that is stopping is waited for first. It starts where the
+  // place names, else where the project runs that language, with the program it runs it with.
+  async start(input: { language: Language; place?: string }, by: string) {
+    await this.load();
+    const stopping = this.live.get(input.language);
+    if (stopping?.stopping) await stopping.ended;
+    const live = await this.exclusive(() => this.ensure(input.language, by, input.place));
+    return { session: structuredClone(live.record) };
+  }
+
   // Stopping names its session: a session that has ended is returned as it is.
   async stop(sessionId: string, by: string) {
     const sessions = await this.load();
@@ -913,7 +924,7 @@ const content = [
 ].join('\n');
 // What each view keeps in its props: the Notebook's form, and which value a value's view shows.
 const viewProps: Record<keyof typeof viewPresentations, Record<string, unknown>> = {
-  'rho.notebook': { form: { enum: ['notebook', 'console'] }, notebook: { type: 'string', pattern: notebookPattern } }, 'rho.variables': {}, 'rho.plots': {}, 'rho.flow': {}, 'rho.servers': {},
+  'rho.notebook': { form: { enum: ['notebook', 'console'] }, notebook: { type: 'string', pattern: notebookPattern } }, 'rho.sessions': {}, 'rho.variables': {}, 'rho.plots': {}, 'rho.flow': {}, 'rho.servers': {},
   'rho.object': { language: { enum: ['r', 'python'] }, name: { type: 'string', minLength: 1 } },
 };
 export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.5.1', requires: [] as string[], capabilities: ['kernel'], presentation, timeline: 'kernel.events',

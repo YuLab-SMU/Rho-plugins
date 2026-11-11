@@ -28,6 +28,7 @@ export const operationPresentation = {
   'kernel.plot': { order: 30, displayName: 'Read a plot', description: "Reads one plot a cell drew, as a PNG image.", readOnly: true, runsCode: false },
   'kernel.inspect': { order: 35, displayName: 'Look at a value', description: "Describes one value of a live session: a table's rows and columns, a model's fit and coefficients, a list's parts, a vector's values, a function's code.", readOnly: true, runsCode: false },
   'kernel.interrupt': { order: 40, displayName: 'Interrupt a cell', description: "Stops the cell that is running; the session and its variables stay.", readOnly: false, runsCode: false },
+  'kernel.start': { order: 45, displayName: 'Start a session', description: "Starts the project's R or Python session without running a cell; a live one is left as it is.", readOnly: false, runsCode: false },
   'kernel.stop': { order: 50, displayName: 'Stop a session', description: "Ends a session; its variables are gone.", readOnly: false, runsCode: false },
   'kernel.places': { order: 60, displayName: 'Read the places', description: "Reads the servers sessions can run on, where each language's next session starts, and the files copied from them.", readOnly: true, runsCode: false },
   'kernel.place.set': { order: 62, displayName: 'Name a place', description: "Names a folder on a server as a place sessions can run in, removes one, or chooses where R or Python runs next.", readOnly: false, runsCode: false },
@@ -40,7 +41,8 @@ export const operationPresentation = {
 // The views of the sessions a page can show. Each reads the same sessions; none holds its own.
 export const viewPresentations = {
   'rho.notebook': { displayName: 'Notebook', description: 'The cells run in the live R and Python sessions, with who ran each and why, what it printed and its plots, and a line to run your own.', readOnly: false, runsCode: true },
-  'rho.variables': { displayName: 'Variables', description: 'The values each live session holds now.', readOnly: true, runsCode: false },
+  'rho.sessions': { displayName: 'Sessions', description: 'The live R and Python processes: where each runs, with which program, what it is doing and holds, and Interrupt and Stop.', readOnly: false, runsCode: false },
+  'rho.variables': { displayName: 'Variables', description: 'The values each live session holds now, by kind, with their value at a glance, type and size.', readOnly: true, runsCode: false },
   'rho.plots': { displayName: 'Plots', description: 'The plots cells drew, newest first.', readOnly: true, runsCode: false },
   'rho.flow': { displayName: 'Data flow', description: 'How the values of the sessions were made: which cells read and defined each, and the files they named.', readOnly: true, runsCode: false },
   'rho.servers': { displayName: 'Servers', description: 'The servers sessions can run on, where each language runs, their files and the skills bound to them.', readOnly: false, runsCode: false },

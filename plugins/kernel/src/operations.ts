@@ -42,6 +42,12 @@ export const operationContracts = {
     outputSchema: obj({ cell: cellSchema }),
     requires: [] as string[], effect: 'native' as const,
   },
+  // Starts the language's session without a cell; a live one is returned as it is.
+  'kernel.start': {
+    inputSchema: obj({ language, place: placeRef }, ['language']),
+    outputSchema: obj({ session: sessionSchema }),
+    requires: [] as string[], effect: 'native' as const,
+  },
   'kernel.stop': {
     inputSchema: obj({ sessionId }),
     outputSchema: obj({ session: sessionSchema }),
