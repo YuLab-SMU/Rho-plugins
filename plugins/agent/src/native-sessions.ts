@@ -263,12 +263,17 @@ function* codexFiles(codexHome: string) {
 
 // ——— Listing and reading ———
 interface Found { producer: NativeProducer; sessionId: string; file: string; summary: NativeSessionSummary }
-const cache = new Map<string, { key: string; value: Omit<NativeSessionSummary, 'open' | 'observedAt' | 'state'> & { unfinished: boolean } | null }>();
+// Each file is read once per change and kept with the folder its session ran in. Whether it
+// belongs to the project being listed is decided on every listing: Codex keeps every folder's
+// sessions in one place, and a summary kept without its folder was shown in every project.
+// A summary is made only once a project in that folder asks for it.
+type Summary = Omit<NativeSessionSummary, 'open' | 'observedAt' | 'state'> & { unfinished: boolean };
+const cache = new Map<string, { key: string; folder: string | null; value?: Summary | null }>();
 const titleOf = (...candidates: Array<string | null | undefined>) => cut((candidates.find(c => c && c.trim()) ?? 'Untitled session').replace(/\s+/g, ' ').trim(), 200);
 
 function claudeSummary(file: string, root: string) {
   const stat = fs.statSync(file), key = stat.size + ':' + stat.mtimeMs, kept = cache.get(file);
-  if (kept?.key === key) return kept.value;
+  if (kept?.key === key) return kept.folder === root ? kept.value ?? null : null;
   const head = readLines(file, 'head', nativeSessionLimits.maxHeadBytes), tail = head.truncated ? readLines(file, 'tail', nativeSessionLimits.maxTailBytes) : head;
   let cwd = '', entrypoint = '', created = '', first: string | null = null, sessionId = path.basename(file, '.jsonl');
   for (const line of head.lines) {
@@ -297,23 +302,36 @@ function claudeSummary(file: string, root: string) {
     unfinished = r.type === 'user' ? !interrupted(r) : r.message?.stop_reason !== 'end_turn';
     break;
   }
-  const value = (!cwd || realpath(cwd) !== root || (first === null && !turns.length)) ? null : {
+  const folder = cwd ? realpath(cwd) : null;
+  const value = (!folder || (first === null && !turns.length)) ? null : {
     id: externalSessionId('claude-code', sessionId), producer: 'claude-code' as const, sessionId, title: titleOf(custom, ai, summaryText, first, lastPrompt),
     lastAt: new Date(stat.mtimeMs).toISOString(), turns: turns.length, sourceCursor: stat.size, omittedTurns: tail.truncated ? 1 : 0,
-    where: claudeWhere[entrypoint] ?? (entrypoint || 'Claude Code'), resume: resumeCommand('claude-code', root, sessionId), bytes: stat.size,
+    where: claudeWhere[entrypoint] ?? (entrypoint || 'Claude Code'), resume: resumeCommand('claude-code', folder, sessionId), bytes: stat.size,
     unfinished
   };
-  cache.set(file, { key, value });
+  cache.set(file, { key, folder, value });
   if (cache.size > 4096) cache.delete(cache.keys().next().value!);
-  return value;
+  return folder === root ? value : null;
 }
-function codexSummary(file: string, root: string) {
-  const stat = fs.statSync(file), key = stat.size + ':' + stat.mtimeMs, kept = cache.get(file);
-  if (kept?.key === key) return kept.value;
-  const head = readLines(file, 'head', nativeSessionLimits.maxHeadBytes);
+const codexMeta = (head: ReturnType<typeof readLines>) => {
   const meta = head.lines.length ? parse(head.lines[0]!) : null, p = meta?.type === 'session_meta' ? meta.payload : null;
-  let value: (Omit<NativeSessionSummary, 'open' | 'observedAt' | 'state'> & { unfinished: boolean }) | null = null;
-  if (p && typeof p.id === 'string' && typeof p.cwd === 'string' && realpath(p.cwd) === root) {
+  return p && typeof p.id === 'string' && typeof p.cwd === 'string' ? p : null;
+};
+function codexSummary(file: string, root: string) {
+  const stat = fs.statSync(file), key = stat.size + ':' + stat.mtimeMs;
+  let kept = cache.get(file), head: ReturnType<typeof readLines> | undefined;
+  if (kept?.key !== key) {
+    head = readLines(file, 'head', nativeSessionLimits.maxHeadBytes);
+    const p = codexMeta(head);
+    kept = { key, folder: p ? realpath(p.cwd) : null };
+    cache.set(file, kept);
+  }
+  if (kept.folder !== root) return null;
+  if (kept.value !== undefined) return kept.value;
+  head ??= readLines(file, 'head', nativeSessionLimits.maxHeadBytes);
+  const p = codexMeta(head);
+  let value: Summary | null = null;
+  if (p) {
     const tail = head.truncated ? readLines(file, 'tail', nativeSessionLimits.maxTailBytes) : head;
     const firstTurns = codexTurns(head.lines, stat.mtimeMs, Date.now()), turns = head.truncated ? codexTurns(tail.lines, stat.mtimeMs, Date.now()) : firstTurns;
     let unfinished = false;
@@ -328,7 +346,7 @@ function codexSummary(file: string, root: string) {
       where: codexWhere(p.originator), resume: resumeCommand('codex', root, p.id), bytes: stat.size, unfinished
     };
   }
-  cache.set(file, { key, value });
+  kept.value = value;
   return value;
 }
 

@@ -455,6 +455,9 @@ tool field limits above. Sidechains, injected reminders and local command output
 are excluded. A recorded interruption is stopped. A last turn without an end record
 is running while its file was written in the last minute; after that it is completed
 when it has a reply and no unanswered tool, and unknown otherwise.
+A file is read again only when its size or modification time changes; what is kept
+is the folder its session ran in, and every listing compares that folder with `root`,
+so one project's sessions are never listed or read for another.
 
 To continue such a session, the application passes its ID as `sessionId` (ACP
 `session/load`). `forkFrom` instead asks the Agent for a separate copy through

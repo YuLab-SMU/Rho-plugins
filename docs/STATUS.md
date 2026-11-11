@@ -29,6 +29,13 @@ markers that turn off transcript saving. [Native sessions](../plugins/agent/READ
 32 Agent owner tests pass. The application's continuity episode with a real Claude
 Code is separate from this component check.
 
+Native sessions (source after Agent 0.4.33): Codex keeps every folder's sessions in
+one place, and the summary kept for each file did not record which project it was
+checked for, so after one project was listed, another project opened in the same
+process listed and could read the first project's Codex sessions (and missed its own
+when the order was reversed). The kept summary now carries the session's own folder;
+`test/native-sessions.test.mjs` fails on the previous source and passes.
+
 Agent **0.4.31**: the MCP bridge sends its client's own `clientInfo` name and version
 to the application in `x-rho-client` ([Layered MCP](../plugins/agent/README.md#layered-mcp-and-optional-presentation)),
 so a connected Agent can be named by what it reports. 33 Agent owner tests pass.
