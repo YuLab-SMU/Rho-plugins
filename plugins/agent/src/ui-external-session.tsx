@@ -47,7 +47,7 @@ export function ExternalConversation({ session, read, renderText, renderResult, 
           </details>
         </li>)}</ol>
       </details>
-      {turn.omittedChars > 0 && <p className="muted">Some text exceeded the observation limit. The original client keeps its full record.</p>}
+      {turn.omittedChars > 0 && <p className="muted">Some text exceeded the observation limit. The Agent keeps its full record.</p>}
     </article>)}
     {kept && kept.first > 0 && <button onClick={() => void earlier()}>Earlier turns</button>}
     <details className="external-source"><summary>Source and observation</summary><dl><dt>Native session</dt><dd>{session.sessionId}</dd><dt>Last observed</dt><dd>{new Date(session.observedAt).toLocaleString()}</dd><dt>Native events read</dt><dd>{session.sourceCursor}</dd></dl></details>

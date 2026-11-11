@@ -408,8 +408,10 @@ an Agent, executes a tool, changes a grant or resumes a runtime.
 `external-session` supplies bounded `listExternalSessions` and
 `readExternalSession` reads. The operation contracts are `agent.sessions.list`
 and `agent.sessions.read`; an embedding application supplies authorization.
-`ui-external-session` renders prompts, visible replies, operations and results,
-with input explicitly retained by the native client. Reasoning, injected context
+`ui-external-session` renders prompts, visible replies, operations and results. The
+view sends nothing itself; an application continues the conversation through the
+Agent's own session. The operations are presented as Agent conversations: where a
+session was started is not a kind of conversation. Reasoning, injected context
 and system messages are excluded; credential-shaped strings are redacted.
 This is an observation of the client's reports, not an independent execution proof.
 

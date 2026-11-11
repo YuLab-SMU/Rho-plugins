@@ -47,8 +47,10 @@ references or no entry. [Agent icons](../plugins/agent-icons/README.md); 4 tests
 
 Agent 0.4.29 retains native Harness conversations in project-local observations,
 with original session/turn/call identities, visible replies, separate tool/exit
-outcomes and reported or exact-version results. Read-only operations and the UI
-entry keep input in the original client. [Budgets and boundaries](../plugins/agent/README.md#external-conversations)
+outcomes and reported or exact-version results. Its operations and UI entry read and
+send nothing; Agent 0.4.34 presents them as Agent conversations, whichever window
+started the session, and an application continues one through the Agent's own session.
+[Budgets and boundaries](../plugins/agent/README.md#external-conversations)
 cover partial records, backwards/conflicting sources, symlinks and writer locks.
 Four focused owner regressions pass; the application's real Harness episode is
 separate from this component check.
@@ -92,7 +94,8 @@ copy of itself forked when the cell started (as it was then, `runningCell` namin
 unless its values take more than a quarter of the machine's memory; Windows, servers and
 Python still answer `busy` until the cell ends. A reading asked for it carries a PNG of what
 an R value draws when printed; a plot object read by its parts (lattice, an older ggplot2, a
-heatmap) and a Python figure have none yet. Notebook 0.4.0 draws its own views: `./ui` holds the Notebook, Variables,
+heatmap) and a Python figure have none yet. A cell run by an Agent the person connected
+from its own window is named for that Agent (the application's `agents`), not "An Agent". Notebook 0.4.0 draws its own views: `./ui` holds the Notebook, Variables,
 Plots, Data flow, Servers and a value's view, registered as six components, and `./code` the
 statement, load-code and data-flow functions that moved from Rho. Notebook 0.5.0 adds
 `kernel.events`, who ran each cell, when, where and how it ended; the contracts package carries

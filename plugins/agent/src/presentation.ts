@@ -21,8 +21,8 @@ export const presentation: PluginPresentation = {
   readOnly: false, runsCode: false,
 };
 export const operationPresentation = {
-  'agent.sessions.list': { order: 58, displayName: 'External conversations', description: 'Reads retained conversations observed in this project. Input remains in the original client.', readOnly: true, runsCode: false },
-  'agent.sessions.read': { order: 59, displayName: 'External conversation', description: 'Reads native turns, tool outcomes and result receipts without sending or resuming anything.', readOnly: true, runsCode: false },
+  'agent.sessions.list': { order: 58, displayName: 'Agent conversations', description: 'Lists the conversations Agents keep in their own files for this project folder, whichever window started them. Starts nothing.', readOnly: true, runsCode: false },
+  'agent.sessions.read': { order: 59, displayName: 'Read a conversation', description: "Reads a conversation's turns, tool outcomes and result receipts from the Agent's own record. Reading sends and resumes nothing.", readOnly: true, runsCode: false },
   'agent.activity.read': { order: 62, displayName: 'Agent activity', description: 'Reads selected Claude Code and dsh activity retained by the project Core Host, with cursors and gaps. Starts nothing.', readOnly: true, runsCode: false },
   'agent.activity.outputs': { order: 63, displayName: 'Observed outputs', description: 'Observes bounded current files and hashes inside a selected project output folder, without attributing them to an Agent.', readOnly: true, runsCode: false },
   'agent.activity.capture': { order: 64, displayName: 'Open observed output', description: 'Captures one CSV or image file in the project through Files: the exact version you observed, or its current bytes. CSV columns remain text; no producer or scientific claim is made.', readOnly: false, runsCode: false },

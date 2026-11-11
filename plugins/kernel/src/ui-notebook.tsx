@@ -6,7 +6,7 @@ import { Icon } from './ui-icons.js';
 import { PlaceChip, usePlaces, whereOf } from './ui-servers.js';
 import { takeCell } from './ui-notebook-target.js';
 import { scopedCells } from './session-scope.js';
-import { call, refused, agentName, clock, durationText, useShell, withShell, versionOf, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
+import { call, refused, agentName, agentNames, clock, durationText, useShell, withShell, versionOf, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
 export { versionOf };
 
 // The project's live R and Python sessions, which the person shares with their Agent. Cells
@@ -32,8 +32,9 @@ export function useAuthors(snapshot: UiSnapshot) {
   return useMemo(() => {
     const byPrincipal = new Map<string, Author>();
     for (const c of snapshot.conversations ?? []) if (c.principal) byPrincipal.set(c.principal, { name: agentName(c.client), conversationId: c.conversationId, title: c.title ?? undefined });
-    return (by: string): Author => by === me ? { name: 'You' } : byPrincipal.get(by) ?? { name: 'An Agent' };
-  }, [snapshot.conversations]);
+    const names = agentNames(snapshot);
+    return (by: string): Author => by === me ? { name: 'You' } : byPrincipal.get(by) ?? { name: names.get(by) ?? 'An Agent' };
+  }, [snapshot.conversations, snapshot.agents]);
 }
 
 // Views of one page read the sessions together: a read already on its way is shared.

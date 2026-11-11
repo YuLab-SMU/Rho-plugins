@@ -43,6 +43,17 @@ export interface UiSnapshot {
   project: { id: string; root: string };
   cursor: number;
   conversations?: ReadonlyArray<{ conversationId: string; principal?: string | null; client?: string | null; title?: string | null }>;
+  // The Agents with access: one the person connected from its own window has no conversation
+  // here, and is named as the page names it, else by the label it was given.
+  agents?: ReadonlyArray<{ principal: string; label?: string | null; name?: string | null; conversationId?: string | null }>;
+}
+// Who ran a cell, by principal: a conversation's Agent, or an Agent the person connected. Where
+// a session was started is not part of the name.
+export function agentNames(snapshot: UiSnapshot) {
+  const names = new Map<string, string>();
+  for (const a of snapshot.agents ?? []) { const name = a.name ?? a.label; if (name) names.set(a.principal, name); }
+  for (const c of snapshot.conversations ?? []) if (c.principal) names.set(c.principal, agentName(c.client));
+  return names;
 }
 // One conversation's share of the sessions, as its Studio shows them: the cells its Agent and the
 // person ran since it began, up to `at` during a replay (null for now).

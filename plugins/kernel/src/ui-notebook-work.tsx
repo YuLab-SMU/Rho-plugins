@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Icon } from './ui-icons.js';
 import { askCell } from './ui-notebook-target.js';
-import { call, agentName, when, versionOf, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
+import { call, agentNames, when, versionOf, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
 
 // What was done in the project's live sessions, for the Overview: where each session with cells
 // runs and what it holds, and the newest cells by their purpose. Work done only in the Notebook,
@@ -31,7 +31,7 @@ const firstLine = (code: string) => code.split('\n').map(line => line.trim()).fi
 export function NotebookWorkSection({ work, snapshot, onOpen }: { work: NotebookWork; snapshot: UiSnapshot; onOpen: () => void }) {
   const { read, problem, cells } = work;
   if (!cells && !problem) return null;
-  const agents = new Map((snapshot.conversations ?? []).filter(c => c.principal).map(c => [c.principal!, agentName(c.client)]));
+  const agents = agentNames(snapshot);
   const author = (by: string) => by === browser ? 'You' : agents.get(by) ?? 'An Agent';
   // Sessions that ran cells, the live ones first, then the newest.
   const sessions = [...(read?.sessions ?? [])].filter(s => s.cells > 0)
