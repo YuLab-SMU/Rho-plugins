@@ -1,5 +1,5 @@
 import { objectSchema as obj, timelineContract } from '@rho-workspace/plugin-contracts';
-import { cellId, cellSchema, changeId, copySchema, inspectStates, language, objectSchema, placeCheckSchema, placeId, placeInput, placeRef, placesSchema, remoteEntrySchema, server, serverSkillTextSchema, serversSchema, sessionId, sessionSchema, sortInput } from './contract.js';
+import { cellId, cellSchema, changeId, notebookId, copySchema, inspectStates, language, objectSchema, placeCheckSchema, placeId, placeInput, placeRef, placesSchema, remoteEntrySchema, server, serverSkillTextSchema, serversSchema, sessionId, sessionSchema, sortInput } from './contract.js';
 
 // Owner business contracts. Application project/authentication fields are separate.
 export const operationContracts = {
@@ -9,7 +9,7 @@ export const operationContracts = {
   // project keeps it for the language's later sessions. A cell naming another program than the
   // live session's is refused.
   'kernel.run': {
-    inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 }, place: placeRef, interpreter: { type: 'string', minLength: 1, maxLength: 1024 } }, ['language', 'code', 'changeId']),
+    inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, notebook: notebookId, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 }, place: placeRef, interpreter: { type: 'string', minLength: 1, maxLength: 1024 } }, ['language', 'code', 'changeId']),
     outputSchema: obj({ cell: cellSchema, session: sessionSchema }),
     requires: [] as string[], effect: 'native' as const,
   },

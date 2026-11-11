@@ -20,6 +20,7 @@ const styles = `/* The Notebook: cells in the order they ran beside the live ses
 .nb-who .text-button:hover { text-decoration: underline; background: none; }
 .nb-cell.mine .nb-who { color: var(--color-ink); }
 .nb-purpose { min-width: 0; color: var(--color-ink); font-size: 14px; font-weight: 600; line-height: 1.4; }
+.nb-elsewhere { margin-right: 8px; padding: 1px 7px; border-radius: 999px; background: var(--color-well); color: var(--color-meta); font-size: 11.5px; white-space: nowrap; }
 .nb-unnamed { color: var(--color-muted); font-weight: 500; }
 .nb-when { display: flex; gap: 8px; color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .nb-ending { display: inline-flex; align-items: center; gap: 6px; }

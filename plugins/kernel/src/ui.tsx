@@ -6,7 +6,7 @@ import { viewPresentations } from './presentation.js';
 
 ensureStyles();
 
-export { SessionPane, NotebookPage, VariablesPane, PlotsPane, Code, FormSwitch, languages, languageName, notebookViewLimits, plotsPaneLimits, type NotebookForm, type Prepared, type Beside, type Cell, type Session } from './ui-notebook.js';
+export { SessionPane, NotebookPage, VariablesPane, PlotsPane, Code, FormSwitch, languages, languageName, notebookViewLimits, plotsPaneLimits, type NotebookForm, type NotebookNames, type Prepared, type Beside, type Cell, type Session } from './ui-notebook.js';
 export { savedForm, saveForm } from './ui-notebook-form.js';
 export { askCell } from './ui-notebook-target.js';
 export { ServersPane, showOnServer } from './ui-servers.js';

@@ -6,6 +6,9 @@ import { objectSchema as obj, text } from '@rho-workspace/plugin-contracts';
 export const languages = ['r', 'python'] as const;
 export const changeId = { type: 'string', pattern: '^[A-Za-z0-9._:@-]{1,128}$' };
 export const cellId = { type: 'string', pattern: '^k-[a-f0-9]{16}$' };
+// A notebook's identity: what its view keeps and its cells carry. The page that shows it names it.
+export const notebookPattern = '^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$';
+export const notebookId = { type: 'string', pattern: notebookPattern };
 export const sessionId = { type: 'string', pattern: '^s-[a-f0-9]{16}$' };
 export const language = { enum: [...languages] };
 const time = { type: 'string', minLength: 1 };
@@ -84,6 +87,10 @@ export const outputSchema = obj({ kind: { enum: ['stdout', 'stderr', 'warning', 
 export const savedFigureSchema = obj({ number: { type: 'integer', minimum: 1 }, path: text, bytes: { type: 'integer', minimum: 0 }, sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' }, figure: figureSummarySchema, figureProblem: { type: 'string' } }, ['number', 'path', 'bytes', 'sha256']);
 export const cellSchema = obj({
   cellId, changeId, by: text, sessionId, language, code: { type: 'string' }, purpose: maybe({ type: 'string' }),
+  // The notebook it was run in, by that notebook's identity. The notebooks of a project share its
+  // sessions, so this says where the cell reads, not which values it could see. A cell run in the
+  // project's own notebook, and every cell recorded before notebooks had identities, has none.
+  notebook: notebookId,
   queuedAt: time, startedAt: maybe(time), endedAt: maybe(time), state: { enum: [...cellStates] },
   // The order it ran in its session, counting from 1.
   number: { type: 'integer', minimum: 1 },

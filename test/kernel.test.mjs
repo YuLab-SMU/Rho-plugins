@@ -177,6 +177,23 @@ test('a change identity names one cell; cells run one at a time in the order the
   await host.close();
 });
 
+test('notebooks share the sessions: a cell keeps the notebook it was run in and sees the others\' values', async () => {
+  const root = await project();
+  const host = new KernelHost(root);
+  const plain = await host.run({ language: 'python', code: 'shared = 20', changeId: 'a', by: 'browser:local', waitMs: 30000 });
+  const named = await host.run({ language: 'python', code: 'shared + 1', notebook: 'nb-4f2a', changeId: 'b', by: 'browser:local', waitMs: 30000 });
+  assert.equal(plain.cell.notebook, undefined, 'the project\'s own notebook has no identity');
+  assert.equal(named.cell.notebook, 'nb-4f2a');
+  assert.equal(named.cell.sessionId, plain.cell.sessionId, 'one session for both');
+  assert.equal(text(await settled(host, named.cell.cellId)), '21\n');
+  await assert.rejects(host.run({ language: 'python', code: '1', notebook: 'two words', changeId: 'c', by: 'browser:local' }), e => e.kind === 'invalid');
+  await host.close();
+  // The record keeps it across a restart of Rho.
+  const later = new KernelHost(root);
+  assert.deepEqual((await later.read()).cells.map(c => c.notebook ?? null), [null, 'nb-4f2a']);
+  await later.close();
+});
+
 test('each cell is a timeline event: who ran it, when, where and how it ended, newest first', async () => {
   const root = await project();
   const host = new KernelHost(root);

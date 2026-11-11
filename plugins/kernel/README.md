@@ -97,6 +97,14 @@ to copy (below) answer `busy` with the reason until the cell ends. Measured on a
 with R 4.5.2, the copy adds about 10 ms to a cell (2 ms of it the fork in a small
 session, 9 ms beside a 4 GB matrix), and a reading of it takes 30 to 130 ms.
 
+A project's notebooks share its sessions. `kernel.run` takes an optional `notebook`, an
+identity (a letter or digit, then up to 63 letters, digits, `.`, `_`, `:` or `-`) that the
+cell keeps; a cell without one belongs to the project's own notebook. The Notebook view
+(`SessionPane`) given `notebook` lists the cells run in it and runs its own there. Without
+it the view lists every cell and names the notebook each was run in, from the `notebooks`
+names the page hands it. Values are shared whichever notebook a cell is in, and cells are
+numbered by session, not by notebook.
+
 A cell keeps its `changeId` per caller: repeating the same identity returns the same
 cell and never runs it twice. Cells run one at a time in their session, in the order
 they came. Running the first cell of a language starts that session; reading never

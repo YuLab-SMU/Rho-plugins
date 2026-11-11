@@ -14,6 +14,7 @@ import { Serverctl } from './servers.js';
 import { operationContracts } from './operations.js';
 import { operationPresentation, presentation, viewPresentations } from './presentation.js';
 import type { cellStates, languages, sessionStates } from './contract.js';
+import { notebookPattern } from './contract.js';
 
 export type Language = typeof languages[number];
 export interface Variable { name: string; type: string; size: string; bytes: number; summary: string }
@@ -45,6 +46,8 @@ export type Output = { kind: 'stdout' | 'stderr' | 'warning' | 'error'; text: st
 export interface SavedFigure { number: number; path: string; bytes: number; sha256: string; figure?: FigureSummary; figureProblem?: string }
 export interface CellRecord {
   cellId: string; changeId: string; by: string; sessionId: string; language: Language; code: string; purpose: string | null;
+  // The notebook it was run in; none for the project's own notebook.
+  notebook?: string;
   queuedAt: string; startedAt: string | null; endedAt: string | null; state: typeof cellStates[number]; number: number;
   outputs: Output[]; bytes: number; kept: number; cut: boolean; interrupt: Asked | null; problem: string | null;
   defined?: string[]; removed?: string[];
@@ -271,7 +274,7 @@ export class KernelHost {
     return { events, omitted: Math.max(0, this.cells.length - limit) };
   }
 
-  async run(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; waitMs?: number; place?: string; interpreter?: string }) {
+  async run(input: { language: Language; code: string; purpose?: string; notebook?: string; changeId: string; by: string; waitMs?: number; place?: string; interpreter?: string }) {
     await this.load();
     const cell = await this.exclusive(() => this.queue(input));
     // Waiting for the cell holds nothing: other requests, an interrupt among them, go on.
@@ -283,12 +286,13 @@ export class KernelHost {
     return { cell: structuredClone(cell), session: structuredClone(this.sessions!.find(s => s.sessionId === cell.sessionId)!) };
   }
 
-  private async queue(input: { language: Language; code: string; purpose?: string; changeId: string; by: string; place?: string; interpreter?: string }) {
+  private async queue(input: { language: Language; code: string; purpose?: string; notebook?: string; changeId: string; by: string; place?: string; interpreter?: string }) {
     const known = this.cells.find(c => c.changeId === input.changeId && c.by === input.by);
     if (known) {
       requireThat(known.code === input.code && known.language === input.language, 'conflict', 'This change identity already names a different cell.');
     } else {
       requireThat(input.code.trim().length > 0 && Buffer.byteLength(input.code) <= this.limits.maxCodeBytes, 'invalid', `Write code of at most ${this.limits.maxCodeBytes} bytes.`, { limit: 'maxCodeBytes' });
+      requireThat(input.notebook === undefined || new RegExp(notebookPattern).test(input.notebook), 'invalid', 'Name the notebook by the identity its cells carry.');
       const live = await this.ensure(input.language, input.by, input.place, input.interpreter);
       requireThat(live.queue.length < this.limits.maxQueued, 'limit', `At most ${this.limits.maxQueued} cells wait in a session. Wait for some to run or interrupt the one running.`, { limit: 'maxQueued', maximum: this.limits.maxQueued });
       // The oldest finished cells make room, with their plots.
@@ -301,6 +305,7 @@ export class KernelHost {
       }
       live.record.cells++;
       const cell: CellRecord = { cellId: id('k-'), changeId: input.changeId, by: input.by, sessionId: live.record.sessionId, language: input.language, code: input.code, purpose: input.purpose?.trim().slice(0, 200) || null,
+        ...(input.notebook ? { notebook: input.notebook } : {}),
         queuedAt: now(), startedAt: null, endedAt: null, state: 'queued', number: live.record.cells, outputs: [], bytes: 0, kept: 0, cut: false, interrupt: null, problem: null, defined: [], removed: [], used: [], files: [] };
       this.cells.push(cell); live.queue.push(cell);
       this.changed();
@@ -897,6 +902,7 @@ const content = [
   'Each project has a live R session and a live Python session that you and the person share.',
   'To look at data, check a value or try a model, run code with kernel.run (language "r" or "python") instead of a one-off Rscript -e or python3 -c: what you define stays in the session for the next cell, and the person sees each cell, its output, its plots and the variables.',
   'Give each cell a short purpose. Pass waitMs to wait for it to finish; kernel.read reads it later.',
+  'A person may keep several notebooks over the same sessions. A cell that kernel.read lists with a notebook was run in that one; pass the same notebook to kernel.run to add your cell there, and leave it out otherwise. The values are shared whichever notebook a cell is in.',
   'A session starts with the first cell of its language. Interrupt a cell that runs too long with kernel.interrupt; only the person stops a session.',
   'Results meant to last still go to files from a script, so they can be rebuilt without the session. Run the script in the session (source("analysis.R"), exec(open("analysis.py").read())) rather than with Rscript or python3 from a shell: a figure file stays readable mark by mark only while it holds the bytes a cell saved.',
   'A ggplot drawn in the R session (ggplot2 and what is built on it: ggtree, enrichplot, Seurat, patchwork) is also kept as a figure whose drawn marks are bound to the rows they come from; so is a page drawn with base graphics (bound where its points match a table in the session) and a ComplexHeatmap (each cell named by its row, column and value). The plot output names its layers and marks. Read it with figure.read {cellId, plot} to check what was actually drawn (marks per layer, rows missing, mappings) and to get the rows behind marks. A ggplot saved to a project file with ggsave() is kept as a figure of that file too: the cell names it under saved, and figure.read {path} reads it while the file keeps those bytes. When the person selects marks in a plot or a saved figure, their message names the selection.',
@@ -907,7 +913,7 @@ const content = [
 ].join('\n');
 // What each view keeps in its props: the Notebook's form, and which value a value's view shows.
 const viewProps: Record<keyof typeof viewPresentations, Record<string, unknown>> = {
-  'rho.notebook': { form: { enum: ['notebook', 'console'] } }, 'rho.variables': {}, 'rho.plots': {}, 'rho.flow': {}, 'rho.servers': {},
+  'rho.notebook': { form: { enum: ['notebook', 'console'] }, notebook: { type: 'string', pattern: notebookPattern } }, 'rho.variables': {}, 'rho.plots': {}, 'rho.flow': {}, 'rho.servers': {},
   'rho.object': { language: { enum: ['r', 'python'] }, name: { type: 'string', minLength: 1 } },
 };
 export const plugin = { entryVersion: '1.0' as const, id: 'kernel', package: '@rho-workspace/plugin-kernel', version: '0.5.1', requires: [] as string[], capabilities: ['kernel'], presentation, timeline: 'kernel.events',

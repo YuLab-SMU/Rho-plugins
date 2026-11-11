@@ -137,6 +137,10 @@ Windows it also starts a local session without a POSIX `C.UTF-8` value in `LC_AL
 no such locale, so R warned at startup, ran in the C locale and printed "3 × 2 中文" as
 "3 <U+00D7> 2 <U+4E2D><U+6587>". The new Windows test fails without the change; in that
 environment the kernel tests also left an R session that kept the test file from exiting.
+Notebook 0.5.16 lets several notebooks share a project's sessions: `kernel.run` takes `notebook`,
+an identity its cell keeps, and a Notebook view given one lists the cells run in it and runs its
+own there, while the view without one lists every cell and names the notebook of each. There is
+still one session per language, with one numbering and one set of values.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a
