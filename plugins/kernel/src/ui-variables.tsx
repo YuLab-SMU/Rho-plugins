@@ -1,11 +1,14 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Icon } from './ui-icons.js';
-import { languageName, languages, latestSessions, useKernel, useRelations, type Cell, type Session } from './ui-notebook.js';
+import { languageName, languages, latestSessions, useKernel, useRelations, type Cell, type NotebookNames, type Session } from './ui-notebook.js';
+import { useShownNotebook } from './ui-notebook-target.js';
+import { NotebookPick, notebookName } from './ui-notebook-pick.js';
 import { call, clock, versionOf, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
 import { whereOf } from './ui-servers.js';
 
 // What a live session holds, as an environment pane lists it: by kind (tables and matrices, other
 // values, functions), each with its value at a glance, its type, its size and the memory it takes.
+// It shows the sessions of the notebook the person last worked in, and can show another's.
 // A name opens the value in a view of its own; the arrow beside it lists a table's columns or a
 // list's parts in place, and says which cell made it and which read it. Reading never starts a
 // session, runs nothing and waits for no cell.
@@ -33,13 +36,14 @@ function sizeText(v: Variable, language: Language) {
 export const bytesText = (bytes: number) => !bytes ? '' : bytes < 1024 ? bytes + ' B' : bytes < 1024 ** 2 ? (bytes / 1024).toFixed(bytes < 10240 ? 1 : 0) + ' KB' : bytes < 1024 ** 3 ? (bytes / 1024 ** 2).toFixed(1) + ' MB' : (bytes / 1024 ** 3).toFixed(2) + ' GB';
 type Sort = { by: 'name' | 'type' | 'bytes'; descending: boolean };
 
-export function VariablesPane({ client, snapshot, onObject, onCell, onSessions }: { client: UiClient; snapshot: UiSnapshot; onObject?: (language: Language, name: string) => void; onCell?: (cellId: string) => void; onSessions?: () => void }) {
+export function VariablesPane({ client, snapshot, onObject, onCell, onSessions, notebooks }: { client: UiClient; snapshot: UiSnapshot; onObject?: (language: Language, name: string, notebook?: string) => void; onCell?: (cellId: string, notebook?: string | null) => void; onSessions?: () => void; notebooks?: NotebookNames }) {
   const { read, off, problem } = useKernel(client, snapshot.project.id, snapshot.cursor);
-  const latest = useMemo(() => latestSessions(read), [read]);
+  const notebook = useShownNotebook();
+  const latest = useMemo(() => latestSessions(read, notebook), [read, notebook]);
   const relations = useRelations(read?.cells ?? none);
   const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended');
   const [chosen, setChosen] = useState<Language | null>(null);
-  const recent = read?.cells.at(-1)?.language;
+  const recent = read?.cells.filter(c => (c.notebook ?? null) === notebook).at(-1)?.language;
   const shown = chosen && live.includes(chosen) ? chosen : recent && live.includes(recent) ? recent : live[0] ?? null;
   const session = shown ? latest[shown] : undefined;
   const [query, setQuery] = useState('');
@@ -71,13 +75,14 @@ export function VariablesPane({ client, snapshot, onObject, onCell, onSessions }
   const state = session ? [versionOf(session), whereOf(session), session.state === 'busy' ? 'running a cell' : session.state === 'starting' ? 'starting' : 'idle'].filter(Boolean).join(' · ') : '';
   return <div className="nb-pane nb-env" ref={pane}>
     <header className="nb-env-head">
+      <NotebookPick sessions={read.sessions} shown={notebook} names={notebooks} />
       {live.length > 1 && <div className="nb-tabs" role="group" aria-label="Session">{live.map(l => <button key={l} aria-pressed={l === shown} onClick={() => setChosen(l)}>{languageName[l]}</button>)}</div>}
       {session && (onSessions
         ? <button className={'nb-env-state ' + session.state} title="Show the sessions" onClick={onSessions}><span className="nb-dot" aria-hidden="true" />{state}</button>
         : <span className={'nb-env-state ' + session.state}><span className="nb-dot" aria-hidden="true" />{state}</span>)}
       {session && <div className="nb-env-find" role="search"><Icon name="search" size={13} /><input type="search" placeholder="Find" aria-label="Find a value by name" value={query} spellCheck={false} onChange={event => setQuery(event.target.value)} /></div>}
     </header>
-    {!session ? <p className="nb-empty-line">No live session. Values show here once a cell runs in R or Python, from a notebook or a script's line.{onSessions && <> <button className="text-button" onClick={onSessions}>Show the sessions</button></>}</p>
+    {!session ? <p className="nb-empty-line">{notebook ? `No live session in ${notebookName(notebook, notebooks)}.` : 'No live session.'} Values show here once a cell runs in R or Python, from a notebook or a script's line.{onSessions && <> <button className="text-button" onClick={onSessions}>Show the sessions</button></>}</p>
       : !all.length ? <p className="nb-empty-line">Nothing defined in {languageName[session.language]} yet.</p>
       : <>
         <p className="nb-env-total">{all.length + session.variablesOmitted} {all.length + session.variablesOmitted === 1 ? 'value' : 'values'}{total ? ' · ' + bytesText(total) + ' in memory' : ''}{session.variablesAt ? ' · listed at ' + clock(Date.parse(session.variablesAt), true) : ''}{session.state === 'busy' ? ', before the running cell' : ''}</p>
@@ -92,15 +97,15 @@ export function VariablesPane({ client, snapshot, onObject, onCell, onSessions }
                   <tr className={'nb-env-row' + (unfolded ? ' open' : '')} title={v.type + (v.summary ? ': ' + v.summary : '')}>
                     <td className="nb-env-name">
                       <button className="nb-env-twisty" aria-expanded={unfolded} aria-label={(unfolded ? 'Fold ' : 'Unfold ') + v.name} onClick={() => setOpen(unfolded ? open.filter(n => n !== v.name) : [...open, v.name])}><Icon name="chevron" size={10} stroke={2.2} /></button>
-                      {onObject ? <button className="nb-env-open" title={'Open ' + v.name} onClick={() => onObject(session.language, v.name)}>{v.name}</button> : <span className="nb-env-open">{v.name}</span>}
+                      {onObject ? <button className="nb-env-open" title={'Open ' + v.name} onClick={() => onObject(session.language, v.name, notebook ?? undefined)}>{v.name}</button> : <span className="nb-env-open">{v.name}</span>}
                     </td>
                     <td className="nb-env-value">{kind === 'data' ? <span className="nb-env-dims">{sizeText(v, session.language)}</span> : <><code>{v.summary}</code>{sizeText(v, session.language) && <small> · {sizeText(v, session.language)}</small>}</>}</td>
                     {typed && <td className="nb-env-type">{v.type}</td>}
                     <td className="nb-env-bytes">{bytesText(v.bytes)}</td>
                   </tr>
                   {unfolded && <tr className="nb-env-detail"><td colSpan={columns}>
-                    <Detail client={client} projectId={snapshot.project.id} cursor={snapshot.cursor} language={session.language} variable={v} kind={kind}
-                      made={relations.bySession.get(session.sessionId)} onCell={onCell} />
+                    <Detail client={client} projectId={snapshot.project.id} cursor={snapshot.cursor} language={session.language} notebook={notebook} variable={v} kind={kind}
+                      made={relations.bySession.get(session.sessionId)} onCell={onCell && (cellId => onCell(cellId, notebook))} />
                   </td></tr>}
                 </Fragment>;
               })}
@@ -113,8 +118,8 @@ export function VariablesPane({ client, snapshot, onObject, onCell, onSessions }
 
 // What a value holds, unfolded in place: a table's columns with their first values, a list's
 // parts, and the cell that made the value and those that read it.
-function Detail({ client, projectId, cursor, language, variable, kind, made, onCell }: {
-  client: UiClient; projectId: string; cursor: number; language: Language; variable: Variable; kind: Kind;
+function Detail({ client, projectId, cursor, language, notebook, variable, kind, made, onCell }: {
+  client: UiClient; projectId: string; cursor: number; language: Language; notebook: string | null; variable: Variable; kind: Kind;
   made?: ReturnType<typeof useRelations>['all']; onCell?: (cellId: string) => void;
 }) {
   const [reading, setReading] = useState<Inspected | null>(null), [problem, setProblem] = useState('');
@@ -122,7 +127,7 @@ function Detail({ client, projectId, cursor, language, variable, kind, made, onC
   useEffect(() => {
     if (!looks) return;
     let live = true;
-    call(client, 'kernel.inspect', { projectId, language, name: variable.name, limit: kind === 'data' ? variablesPaneLimits.values : variablesPaneLimits.parts }).then(answer => { if (live) { setReading(answer); setProblem(''); } },
+    call(client, 'kernel.inspect', { projectId, language, ...(notebook ? { notebook } : {}), name: variable.name, limit: kind === 'data' ? variablesPaneLimits.values : variablesPaneLimits.parts }).then(answer => { if (live) { setReading(answer); setProblem(''); } },
       error => { if (live) setProblem(error instanceof Error ? error.message : 'The value could not be read.'); });
     return () => { live = false; };
   }, [variable.name, variable.summary, variable.size, cursor]);

@@ -19,8 +19,9 @@ export const recordSchema = obj({
   problem: { anyOf: [{ type: 'string' }, { type: 'null' }] },
 });
 
-// A terminal: the person's own shell on a pseudo-terminal, for as long as Rho runs. `bytes` is
+// A terminal: a shell on a pseudo-terminal, for as long as Rho runs, opened by `by`. `bytes` is
 // what it has printed so far and `kept` the offset of the oldest byte a read can still return.
+// `typedBy` is the latest input from anyone other than whoever opened it.
 export const terminalId = { type: 'string', pattern: '^t-[a-f0-9]{16}$' };
 export const terminalSize = { cols: { type: 'integer', minimum: 2, maximum: 500 }, rows: { type: 'integer', minimum: 1, maximum: 300 } };
 export const terminalSchema = obj({
@@ -29,4 +30,5 @@ export const terminalSchema = obj({
   exit: { anyOf: [obj({ code: { anyOf: [{ type: 'integer' }, { type: 'null' }] }, signal: { anyOf: [{ type: 'string' }, { type: 'null' }] } }), { type: 'null' }] },
   bytes: { type: 'integer', minimum: 0 }, kept: { type: 'integer', minimum: 0 },
   problem: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+  typedBy: { anyOf: [obj({ by: text, at: time }), { type: 'null' }] },
 });

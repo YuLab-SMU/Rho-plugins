@@ -10,7 +10,8 @@ export { SessionPane, NotebookPage, PlotsPane, Code, FormSwitch, languages, lang
 export { VariablesPane, variablesPaneLimits } from './ui-variables.js';
 export { SessionsPane, sessionsPaneLimits } from './ui-sessions.js';
 export { savedForm, saveForm } from './ui-notebook-form.js';
-export { askCell, askPlot } from './ui-notebook-target.js';
+export { askCell, askPlot, showNotebook } from './ui-notebook-target.js';
+export { notebookName } from './ui-notebook-pick.js';
 export { ServersPane, showOnServer } from './ui-servers.js';
 export { FlowPane, ScriptFlowView, lineageViewLimits, innerFlowLimits } from './ui-flow.js';
 export { ObjectView, objectViewLimits } from './ui-object.js';

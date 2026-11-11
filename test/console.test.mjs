@@ -197,6 +197,33 @@ test('a terminal is a shell on a real terminal: it has a size, takes keys and Ct
   await assert.rejects(host.read(terminal.terminalId, 0), e => e.kind === 'not_found');
 });
 
+test('an Agent reads a terminal as text and types in it: its screen, a command\'s settled output, a full-screen program, and who typed', { skip: noPty }, async t => {
+  const root = await project(), host = new TerminalHost(root, { shell: '/bin/sh', limits: { quietMs: 300 } });
+  t.after(() => host.shutdown());
+  const { terminal } = await host.open({ cols: 40, rows: 10, by: 'browser:local' });
+  // The person's own typing is theirs; the Agent's is kept as the latest input of another.
+  host.write(terminal.terminalId, 'PS1="$ "\n', 'browser:local');
+  assert.equal(host.list().terminals[0].typedBy ?? null, null);
+  const sent = host.write(terminal.terminalId, 'printf "\\033[31mred\\033[0m %s\\n" one; echo two; echo a-line-much-longer-than-forty-columns-to-wrap-it\r', 'agent:a');
+  assert.equal(typeof sent.offset, 'number');
+  const after = await host.screen(terminal.terminalId, { after: sent.offset, waitMs: 10000 });
+  assert.equal(after.quiet, true, 'the output came and stopped');
+  assert.equal(after.fullScreen, false);
+  assert.ok(after.lines.includes('red one') && after.lines.includes('two'), 'colours stripped: ' + JSON.stringify(after.lines));
+  assert.ok(after.lines.includes('a-line-much-longer-than-forty-columns-to-wrap-it'), 'a wrapped line is joined again');
+  assert.equal(after.lines.at(-1), '$ ', 'the prompt is last, nothing below it');
+  assert.equal(after.terminal.typedBy.by, 'agent:a');
+  // Nothing printed within the wait: not quiet, and the screen as it is.
+  const idle = await host.screen(terminal.terminalId, { after: after.offset, waitMs: 400 });
+  assert.equal(idle.quiet, false); assert.equal(idle.offset, after.offset);
+  // A full-screen program has the screen until it is left.
+  const opened = host.write(terminal.terminalId, 'printf "\\033[?1049h\\033[Hfull screen"; sleep 2; printf "\\033[?1049l"\r', 'agent:a');
+  const full = await host.screen(terminal.terminalId, { after: opened.offset, waitMs: 1500 });
+  assert.equal(full.fullScreen, true); assert.ok(full.lines.some(l => l.startsWith('full screen')));
+  assert.ok((await host.screen(terminal.terminalId, { lines: 2 })).lines.length <= 2);
+  await assert.rejects(host.screen(terminal.terminalId, { lines: 501 }), e => e.kind === 'limit');
+});
+
 test('terminal limits: how many are open, the scrollback kept, and one write', { skip: noPty }, async t => {
   const root = await project(), host = new TerminalHost(root, { shell: '/bin/sh', limits: { maxTerminals: 1, scrollbackBytes: 4096, maxWriteBytes: 16 } });
   t.after(() => host.shutdown());

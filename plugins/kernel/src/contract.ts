@@ -78,6 +78,8 @@ export const sessionSchema = obj({
   // The program it ran, as the session reported it: relative to the project when it is in it
   // (.venv/bin/python). Sessions recorded before have none.
   program: maybe({ type: 'string' }),
+  // The notebook whose session it is; none for the project's own notebook.
+  notebook: notebookId,
 }, ['sessionId', 'language', 'state', 'version', 'pid', 'startedAt', 'startedBy', 'endedAt', 'ending', 'stop', 'problem', 'variables', 'variablesOmitted', 'variablesAt', 'cells']);
 // A described plot names what it drew: its describer, layers, marks and how many are bound to rows.
 export const figureSummarySchema = obj({ describer: text, kind: { type: 'string' }, title: { type: 'string' }, layers: { type: 'integer', minimum: 0 }, marks: { type: 'integer', minimum: 0 }, bound: { type: 'integer', minimum: 0 }, geoms: { type: 'array', items: { type: 'string' } } }, ['describer', 'layers', 'marks', 'bound', 'geoms']);
@@ -87,9 +89,9 @@ export const outputSchema = obj({ kind: { enum: ['stdout', 'stderr', 'warning', 
 export const savedFigureSchema = obj({ number: { type: 'integer', minimum: 1 }, path: text, bytes: { type: 'integer', minimum: 0 }, sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' }, figure: figureSummarySchema, figureProblem: { type: 'string' } }, ['number', 'path', 'bytes', 'sha256']);
 export const cellSchema = obj({
   cellId, changeId, by: text, sessionId, language, code: { type: 'string' }, purpose: maybe({ type: 'string' }),
-  // The notebook it was run in, by that notebook's identity. The notebooks of a project share its
-  // sessions, so this says where the cell reads, not which values it could see. A cell run in the
-  // project's own notebook, and every cell recorded before notebooks had identities, has none.
+  // The notebook it was run in, by that notebook's identity, whose session of its language ran it.
+  // A cell run in the project's own notebook, and every cell recorded before notebooks had
+  // identities, has none.
   notebook: notebookId,
   queuedAt: time, startedAt: maybe(time), endedAt: maybe(time), state: { enum: [...cellStates] },
   // The order it ran in its session, counting from 1.

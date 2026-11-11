@@ -177,20 +177,37 @@ test('a change identity names one cell; cells run one at a time in the order the
   await host.close();
 });
 
-test('notebooks share the sessions: a cell keeps the notebook it was run in and sees the others\' values', async () => {
+test('each notebook has its own sessions: a cell keeps its notebook, and a value made in one is not in another', async () => {
   const root = await project();
-  const host = new KernelHost(root);
+  const host = new KernelHost(root, { limits: { maxSessions: 3 } });
   const plain = await host.run({ language: 'python', code: 'shared = 20', changeId: 'a', by: 'browser:local', waitMs: 30000 });
-  const named = await host.run({ language: 'python', code: 'shared + 1', notebook: 'nb-4f2a', changeId: 'b', by: 'browser:local', waitMs: 30000 });
+  const named = await host.run({ language: 'python', code: 'mine = 1\nprint("shared" in dir())', notebook: 'nb-4f2a', changeId: 'b', by: 'browser:local', waitMs: 30000 });
   assert.equal(plain.cell.notebook, undefined, 'the project\'s own notebook has no identity');
   assert.equal(named.cell.notebook, 'nb-4f2a');
-  assert.equal(named.cell.sessionId, plain.cell.sessionId, 'one session for both');
-  assert.equal(text(await settled(host, named.cell.cellId)), '21\n');
-  await assert.rejects(host.run({ language: 'python', code: '1', notebook: 'two words', changeId: 'c', by: 'browser:local' }), e => e.kind === 'invalid');
+  assert.notEqual(named.cell.sessionId, plain.cell.sessionId, 'a session of its own');
+  assert.equal(named.session.notebook, 'nb-4f2a'); assert.equal(plain.session.notebook, undefined);
+  assert.equal(text(await settled(host, named.cell.cellId)), 'False\n', 'the project notebook\'s value is not there');
+  const next = await host.run({ language: 'python', code: 'print(mine + 1)', notebook: 'nb-4f2a', changeId: 'c', by: 'agent:a', waitMs: 30000 });
+  assert.equal(next.cell.sessionId, named.cell.sessionId); assert.equal(next.cell.number, 2);
+  assert.equal(text(await settled(host, next.cell.cellId)), '2\n');
+  // Reading a value names the notebook whose session holds it.
+  assert.equal((await host.inspect({ language: 'python', notebook: 'nb-4f2a', name: 'mine' })).state, 'shown');
+  assert.equal((await host.inspect({ language: 'python', name: 'mine' })).state, 'missing');
+  assert.equal((await host.inspect({ language: 'python', notebook: 'nb-0000', name: 'mine' })).state, 'none');
+  // A session starts without a cell in a notebook of its own, once.
+  const started = await host.start({ language: 'python', notebook: 'nb-77' }, 'browser:local');
+  assert.equal(started.session.notebook, 'nb-77');
+  assert.equal((await host.start({ language: 'python', notebook: 'nb-77' }, 'browser:local')).session.sessionId, started.session.sessionId);
+  // Three live sessions are the limit here: a fourth is refused, naming those that run.
+  await assert.rejects(host.start({ language: 'r', notebook: 'nb-77' }, 'browser:local'), e => e.kind === 'limit' && /At most 3 sessions/.test(e.message) && /Stop one in Sessions/.test(e.message));
+  await assert.rejects(host.run({ language: 'python', code: '1', notebook: 'two words', changeId: 'd', by: 'browser:local' }), e => e.kind === 'invalid');
+  await assert.rejects(host.start({ language: 'python', notebook: 'two words' }, 'browser:local'), e => e.kind === 'invalid');
   await host.close();
-  // The record keeps it across a restart of Rho.
+  // The record keeps both across a restart of Rho.
   const later = new KernelHost(root);
-  assert.deepEqual((await later.read()).cells.map(c => c.notebook ?? null), [null, 'nb-4f2a']);
+  const record = await later.read();
+  assert.deepEqual(record.cells.map(c => c.notebook ?? null), [null, 'nb-4f2a', 'nb-4f2a']);
+  assert.deepEqual(record.sessions.map(s => s.notebook ?? null).sort(), [null, 'nb-4f2a', 'nb-77'].sort());
   await later.close();
 });
 

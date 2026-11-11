@@ -19,7 +19,8 @@ const kinds: Record<Described['kind'], { icon: IconName; name: string }> = {
 };
 const when = (iso: string) => clock(Date.parse(iso));
 
-export function ObjectView({ client, snapshot, language, name, onUse }: { client: UiClient; snapshot: UiSnapshot; language: Language; name: string; onUse?: (expression: string) => void }) {
+// A value of a notebook's session (notebook: its identity; none for the project's notebook).
+export function ObjectView({ client, snapshot, language, name, notebook, onUse }: { client: UiClient; snapshot: UiSnapshot; language: Language; name: string; notebook?: string; onUse?: (expression: string) => void }) {
   const projectId = snapshot.project.id, session = languageNames[language];
   const [path, setPath] = useState<number[]>([]);
   const [offset, setOffset] = useState(0);
@@ -43,7 +44,7 @@ export function ObjectView({ client, snapshot, language, name, onUse }: { client
   useEffect(() => {
     if (!visible) return;
     let live = true;
-    call(client, 'kernel.inspect', { projectId, language, name, path, offset, limit: objectViewLimits.rows, picture: true, ...(sort ? { sort } : {}) }).then(answer => {
+    call(client, 'kernel.inspect', { projectId, language, ...(notebook ? { notebook } : {}), name, path, offset, limit: objectViewLimits.rows, picture: true, ...(sort ? { sort } : {}) }).then(answer => {
       if (!live) return;
       setReading(answer); setProblem('');
       if (answer.state === 'shown') setKept({ key, reading: answer });

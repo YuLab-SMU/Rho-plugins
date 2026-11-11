@@ -1,6 +1,6 @@
 {
   "name": "@rho-workspace/plugin-console",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "type": "module",
   "description": "Rho console plugin: commands a person runs in a project folder, kept with their output",
   "license": "AGPL-3.0-only",
@@ -23,7 +23,8 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@rho-workspace/plugin-contracts": "0.4.0"
+    "@rho-workspace/plugin-contracts": "0.4.0",
+    "@xterm/headless": "6.0.0"
   },
   "peerDependencies": {
     "react": "19.3.1"

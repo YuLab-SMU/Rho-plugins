@@ -4,17 +4,23 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import type { Writable } from 'node:stream';
 import { confined, now, requireThat } from '@rho-workspace/plugin-contracts';
+import headless from '@xterm/headless';
 
-// A terminal is the person's own shell on a pseudo-terminal, in the project folder: what a
-// terminal window gives them, drawn by the page. It lives while Rho runs. Closing it, or Rho
+// A terminal is a shell on a pseudo-terminal, in the project folder: what a terminal window gives
+// the person, drawn by the page. The person and an Agent may both use it; who opened it and who
+// last typed there besides them are kept with it. It lives while Rho runs. Closing it, or Rho
 // closing, hangs up the shell the way closing a terminal window does.
 //
 // The protected resources are this machine's processes and Rho's memory. A project keeps at most
 // maxTerminals at once (ended ones make room; with all of them live a new one is refused). Each
 // keeps its last scrollbackBytes of output; older output is counted in `dropped` when a reader
 // asks for it, never returned as if it were whole. One read returns at most maxReadBytes and waits
-// at most maxWaitMs; one write takes at most maxWriteBytes.
-export const terminalLimits = { maxTerminals: 4, scrollbackBytes: 1024 * 1024, maxReadBytes: 256 * 1024, maxWriteBytes: 64 * 1024, maxWaitMs: 25000, maxCols: 500, maxRows: 300, closeGraceMs: 2000 };
+// at most maxWaitMs; one write takes at most maxWriteBytes. What a terminal shows is also kept as
+// text by a terminal emulator (xterm.js without a page), with screenScrollback lines above the
+// screen; a reading of it returns at most maxScreenLines lines, and one that waits for output
+// returns once the output has been quiet for quietMs, or at maxWaitMs.
+export const terminalLimits = { maxTerminals: 4, scrollbackBytes: 1024 * 1024, maxReadBytes: 256 * 1024, maxWriteBytes: 64 * 1024, maxWaitMs: 25000, maxCols: 500, maxRows: 300, closeGraceMs: 2000,
+  screenScrollback: 2000, screenLines: 60, maxScreenLines: 500, quietMs: 400 };
 export type TerminalLimits = typeof terminalLimits;
 
 export interface TerminalRecord {
@@ -22,8 +28,11 @@ export interface TerminalRecord {
   startedAt: string; endedAt: string | null; exit: { code: number | null; signal: string | null } | null;
   // Bytes printed so far, and the offset of the oldest byte still kept.
   bytes: number; kept: number; problem: string | null;
+  // The latest input from anyone other than whoever opened it (an Agent in the person's terminal).
+  typedBy?: { by: string; at: string } | null;
 }
-interface Live { child: ChildProcess; control: Writable | null; record: TerminalRecord; chunks: Buffer[]; waiters: Set<() => void>; errors: string; killTimer?: NodeJS.Timeout }
+type Screen = InstanceType<typeof headless.Terminal>;
+interface Live { child: ChildProcess; control: Writable | null; record: TerminalRecord; chunks: Buffer[]; waiters: Set<() => void>; errors: string; killTimer?: NodeJS.Timeout; screen: Screen }
 
 // The pseudo-terminal is opened by a few lines of Python, which macOS and Linux have and which
 // needs no compiled module in Rho: it starts the shell on a new terminal, copies bytes both
@@ -101,7 +110,7 @@ export class TerminalHost {
     while (this.live.size >= this.limits.maxTerminals) {
       const ended = [...this.live.values()].find(l => l.record.endedAt !== null);
       requireThat(ended, 'limit', `At most ${this.limits.maxTerminals} terminals are open in a project at once. Close one first.`, { limit: 'maxTerminals', maximum: this.limits.maxTerminals });
-      this.live.delete(ended.record.terminalId);
+      this.live.delete(ended.record.terminalId); ended.screen.dispose();
     }
     const cwd = input.cwd ?? '', folder = cwd ? await confined(this.root, cwd) : await fs.realpath(this.root);
     requireThat((await fs.stat(folder)).isDirectory(), 'invalid', 'Open a terminal in a folder of this project.');
@@ -116,11 +125,12 @@ export class TerminalHost {
       requireThat(false, 'unavailable', 'The terminal could not be started: ' + (error instanceof Error ? error.message : 'python3 did not start.'));
       throw error;
     }
-    const live: Live = { child, control: child.stdio[3] as Writable, record, chunks: [], waiters: new Set(), errors: '' };
+    const screen = new headless.Terminal({ cols: input.cols, rows: input.rows, scrollback: this.limits.screenScrollback, allowProposedApi: true });
+    const live: Live = { child, control: child.stdio[3] as Writable, record, chunks: [], waiters: new Set(), errors: '', screen };
     this.live.set(record.terminalId, live);
     const wake = () => { for (const done of [...live.waiters]) done(); };
     child.stdout!.on('data', (chunk: Buffer) => {
-      live.chunks.push(chunk); record.bytes += chunk.length;
+      live.chunks.push(chunk); record.bytes += chunk.length; screen.write(chunk);
       // The oldest output goes once more than the scrollback is kept.
       let held = record.bytes - record.kept;
       while (live.chunks.length > 1 && held - live.chunks[0]!.length >= this.limits.scrollbackBytes) { const old = live.chunks.shift()!; held -= old.length; record.kept += old.length; }
@@ -141,18 +151,20 @@ export class TerminalHost {
     return { terminal: { ...record } };
   }
 
-  write(terminalId: string, data: string) {
+  // Typed input, as `by` sends it; input from anyone but the opener is kept as the latest such.
+  write(terminalId: string, data: string, by?: string) {
     const live = this.need(terminalId);
     requireThat(Buffer.byteLength(data) <= this.limits.maxWriteBytes, 'limit', `Send at most ${this.limits.maxWriteBytes} bytes at a time.`, { limit: 'maxWriteBytes', maximum: this.limits.maxWriteBytes });
     requireThat(live.record.endedAt === null, 'condition', 'This terminal\'s shell has ended. Open a new one.');
     live.child.stdin!.write(data);
-    return { terminalId, bytes: Buffer.byteLength(data) };
+    if (by && by !== live.record.by) { live.record.typedBy = { by, at: now() }; this.changed(); }
+    return { terminalId, bytes: Buffer.byteLength(data), offset: live.record.bytes };
   }
 
   resize(terminalId: string, cols: number, rows: number) {
     const live = this.need(terminalId);
     requireThat(whole(cols, 2, this.limits.maxCols) && whole(rows, 1, this.limits.maxRows), 'invalid', `Size the terminal between 2 × 1 and ${this.limits.maxCols} × ${this.limits.maxRows}.`);
-    if (live.record.endedAt === null && (live.record.cols !== cols || live.record.rows !== rows)) { live.record.cols = cols; live.record.rows = rows; live.control?.write(`${cols} ${rows}\n`); }
+    if (live.record.endedAt === null && (live.record.cols !== cols || live.record.rows !== rows)) { live.record.cols = cols; live.record.rows = rows; live.control?.write(`${cols} ${rows}\n`); live.screen.resize(cols, rows); }
     return { terminal: { ...live.record } };
   }
 
@@ -178,11 +190,49 @@ export class TerminalHost {
     return { data: Buffer.concat(parts).toString('base64'), offset: from, nextOffset: from + taken, dropped: Math.max(0, from - after), more: from + taken < record.bytes, terminal: { ...record } };
   }
 
+  // What the terminal shows now, as text: its lines up to the bottom of the screen, a line the
+  // screen wrapped joined again, at most `lines` of them (the screen's own rows and those above
+  // it), where the cursor is on the screen, and whether a full-screen program (an editor, top,
+  // less) has the screen. Given `after`, the offset of bytes a writer or reader was at, it first
+  // waits up to waitMs for output past it and for that output to stop for quietMs, so a command
+  // just typed has printed what it prints at once. `offset` is the bytes printed by then.
+  async screen(terminalId: string, input: { after?: number; waitMs?: number; lines?: number } = {}) {
+    const live = this.need(terminalId), record = live.record, limits = this.limits;
+    const lines = input.lines ?? limits.screenLines;
+    requireThat(whole(lines, 1, limits.maxScreenLines), 'limit', `Read at most ${limits.maxScreenLines} lines at a time.`, { limit: 'maxScreenLines', maximum: limits.maxScreenLines });
+    const wait = (ms: number) => new Promise<void>(resolve => {
+      const done = () => { clearTimeout(timer); live.waiters.delete(done); resolve(); };
+      const timer = setTimeout(done, Math.max(0, ms));
+      live.waiters.add(done);
+    });
+    // quiet: the output had stopped (or the shell ended) when the reading was taken.
+    let quiet = true;
+    if (input.after !== undefined && (input.waitMs ?? 0) > 0) {
+      const until = Date.now() + Math.min(input.waitMs!, limits.maxWaitMs);
+      while (record.bytes <= input.after && record.endedAt === null && Date.now() < until) await wait(until - Date.now());
+      let seen = -1;
+      while (record.endedAt === null && record.bytes !== seen && Date.now() < until) { seen = record.bytes; await wait(Math.min(limits.quietMs, until - Date.now())); }
+      quiet = record.endedAt !== null || (record.bytes === seen && record.bytes > input.after);
+    }
+    await new Promise<void>(resolve => live.screen.write('', resolve));
+    const buffer = live.screen.buffer.active, text: string[] = [], cursorRow = buffer.baseY + buffer.cursorY;
+    let cursorLine = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const line = buffer.getLine(i);
+      if (!line) continue;
+      if (line.isWrapped && text.length) text[text.length - 1] += line.translateToString(true); else text.push(line.translateToString(true));
+      if (i === cursorRow) cursorLine = text.length - 1;
+    }
+    // Blank rows below the cursor are the screen's empty rest.
+    while (text.length - 1 > cursorLine && !text.at(-1)!.trim()) text.pop();
+    return { lines: text.slice(-lines), omitted: Math.max(0, text.length - lines), cursor: { row: buffer.cursorY, col: buffer.cursorX }, fullScreen: buffer.type === 'alternate', offset: record.bytes, quiet, terminal: { ...record } };
+  }
+
   // Closing hangs up the shell, as closing a terminal window does, and forgets the terminal.
   close(terminalId: string) {
     const live = this.need(terminalId);
     this.end(live);
-    this.live.delete(terminalId);
+    this.live.delete(terminalId); live.screen.dispose();
     for (const done of [...live.waiters]) done();
     this.changed();
     return { terminal: { ...live.record } };
@@ -196,5 +246,5 @@ export class TerminalHost {
     live.killTimer.unref?.();
   }
   // Rho closing: every shell is hung up.
-  shutdown() { for (const live of this.live.values()) { this.end(live); clearTimeout(live.killTimer); } this.live.clear(); }
+  shutdown() { for (const live of this.live.values()) { this.end(live); clearTimeout(live.killTimer); live.screen.dispose(); } this.live.clear(); }
 }

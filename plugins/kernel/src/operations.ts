@@ -32,7 +32,7 @@ export const operationContracts = {
   // parts a reading listed; offset, limit and sort choose the page of rows, elements or parts.
   // picture asks for what an R value draws when it is printed, as a PNG beside its description.
   'kernel.inspect': {
-    inputSchema: obj({ language, name: { type: 'string', minLength: 1, maxLength: 256 }, path: { type: 'array', items: { type: 'integer', minimum: 0 }, maxItems: 16 }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200 }, sort: sortInput, picture: { type: 'boolean' } }, ['language', 'name']),
+    inputSchema: obj({ language, notebook: notebookId, name: { type: 'string', minLength: 1, maxLength: 256 }, path: { type: 'array', items: { type: 'integer', minimum: 0 }, maxItems: 16 }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200 }, sort: sortInput, picture: { type: 'boolean' } }, ['language', 'name']),
     outputSchema: obj({ state: { enum: [...inspectStates] }, sessionId: { anyOf: [sessionId, { type: 'null' }] }, afterCell: { type: 'integer', minimum: 0 }, runningCell: { anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }] }, readAt: { type: 'string', minLength: 1 }, problem: { anyOf: [{ type: 'string' }, { type: 'null' }] }, object: { anyOf: [objectSchema, { type: 'null' }] } }),
     requires: [] as string[], effect: 'read' as const,
   },
@@ -42,9 +42,10 @@ export const operationContracts = {
     outputSchema: obj({ cell: cellSchema }),
     requires: [] as string[], effect: 'native' as const,
   },
-  // Starts the language's session without a cell; a live one is returned as it is.
+  // Starts a notebook's session of the language without a cell (the project's notebook when none
+  // is named); a live one is returned as it is.
   'kernel.start': {
-    inputSchema: obj({ language, place: placeRef }, ['language']),
+    inputSchema: obj({ language, notebook: notebookId, place: placeRef }, ['language']),
     outputSchema: obj({ session: sessionSchema }),
     requires: [] as string[], effect: 'native' as const,
   },

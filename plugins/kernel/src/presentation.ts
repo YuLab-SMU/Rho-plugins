@@ -38,7 +38,7 @@ export const operationPresentation = {
   'kernel.servers': { order: 70, displayName: 'Read your servers', description: "Reads the servers you manage with serverctl and the skills bound to each.", readOnly: true, runsCode: false },
   'kernel.server.skill': { order: 72, displayName: "Read a server's skill", description: "Reads one skill bound to a server: how that server is used.", readOnly: true, runsCode: false },
 } satisfies Record<string, EntryPresentation>;
-// The views of the sessions a page can show. Each reads the same sessions; none holds its own.
+// The views of the sessions a page can show. Each reads the project's sessions; none holds its own.
 export const viewPresentations = {
   'rho.notebook': { displayName: 'Notebook', description: 'The cells run in the live R and Python sessions, with who ran each and why, what it printed and its plots, and a line to run your own.', readOnly: false, runsCode: true },
   'rho.sessions': { displayName: 'Sessions', description: 'The live R and Python processes: where each runs, with which program, what it is doing and holds, and Interrupt and Stop.', readOnly: false, runsCode: false },

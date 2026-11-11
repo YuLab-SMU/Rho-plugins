@@ -206,14 +206,15 @@ export class ConsoleRunner {
 const content = [
   'The Console records commands the person at this machine runs in the project folder.',
   'Agents run their own commands with their own tools; an Agent may read this record with console.list and console.output.',
-  'The person may also keep a terminal open here, their own shell. It is theirs alone: an Agent cannot open, read or type in it, and what is run there is not in this record.',
+  'The person may also keep terminals open here, each a shell in the project folder, and you may use them too. console.terminal.list lists them with who opened each. console.terminal.screen reads what one shows now as text. console.terminal.write types into it as if typed there: end a command with "\\r". It returns the offset printed so far; pass it as after to console.terminal.screen with waitMs to wait until the output has come and stopped (quiet says it had). A full-screen program (an editor, top, less) has the screen while fullScreen is true; send its own keys, such as "q", to leave it.',
+  'Use a terminal for what the person has open or asks for there: a server they logged into, a program waiting for input, a command they want to watch. Work they need not watch is better done with your own tools. The person sees all that is typed and printed in a terminal, and your writes are recorded as your activity; what runs there is not in the Console\'s record of commands. console.terminal.open opens a terminal of your own, which the person can show beside theirs; wait for its prompt with console.terminal.screen (after 0, waitMs) before typing. You may close only the terminals you opened.',
   'Use capability.list to see whether those reads are enabled for you.',
   'A command keeps its changeId: repeating it returns the same record and never runs it twice.',
   'How a command ended is what Rho observed: an exit code or signal, a requested stop, or unknown.',
 ].join('\n');
 export const plugin = { entryVersion: '1.0' as const, id: 'console', package: '@rho-workspace/plugin-console', version: '0.3.0', requires: [] as string[], capabilities: ['console'], presentation, timeline: 'console.events',
   operations: Object.entries(operationContracts).map(([method, contract]) => ({ method, presentation: operationPresentation[method as keyof typeof operationPresentation], version: '2.0' as const, ...structuredClone(contract), requires: [...contract.requires] })),
-  skills: [{ id: 'console.workspace', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Console', description: 'Explains what the console records and that it runs commands only for the person.' },
+  skills: [{ id: 'console.workspace', version: '1.0', content, digest: digest(content), presentation: { displayName: 'Console', description: 'Explains what the console records, and how an Agent reads and types in a terminal.' },
     intent: 'Read the commands the person ran and how they ended.', requires: ['console.list', 'console.output'],
     example: { method: 'console.list', input: { limit: 20 } },
     failureRecipes: [{ kind: 'limit', message: 'Too many commands are running.', next: 'Stop one or wait for it to end, then run again with a new changeId.' }],

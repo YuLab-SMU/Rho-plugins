@@ -4,7 +4,8 @@ import { cellRelations, type CellRelations, type LineageCell } from './lineage.j
 import { CellScriptFlow } from './ui-flow.js';
 import { Icon } from './ui-icons.js';
 import { PlaceChip, usePlaces, whereOf } from './ui-servers.js';
-import { takeCell, takePlot, useAskedCell, useAskedPlot } from './ui-notebook-target.js';
+import { showNotebook, takeCell, takePlot, useAskedCell, useAskedPlot, useShownNotebook } from './ui-notebook-target.js';
+import { NotebookPick } from './ui-notebook-pick.js';
 import { scopedCells } from './session-scope.js';
 import { call, refused, agentName, agentNames, clock, durationText, useShell, withShell, versionOf, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
 export { versionOf };
@@ -357,11 +358,13 @@ function example(language: Language, session: Session | undefined) {
   return table ? `${table.name}.describe()` : live.length ? 'dir()' : 'x = list(range(10))';
 }
 
+// The session a notebook's cell runs in: the project's, shared with the Agent, or a notebook's own.
+const runsIn = (language: Language, own?: boolean) => own ? `this notebook's own ${languageName[language]} session` : `the ${languageName[language]} session you share with the Agent`;
 // Which session a cell goes to, as the chip each cell carries: pressing it switches to the other.
-function LanguageChip({ language, onLanguage }: { language: Language; onLanguage: (language: Language) => void }) {
+function LanguageChip({ language, onLanguage, own }: { language: Language; onLanguage: (language: Language) => void; own?: boolean }) {
   const other: Language = language === 'r' ? 'python' : 'r';
   return <button type="button" className={'nb-lang-switch ' + language} aria-label={`${languageName[language]}. Switch to ${languageName[other]}`}
-    title={`Runs in the ${languageName[language]} session you share with the Agent. Switch to ${languageName[other]}`} onClick={() => onLanguage(other)}>
+    title={`Runs in ${runsIn(language, own)}. Switch to ${languageName[other]}`} onClick={() => onLanguage(other)}>
     {languageName[language]}<Icon name="updown" size={10} stroke={2.2} /></button>;
 }
 
@@ -374,17 +377,17 @@ function SessionChip({ language, session, onSessions }: { language: Language; se
   </button>;
 }
 
-function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small, place, state }: {
-  language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean; place?: React.ReactNode; state?: React.ReactNode;
+function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small, place, state, own }: {
+  own?: boolean; language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean; place?: React.ReactNode; state?: React.ReactNode;
   onRun: () => void; onInterrupt: () => void; running: boolean; input: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const id = useId(), lines = Math.max(small ? 1 : 2, Math.min(small ? 8 : 14, draft.split('\n').length));
   const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
   return <form className="nb-composer" onSubmit={event => { event.preventDefault(); onRun(); }}>
     <div className="nb-compose-bar">
-      <LanguageChip language={language} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
+      <LanguageChip language={language} own={own} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
       {place}
-      <label htmlFor={id}>Runs in the {languageName[language]} session you share with the Agent</label>
+      <label htmlFor={id}>Runs in {runsIn(language, own)}</label>
       {state}
     </div>
     {note && <p className="nb-compose-note">{note}</p>}
@@ -485,7 +488,8 @@ function ConsoleBar({ sessions, asking, onInterrupt, onStop, onClear, place, onS
 // The prompt: Enter runs finished code and goes on to another line in unfinished code, as a
 // console does; Shift+Enter adds a line and ⌘/Ctrl+Enter runs whatever is there. ↑ and ↓ bring
 // back what the person ran; Esc interrupts the running cell; Ctrl+L clears the view.
-function ConsolePrompt({ language, setLanguage, draft, setDraft, note, problem, busy, running, input, history, onRun, onInterrupt, onClear }: {
+function ConsolePrompt({ language, setLanguage, draft, setDraft, note, problem, busy, running, input, history, onRun, onInterrupt, onClear, own }: {
+  own?: boolean;
   language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (text: string) => void; note: string; problem: string; busy: boolean; running: boolean;
   input: React.RefObject<HTMLTextAreaElement | null>; history: Array<{ code: string; language: Language }>; onRun: (code: string) => void; onInterrupt: () => void; onClear: () => void;
 }) {
@@ -534,7 +538,7 @@ function ConsolePrompt({ language, setLanguage, draft, setDraft, note, problem, 
   return <div className={'nbc-prompt-row ' + language}>
     {note && <p className="nbc-quiet">{note}</p>}
     <div className="nbc-prompt-line">
-      <LanguageChip language={language} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
+      <LanguageChip language={language} own={own} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
       <pre className="nbc-prompt" aria-hidden="true">{[first, ...Array(lines - 1).fill(rest)].join('\n')}</pre>
       <textarea ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off" aria-label={`${languageName[language]} prompt`}
         onChange={event => { setBack(null); setDraft(event.target.value); }} onKeyDown={keys} />
@@ -568,11 +572,14 @@ export interface Beside { variables?: boolean; plots?: boolean }
 // a plot opens in the Plots view, the sessions' state in the Sessions view and a value in its own
 // view (onObject), so it keeps no plots, variables or sessions of its own beside the cells.
 export interface Linked { plot(cellId: string, plot: number): void; sessions(): void }
-// `notebook` makes the view one notebook among several over the same sessions: it lists the cells
-// run in it and runs its own there. Without it the view is the project's notebook, which lists
-// every cell and says which notebook another one was run in (`notebooks`: identity to name).
+// `notebook` makes the view one notebook among several, each with R and Python sessions of its
+// own: it lists the cells run in it and runs its own in its sessions. Without it the view is the
+// project's notebook, whose sessions the Agent works in unless it names another. A notebook shown
+// in several views (split, or on several pages) is one notebook. In a conversation's record the
+// view lists that conversation's cells wherever they ran and names a notebook of another
+// (`notebooks`: identity to name).
 export type NotebookNames = Readonly<Record<string, string>>;
-export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject, beside, linked, form, scope, shell, notebook, notebooks }: { client: UiClient; snapshot: UiSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string) => void; scope?: SessionScope; shell?: KernelShell; beside?: Beside; linked?: Linked; form?: NotebookForm; notebook?: string; notebooks?: NotebookNames }) {
+export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject, beside, linked, form, scope, shell, notebook, notebooks }: { client: UiClient; snapshot: UiSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string, notebook?: string) => void; scope?: SessionScope; shell?: KernelShell; beside?: Beside; linked?: Linked; form?: NotebookForm; notebook?: string; notebooks?: NotebookNames }) {
   const box = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false), [shown, setShown] = useState(0);
   // A view the shell hides or moves leaves the page and loses its scroll; each time it shows at
@@ -599,7 +606,7 @@ export function NotebookPage({ shell, ...props }: Parameters<typeof NotebookBody
   return withShell(shell, <WithFacts snapshot={props.snapshot}><NotebookBody {...props} /></WithFacts>);
 }
 function NotebookBody({ client, snapshot, onConversation, onObject, scope, compact: narrow = false, inView = false, shown = 0, prepared, onTaken, beside = {}, linked, form = 'notebook', notebook, notebooks }: {
-  client: UiClient; snapshot: UiSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void; beside?: Beside; linked?: Linked; form?: NotebookForm;
+  client: UiClient; snapshot: UiSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string, notebook?: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void; beside?: Beside; linked?: Linked; form?: NotebookForm;
   scope?: SessionScope; notebook?: string; notebooks?: NotebookNames }) {
   const projectId = snapshot.project.id;
   // Linked to the other views, the cells take the whole view at any width.
@@ -607,14 +614,13 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   const { read, off, problem, again } = useKernel(client, projectId, snapshot.cursor);
   const { places, setPlaces } = usePlaces(client, projectId, snapshot.cursor);
   const who = useAuthors(snapshot);
-  const cells = useMemo(() => { const scoped = scopedCells(read?.cells ?? [], scope); return notebook ? scoped.filter(c => c.notebook === notebook) : scoped; }, [read, notebook, scope?.principal, scope?.since, scope?.at, scope?.cellIds]);
-  // In the project's notebook, where a cell of another notebook was run.
+  // The notebook's own cells; a conversation's record lists its cells wherever they ran.
+  const cells = useMemo(() => { const scoped = scopedCells(read?.cells ?? [], scope); return notebook ? scoped.filter(c => c.notebook === notebook) : scope ? scoped : scoped.filter(c => !c.notebook); }, [read, notebook, scope?.principal, scope?.since, scope?.at, scope?.cellIds]);
+  // In a conversation's record, where a cell of another notebook was run.
   const elsewhere = (cell: Cell) => notebook || !cell.notebook ? undefined : notebooks?.[cell.notebook] ?? 'Another notebook';
-  const latest = useMemo(() => {
-    const out: Partial<Record<Language, Session>> = {};
-    for (const s of read?.sessions ?? []) if (!out[s.language] || s.startedAt > out[s.language]!.startedAt) out[s.language] = s;
-    return out;
-  }, [read]);
+  const latest = useMemo(() => latestSessions(read, notebook ?? null), [read, notebook]);
+  // The other views follow the notebook the person shows, presses or runs a cell in.
+  const mark = () => { if (!scope) showNotebook(notebook ?? null); };
   const [language, setLanguage] = useState<Language | null>(null);
   const shownLanguage: Language = language ?? cells.at(-1)?.language ?? 'r';
   const [draft, setDraft] = useState('');
@@ -647,12 +653,14 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
     const first = out[0]?.at ?? Infinity, until = scope?.at ?? Infinity;
     for (const session of read?.sessions ?? []) {
       const has = cells.some(c => c.sessionId === session.sessionId);
+      if (!scope && (session.notebook ?? null) !== (notebook ?? null)) continue;
       if ((scope || notebook) && !has) continue;
       if (has || Date.parse(session.startedAt) >= first) out.push({ at: Date.parse(session.startedAt), order: 1, key: session.sessionId + ':start', session, edge: 'start' });
       if (session.endedAt && Date.parse(session.endedAt) <= until && (has || Date.parse(session.endedAt) >= first)) out.push({ at: Date.parse(session.endedAt), order: session.endedAt === session.startedAt ? 3 : 0, key: session.sessionId + ':end', session, edge: 'end' });
     }
     return out.sort((a, b) => a.at - b.at || a.order - b.order);
   }, [cells, read?.sessions, scope?.at]);
+  useEffect(() => { if (shown && inView && page.current?.offsetWidth) mark(); }, [shown]);
 
   // A new cell, and output arriving in the last one, stay in view while the reader is at the end.
   const last = cells.at(-1);
@@ -697,7 +705,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   async function run(code: string, lang: Language) {
     if (!code.trim() || busy) return;
     if (pending.current?.code !== code || pending.current.language !== lang) pending.current = { code, language: lang, changeId: 'notebook-' + crypto.randomUUID() };
-    setBusy(true); setRunProblem('');
+    setBusy(true); setRunProblem(''); mark();
     try {
       await call(client, 'kernel.run', { projectId, language: lang, code, changeId: pending.current.changeId, ...(notebook ? { notebook } : {}) });
       pending.current = null; setDraft(''); setNote(''); atEnd.current = true; void again();
@@ -732,16 +740,18 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
     element.classList.remove('flash'); void element.offsetWidth; element.classList.add('flash');
   };
   const relations = useRelations(cells);
+  // A value named here opens as a value of this notebook's session.
+  const openObject = onObject && ((language: Language, name: string) => onObject(language, name, notebook));
 
   if (off) return <p className="nb-empty-line">{problem}</p>;
   // The line to run waits for now during a replay.
   const composing = (scope?.at ?? null) === null;
   // Where the language's next cell runs, when the project names any server.
   const placeChip = <PlaceChip client={client} projectId={projectId} language={shownLanguage} session={latest[shownLanguage]} places={places} onChanged={setPlaces} />;
-  const composer = (small: boolean) => composing && <Composer small={small} language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} busy={busy} problem={runProblem} note={note} onRun={() => void run(draft, shownLanguage)}
+  const composer = (small: boolean) => composing && <Composer own={!!notebook} small={small} language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} busy={busy} problem={runProblem} note={note} onRun={() => void run(draft, shownLanguage)}
     running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} place={placeChip}
     state={linked && <SessionChip language={shownLanguage} session={latest[shownLanguage]} onSessions={linked.sessions} />} />;
-  const nothing = scope?.at != null ? 'No cells by then.' : notebook ? 'Nothing has run in this notebook yet. What you run here uses the same R and Python sessions as the project\'s other notebooks, and is listed here.' : scope ? 'No cells in this conversation yet. What you run here runs in the sessions you share with the Agent.' : 'Nothing has run in the live sessions yet. What you run here runs in the sessions you share with the Agent.';
+  const nothing = scope?.at != null ? 'No cells by then.' : notebook ? 'Nothing has run in this notebook yet. It has R and Python sessions of its own, which its first cell of each language starts; values of the other notebooks are not here.' : scope ? 'No cells in this conversation yet. What you run here runs in the sessions you share with the Agent.' : 'Nothing has run in the live sessions yet. What you run here runs in the sessions you share with the Agent.';
   // In a narrow view the cells take the whole view; the sessions and their values fold above them.
   const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended' && (!scope || cells.some(c => c.sessionId === latest[l]!.sessionId)));
   // A value named in a cell opens while that cell's session is live; with an ended session its
@@ -755,7 +765,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   if (form === 'console') {
     const history = cells.filter(c => c.by === me).map(c => ({ code: c.code.replace(/\n+$/, ''), language: c.language }));
     const shownRows = rows.filter(row => row.at > cleared);
-    return <div className="nb-console" ref={page} onMouseUp={event => {
+    return <div className="nb-console" ref={page} onPointerDownCapture={mark} onFocusCapture={mark} onMouseUp={event => {
       if (!composing || window.getSelection()?.toString() || (event.target as HTMLElement).closest('button, a, textarea, summary, img')) return;
       input.current?.focus({ preventScroll: true });
     }}>
@@ -771,28 +781,28 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
           ? <ConsoleCell key={row.key} cell={row.cell} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} plotsBeside={!!beside.plots} plotNumber={plotNumber} onConversation={onConversation} onPlot={current.has(row.cell.sessionId) ? linked?.plot : undefined} />
           : <ConsoleMark key={row.key} session={row.session} edge={row.edge} who={who} />)}
       </div>
-      {composing && <ConsolePrompt language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} note={note} problem={runProblem} busy={busy} input={input} history={history}
+      {composing && <ConsolePrompt own={!!notebook} language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} note={note} problem={runProblem} busy={busy} input={input} history={history}
         running={latest[shownLanguage]?.state === 'busy'} onRun={code => void run(code, shownLanguage)} onInterrupt={() => void interrupt(shownLanguage)} onClear={() => setCleared(rows.at(-1)?.at ?? Date.now())} />}
     </div>;
   }
-  if (compact) return <div className={'nb-page compact' + (linked ? ' linked' : '') + (narrow ? '' : ' roomy')} ref={page}>
+  if (compact) return <div className={'nb-page compact' + (linked ? ' linked' : '') + (narrow ? '' : ' roomy')} ref={page} onPointerDownCapture={mark} onFocusCapture={mark}>
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {live.length > 0 && !beside.variables && !linked && <details className="nb-strip">
         <summary>{live.map(l => <span key={l} className={'nb-strip-session ' + latest[l]!.state}><span className="nb-dot" aria-hidden="true" />{versionOf(latest[l]!)} · {latest[l]!.state === 'busy' ? 'running' : latest[l]!.state} · {latest[l]!.variables.length} {latest[l]!.variables.length === 1 ? 'value' : 'values'}</span>)}</summary>
-        <Variables sessions={Object.fromEntries(live.map(l => [l, latest[l]]))} onObject={onObject} relations={relations.bySession} onCell={show} />
+        <Variables sessions={Object.fromEntries(live.map(l => [l, latest[l]]))} onObject={openObject} relations={relations.bySession} onCell={show} />
       </details>}
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
         : !cells.length ? <p className="nb-empty-line">{nothing}</p>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? onObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} onPlot={linked && current.has(row.cell.sessionId) ? linked.plot : undefined} plotNumber={plotNumber} />
+          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} onPlot={linked && current.has(row.cell.sessionId) ? linked.plot : undefined} plotNumber={plotNumber} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && linked && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
       {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
       {composer(!narrow ? false : true)}
     </div>
   </div>;
-  return <div className={'nb-page' + (inView ? ' in-view' : '')} ref={page}>
+  return <div className={'nb-page' + (inView ? ' in-view' : '')} ref={page} onPointerDownCapture={mark} onFocusCapture={mark}>
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
@@ -801,7 +811,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
           <p>When the Agent runs R or Python in this project's live sessions, each cell shows here with its purpose, its code, what it printed, its plots and the values it left. Your own cells run in the same sessions, so you can look at what the Agent made.</p>
         </div>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? onObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} />
+          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
       {composer(false)}
@@ -812,7 +822,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
         {languages.map(l => <SessionRow key={l} language={l} session={latest[l]} asking={asking} onInterrupt={() => void interrupt(l)} onStop={session => void stop(session)} />)}
         {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
       </section>
-      {!beside.variables && <Variables sessions={latest} onObject={onObject} relations={relations.bySession} onCell={show} />}
+      {!beside.variables && <Variables sessions={latest} onObject={openObject} relations={relations.bySession} onCell={show} />}
       {plots.length > 0 && !beside.plots && <section className="nb-rail-section" aria-labelledby="nb-plots">
         <header><h2 id="nb-plots">Plots</h2></header>
         <div className="nb-thumbs">{plots.map(({ cell, output }) => <RailPlot key={cell.cellId + ':' + output.plot} client={client} projectId={projectId} cell={cell} output={output} onShow={() => show(cell.cellId)} />)}</div>
@@ -821,30 +831,31 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   </div>;
 }
 
-// The newest session of each language.
-export function latestSessions(read: Read | null) {
+// The newest session of each language of one notebook (null: the project's own).
+export function latestSessions(read: Read | null, notebook: string | null = null) {
   const out: Partial<Record<Language, Session>> = {};
-  for (const s of read?.sessions ?? []) if (!out[s.language] || s.startedAt > out[s.language]!.startedAt) out[s.language] = s;
+  for (const s of read?.sessions ?? []) if ((s.notebook ?? null) === notebook && (!out[s.language] || s.startedAt > out[s.language]!.startedAt)) out[s.language] = s;
   return out;
 }
 
-// The plots the live sessions drew, as a view of their own: the newest at the size of the view,
-// the ones before it to step back through. A new plot comes forward as it is drawn. Plots of an
-// ended session stay with their cells in the Notebook.
+// The plots the live sessions of the shown notebook drew, as a view of their own: the newest at the
+// size of the view, the ones before it to step back through. A new plot comes forward as it is
+// drawn. Plots of an ended session stay with their cells in the Notebook.
 export const plotsPaneLimits = { plots: 24 };
 // A plot another view asks for comes forward here; "Show the cell" brings forward the Notebook that
 // lists its cell (onCell), or scrolls to it where the page shows it.
-export function PlotsPane({ client, snapshot, shell, onCell }: { client: UiClient; snapshot: UiSnapshot; shell?: KernelShell; onCell?: (cellId: string) => void }) {
-  return withShell(shell, <WithFacts snapshot={snapshot}><Plots client={client} snapshot={snapshot} onCell={onCell} /></WithFacts>);
+export function PlotsPane({ client, snapshot, shell, onCell, notebooks }: { client: UiClient; snapshot: UiSnapshot; shell?: KernelShell; onCell?: (cellId: string, notebook?: string | null) => void; notebooks?: NotebookNames }) {
+  return withShell(shell, <WithFacts snapshot={snapshot}><Plots client={client} snapshot={snapshot} onCell={onCell} notebooks={notebooks} /></WithFacts>);
 }
-function Plots({ client, snapshot, onCell }: { client: UiClient; snapshot: UiSnapshot; onCell?: (cellId: string) => void }) {
+function Plots({ client, snapshot, onCell, notebooks }: { client: UiClient; snapshot: UiSnapshot; onCell?: (cellId: string, notebook?: string | null) => void; notebooks?: NotebookNames }) {
   const projectId = snapshot.project.id;
   const { read, off, problem } = useKernel(client, projectId, snapshot.cursor);
   const who = useAuthors(snapshot);
+  const notebook = useShownNotebook();
   const all = useMemo(() => {
-    const live = new Set((read?.sessions ?? []).filter(s => s.state !== 'ended').map(s => s.sessionId));
+    const live = new Set((read?.sessions ?? []).filter(s => s.state !== 'ended' && (s.notebook ?? null) === notebook).map(s => s.sessionId));
     return (read?.cells ?? []).filter(cell => live.has(cell.sessionId)).flatMap(cell => cell.outputs.filter(o => o.kind === 'plot').map(output => ({ key: cell.cellId + ':' + output.plot, cell, output })));
-  }, [read]);
+  }, [read, notebook]);
   const plots = all.slice(-plotsPaneLimits.plots);
   const newest = plots.at(-1)?.key ?? '';
   const [chosen, setChosen] = useState<string | null>(null);
@@ -859,20 +870,22 @@ function Plots({ client, snapshot, onCell }: { client: UiClient; snapshot: UiSna
   useEffect(() => { strip.current?.querySelector('[aria-current="true"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [shown?.key]);
   if (off || (problem && !read)) return <div className="nb-pane"><p className="nb-empty-line">{problem}</p></div>;
   if (!read) return <div className="nb-pane"><p className="nb-empty-line">Reading the live sessions…</p></div>;
-  if (!shown) return <div className="nb-pane"><p className="nb-empty-line">No plots in the live sessions yet. What R and Python draw shows here, the newest first.</p></div>;
+  const pick = <NotebookPick sessions={read.sessions} shown={notebook} names={notebooks} />;
+  if (!shown) return <div className="nb-pane">{pick && <header className="nb-plots-head">{pick}</header>}<p className="nb-empty-line">No plots in the live sessions{notebook ? ' of this notebook' : ''} yet. What R and Python draw shows here, the newest first.</p></div>;
   // A cell is named by its purpose, else by its code's first line.
   const label = (cell: Cell) => cell.purpose ?? (cell.code.split('\n').find(line => line.trim())?.trim() || `${languageName[cell.language]} cell ${cell.number}`);
   const step = (by: number) => setChosen(plots[Math.min(plots.length - 1, Math.max(0, index + by))]!.key);
   const cell = onCell || document.getElementById('cell-' + shown.cell.cellId) ? shown.cell.cellId : null;
   return <div className="nb-pane nb-plots" onKeyDown={event => { if (event.key === 'ArrowLeft') step(-1); else if (event.key === 'ArrowRight') step(1); }}>
     <header className="nb-plots-head">
+      {pick}
       <div className="nb-plots-nav">
         <button className="text-button" disabled={index === 0} aria-label="Previous plot" onClick={() => step(-1)}><Icon name="back" size={14} /></button>
         <span>{all.length - plots.length + index + 1} of {all.length}</span>
         <button className="text-button nb-next" disabled={index === plots.length - 1} aria-label="Next plot" onClick={() => step(1)}><Icon name="back" size={14} /></button>
       </div>
       <p className="nb-plots-from" title={label(shown.cell)}><span className={'nb-lang ' + shown.cell.language}>{languageName[shown.cell.language]}</span> {shown.cell.number} · {label(shown.cell)} · {who(shown.cell.by).name} · {at(shown.cell.queuedAt)}</p>
-      {cell && <button className="text-button" onClick={() => onCell ? onCell(cell) : document.getElementById('cell-' + cell)?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>Show the cell</button>}
+      {cell && <button className="text-button" onClick={() => onCell ? onCell(cell, notebook) : document.getElementById('cell-' + cell)?.scrollIntoView({ block: 'start', behavior: 'smooth' })}>Show the cell</button>}
     </header>
     <PlotFit client={client} projectId={projectId} cell={shown.cell} output={shown.output} label={`Plot drawn by ${label(shown.cell)}`} />
     {plots.length > 1 && <div className="nb-plots-strip" ref={strip} role="group" aria-label="Plots">

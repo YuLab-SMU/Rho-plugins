@@ -264,7 +264,14 @@ th.nb-env-bytes .nb-env-sort { margin-left: auto; }
 .nb-proc { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border: 1px solid var(--color-hairline); border-radius: 10px; background: var(--color-surface); }
 .nb-proc.off { border-style: dashed; background: none; }
 .nb-proc-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
-.nb-proc-head h2 { margin: 0; color: var(--color-ink); font-size: 13.5px; font-weight: 650; }
+.nb-proc-head h3 { margin: 0; color: var(--color-ink); font-size: 13.5px; font-weight: 650; }
+.nb-proc-book { display: flex; flex-direction: column; gap: 8px; }
+.nb-proc-book + .nb-proc-book { margin-top: 6px; }
+.nb-proc-book-name { margin: 0; color: var(--color-ink); font-size: 12.5px; font-weight: 650; }
+.nb-proc-book-name small { color: var(--color-meta); font-weight: 400; }
+.nb-proc-book.shown > .nb-proc-book-name::before { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 6px 1px 0; border-radius: 50%; background: var(--color-accent); }
+.nb-proc-book.quiet .nb-proc-off { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.nb-notebook-pick { flex: none; max-width: 14rem; height: 26px; padding: 0 6px; border: 1px solid var(--color-hairline); border-radius: 6px; background: var(--color-surface); color: var(--color-ink); font: inherit; font-size: 12px; }
 .nb-proc-state { display: inline-flex; align-items: center; gap: 6px; color: var(--color-muted); font-size: 12px; }
 .nb-proc-actions { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; }
 .nb-proc-actions button { min-height: 28px; padding: 3px 10px; font-size: 12px; }

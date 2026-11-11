@@ -75,7 +75,8 @@ function ServersBody({ client, snapshot, onPath }: { client: UiClient; snapshot:
   const projectId = snapshot.project.id;
   const { places, problem, setPlaces } = usePlaces(client, projectId, snapshot.cursor);
   const { read } = useKernel(client, projectId, snapshot.cursor);
-  const latest = useMemo(() => latestSessions(read), [read]);
+  // The newest session of each language of each notebook.
+  const latest = useMemo(() => [...new Set((read?.sessions ?? []).map(s => s.notebook ?? null))].flatMap(book => Object.values(latestSessions(read, book))), [read]);
   const who = useAuthors(snapshot);
   const [form, setForm] = useState<Place | 'new' | null>(null);
   const [checking, setChecking] = useState<string[]>([]);
@@ -89,7 +90,7 @@ function ServersBody({ client, snapshot, onPath }: { client: UiClient; snapshot:
   if (!places) return <div className="nb-pane"><p className="nb-empty-line">{problem || 'Reading where the sessions run…'}</p></div>;
 
   const name = (by: string) => { const n = who(by).name; return n === 'You' ? 'you' : n.replace(/^An /, 'an '); };
-  const sessionsOn = (placeId: string) => languages.map(l => latest[l]).filter((s): s is Session => !!s && (s.place?.placeId ?? 'local') === placeId);
+  const sessionsOn = (placeId: string) => latest.filter((s): s is Session => !!s && (s.place?.placeId ?? 'local') === placeId);
   const use = (language: Language, placeId: string) => call(client, 'kernel.place.set', { projectId, use: { [language]: placeId } }).then(setPlaces, error => setProblems(p => ({ ...p, [placeId]: failure(error) })));
   async function check(place: Place) {
     setChecking(c => [...c, place.placeId]); setProblems(p => ({ ...p, [place.placeId]: '' }));

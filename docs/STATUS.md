@@ -151,6 +151,13 @@ Restart, Stop and Start; `kernel.start` starts a session without a cell, the per
 Values and Functions, sorted and found by name. Given the page's links, the Notebook shows each
 plot as a thumbnail that opens Plots and its session as a chip that opens Sessions, without its
 own strip or variables pane. Restart on a server and the Python session were not tried.
+Notebook 0.5.18 gives each notebook its own R and Python sessions: `kernel.run`, `kernel.start`
+and `kernel.inspect` name the notebook (none: the project's), a value made in one is not in
+another, and at most 8 sessions run at once in a project. Variables, Plots and Data flow follow
+the notebook last worked in, and Sessions lists them by notebook. Console 0.3.3 lets an Agent use
+a terminal: `console.terminal.screen` reads what it shows as text (`@xterm/headless` 6.0.0, MIT),
+after waiting for output past an offset to come and stop; `write` keeps the latest input of
+anyone but the opener as `typedBy`.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

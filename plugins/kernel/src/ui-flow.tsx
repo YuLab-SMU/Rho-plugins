@@ -2,7 +2,9 @@ import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type Reac
 import { scriptFlow, scriptFlowLimits } from './script-flow.js';
 import { graphPath, graphRows, scriptGraph, sessionGraph, type GraphNode, type Making, type ValueGraph } from './value-graph.js';
 import { Icon } from './ui-icons.js';
-import { at, Code, languageName, languages, latestSessions, useAuthors, useKernel, usePlot, versionOf, type Cell, type Session } from './ui-notebook.js';
+import { at, Code, languageName, languages, latestSessions, useAuthors, useKernel, usePlot, versionOf, type Cell, type NotebookNames, type Session } from './ui-notebook.js';
+import { useShownNotebook } from './ui-notebook-target.js';
+import { NotebookPick } from './ui-notebook-pick.js';
 import { whereOf } from './ui-servers.js';
 import { withShell, type KernelShell, type UiClient, type UiSnapshot } from './ui-base.js';
 
@@ -223,12 +225,15 @@ function useEdges(canvas: React.RefObject<HTMLDivElement | null>, graph: ValueGr
 // folder, and is shown there. The page that shows it may give it the application's code
 // highlighting.
 export function FlowPane({ shell, ...props }: Parameters<typeof FlowBody>[0] & { shell?: KernelShell }) { return withShell(shell, <FlowBody {...props} />); }
-function FlowBody({ client, snapshot, onObject, onPath, onRemote }: { client: UiClient; snapshot: UiSnapshot; onObject?: (language: Language, name: string) => void; onPath?: (path: string) => void; onRemote?: (placeId: string, path: string) => void }) {
+function FlowBody({ client, snapshot, onObject: open, onPath, onRemote, notebooks }: { client: UiClient; snapshot: UiSnapshot; onObject?: (language: Language, name: string, notebook?: string) => void; onPath?: (path: string) => void; onRemote?: (placeId: string, path: string) => void; notebooks?: NotebookNames }) {
   const projectId = snapshot.project.id;
   const { read, off, problem } = useKernel(client, projectId, snapshot.cursor);
-  const latest = useMemo(() => latestSessions(read), [read]);
+  // The sessions of the notebook the person last worked in.
+  const notebook = useShownNotebook();
+  const onObject = open && ((language: Language, name: string) => open(language, name, notebook ?? undefined));
+  const latest = useMemo(() => latestSessions(read, notebook), [read, notebook]);
   const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended');
-  const recent = read?.cells.at(-1)?.language;
+  const recent = read?.cells.filter(c => (c.notebook ?? null) === notebook).at(-1)?.language;
   const [chosen, setChosen] = useState<Language | null>(null);
   useEffect(() => setChosen(null), [recent]);
   const shown = chosen && live.includes(chosen) ? chosen : recent && live.includes(recent) ? recent : live.at(-1) ?? null;
@@ -256,6 +261,7 @@ function FlowBody({ client, snapshot, onObject, onPath, onRemote }: { client: Ui
   const unknown = cells.some(c => c.state !== 'queued' && c.state !== 'running' && c.used === undefined);
   return <div className="nb-pane flow-pane" aria-labelledby={id}>
     <header className="flow-head">
+      <NotebookPick sessions={read.sessions} shown={notebook} names={notebooks} />
       <h2 id={id} className="nb-pane-state">{session ? <><span className={'nb-dot ' + session.state} aria-hidden="true" />{[versionOf(session), whereOf(session), session.state === 'busy' ? 'running a cell' : session.state === 'starting' ? 'starting' : 'idle'].filter(Boolean).join(' · ')}</> : 'Data flow'}</h2>
       {live.length > 1 && <div className="nb-tabs" role="group" aria-label="Session">{live.map(l => <button key={l} aria-pressed={l === shown} onClick={() => setChosen(l)}>{languageName[l]}</button>)}</div>}
     </header>

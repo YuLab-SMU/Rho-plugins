@@ -1,9 +1,9 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.5.7 keeps a live R session and a live Python
-session for a project, which an Agent and the person share, on this machine or on a
-server: one the person manages with serverctl, reached through it, or one reached with
-ssh.
+`@rho-workspace/plugin-kernel` 0.5.18 keeps a live R session and a live Python
+session for each notebook of a project, on this machine or on a server: one the person
+manages with serverctl, reached through it, or one reached with ssh. The project's own
+notebook is the one an Agent and the person share unless a notebook is named.
 
 `KernelHost` runs each cell in its language's resident process, in the project
 folder: what one cell defines is there for the next, whoever ran it. R code runs
@@ -97,13 +97,19 @@ to copy (below) answer `busy` with the reason until the cell ends. Measured on a
 with R 4.5.2, the copy adds about 10 ms to a cell (2 ms of it the fork in a small
 session, 9 ms beside a 4 GB matrix), and a reading of it takes 30 to 130 ms.
 
-A project's notebooks share its sessions. `kernel.run` takes an optional `notebook`, an
-identity (a letter or digit, then up to 63 letters, digits, `.`, `_`, `:` or `-`) that the
-cell keeps; a cell without one belongs to the project's own notebook. The Notebook view
-(`SessionPane`) given `notebook` lists the cells run in it and runs its own there. Without
-it the view lists every cell and names the notebook each was run in, from the `notebooks`
-names the page hands it. Values are shared whichever notebook a cell is in, and cells are
-numbered by session, not by notebook.
+Each notebook of a project has sessions of its own. `kernel.run`, `kernel.start` and
+`kernel.inspect` take an optional `notebook`, an identity (a letter or digit, then up to 63
+letters, digits, `.`, `_`, `:` or `-`) that the cell and its session keep; without one they
+are the project's own notebook's. A value made in one notebook is not in another, and cells are
+numbered by session. At most 8 sessions run at once in a project (`maxSessions`); a cell or
+start that would begin another is refused, naming those that run, until one is stopped. The
+Notebook view (`SessionPane`) given `notebook` lists the cells run in it and runs its own in its
+sessions; without it the view is the project's notebook and lists its own cells. In a
+conversation's record it lists that conversation's cells wherever they ran and names the
+notebook of each, from the `notebooks` names the page hands it. A notebook shown in several
+views is one notebook. Variables, Plots and Data flow show the sessions of the notebook the
+person last showed, pressed or ran a cell in (`showNotebook`, `useShownNotebook`), with a choice
+in their header when more than one notebook has a session; Sessions lists every notebook's.
 
 A cell keeps its `changeId` per caller: repeating the same identity returns the same
 cell and never runs it twice. Cells run one at a time in their session, in the order
