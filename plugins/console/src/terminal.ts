@@ -279,7 +279,9 @@ export class TerminalHost {
     const screen = new headless.Terminal({ cols: input.cols, rows: input.rows, scrollback: this.limits.screenScrollback, allowProposedApi: true, ...(windowsPty ? { windowsPty } : {}) });
     const live: Live = { child, control: windows ? null : child.stdio[3] as Writable, record, chunks: [], waiters: new Set(), errors: '', screen, tracking: { typers: [], lastTyper: null, running: null, prompt: null }, said, started, heard, closeFile, marked: !!marks };
     const wake = () => { for (const done of [...live.waiters]) done(); };
-    if (marks) this.log.watch(screen, record.terminalId, nonce, live.tracking, record.by, () => { if (!record.recording) { record.recording = true; this.changed(); wake(); } }, !!windowsPty);
+    // On Windows a reader from the start waits for the first prompt (screen()), so its showing
+    // wakes it; elsewhere a wake with no new output would end a reader's wait for quiet early.
+    if (marks) this.log.watch(screen, record.terminalId, nonce, live.tracking, record.by, () => { if (!record.recording) { record.recording = true; this.changed(); if (windowsPty) wake(); } }, !!windowsPty);
     this.live.set(record.terminalId, live);
     const take = (chunk: Buffer) => {
       live.chunks.push(chunk); record.bytes += chunk.length; screen.write(chunk);

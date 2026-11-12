@@ -327,10 +327,14 @@ test('on Windows an Agent reads a terminal as text and types in it: its screen, 
   // Nothing printed within the wait: not quiet, and the screen as it is.
   const idle = await host.screen(id, { after: after.offset, waitMs: 400 });
   assert.equal(idle.quiet, false); assert.equal(idle.offset, after.offset);
-  // A full-screen program has the screen until it is left.
+  // A full-screen program has the screen until it is left, when the console host passes the switch
+  // to the alternate screen on, as Windows 11's (build 26100) does; Windows Server 2022's (20348)
+  // draws the program's screen as the main one, and there it is not seen as full screen.
   const opened = host.write(id, `${node} -e "process.stdout.write('\\x1b[?1049h\\x1b[Hfull screen'); setTimeout(() => process.stdout.write('\\x1b[?1049l'), 2000)"\r`, 'agent:a');
-  const full = await host.screen(id, { after: opened.offset, waitMs: 1500 });
-  assert.equal(full.fullScreen, true); assert.ok(full.lines.some(l => l.startsWith('full screen')));
+  const full = await showing(host, id, /^full screen/m);
+  const switched = Buffer.from((await host.read(id, opened.offset)).data, 'base64').includes('\x1b[?1049h');
+  if (!switched) t.diagnostic('this console host does not pass the alternate screen on');
+  assert.equal(full.fullScreen, switched);
   assert.ok((await host.screen(id, { lines: 2 })).lines.length <= 2);
   await assert.rejects(host.screen(id, { lines: 501 }), e => e.kind === 'limit');
 });
@@ -544,6 +548,7 @@ test('a terminal command keeps all it printed as its start and end, the screens 
     throw new Error('It did not end: ' + text);
   };
   await type('seq 1 20000\r');
+  const before = host.list().terminals[0].bytes;
   await type('printf "\\033[?1049h\\033[Hfull screen here"; sleep 0.3; printf "\\033[?1049l"; echo after\r');
   const [drawn, big] = (await host.commandList(2)).commands;
   assert.equal(big.command, 'seq 1 20000');
@@ -558,10 +563,14 @@ test('a terminal command keeps all it printed as its start and end, the screens 
   assert.equal(all.length, first.total);
   assert.ok(all.slice(0, first.gap.at).endsWith('\n') && all.trimEnd().endsWith('19999\n20000'), 'the end is kept: ' + JSON.stringify(all.slice(-30)));
   assert.ok(Buffer.byteLength(all.slice(first.gap.at)) <= 2000);
-  // A full-screen program: its last screen, and what it printed after.
-  assert.deepEqual([drawn.output, drawn.screens, drawn.stored], ['after', 1, true]);
-  const shown = await host.commandOutput(drawn.commandId);
-  assert.ok(shown.screens[0].lines[0].startsWith('full screen here'));
+  // A full-screen program: its last screen, and what it printed after. A console host that draws
+  // the program's screen as the main one (Windows Server 2022's) passes no switch on, and no screen
+  // is kept; elsewhere the switch always reaches the terminal.
+  const switched = Buffer.from((await host.read(id, before)).data, 'base64').includes('\x1b[?1049h');
+  if (!switched) t.diagnostic('this console host does not pass the alternate screen on');
+  assert.ok(switched || windows, 'the switch to the alternate screen reached the terminal');
+  assert.deepEqual([drawn.output, drawn.screens, drawn.stored], switched ? ['after', 1, true] : ['after', 0, false]);
+  if (switched) assert.ok((await host.commandOutput(drawn.commandId)).screens[0].lines[0].startsWith('full screen here'));
   // Past the budget the oldest kept output goes, and its record says so.
   await type('seq 1 20000\r');
   const [, , oldest] = (await host.commandList(3)).commands;

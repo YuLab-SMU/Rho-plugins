@@ -1,6 +1,6 @@
 # Console
 
-`@rho-workspace/plugin-console` 0.3.6 records the commands a person runs in a
+`@rho-workspace/plugin-console` 0.3.7 records the commands a person runs in a
 project folder and keeps what they print, and gives the person a terminal there.
 
 `ConsoleRunner` runs a typed command with the person's shell in the project folder
@@ -54,7 +54,10 @@ for minutes, holding the project folder); a console still there after `closeGrac
 with what it started (`taskkill /T /F`). A shell that ends by itself leaves what it started in
 the background running. The record says `windowsPty` (`conpty` and the Windows build), which a
 page gives its terminal emulator, since the console host repaints the screen itself when the
-size changes. Opening a terminal there takes about half a second more than the shell's own
+size changes. Windows 11's console host (build 26100) passes a program's switch to the
+alternate screen on; on GitHub's Windows Server 2022 runner (build 20348) a full-screen program
+was not seen as one and its command kept no screen of it, as that host draws the program's
+screen as the main one. Opening a terminal there takes about half a second more than the shell's own
 start, for the bridge; Windows PowerShell with a profile took 2.4 to 6.5 s to its first
 prompt on the machine checked, Git Bash about 3.7 s.
 

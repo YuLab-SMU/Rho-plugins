@@ -208,7 +208,11 @@ before the output they followed, so a shell waits 50 ms before each (30 of 30 in
 output is read as rows scroll off the screen or at the command's end, as the host repaints rows.
 PowerShell 5.1 and 7 are marked through PSReadLine (`PSConsoleHostReadLine`, `prompt`), with
 their history in Rho's file and exit codes unsigned; Git Bash through bash's hooks with Windows
-folders; cmd.exe is not marked. Agent 0.4.35 starts a batch file (an npm `codex.cmd` or `dsh.cmd`,
+folders; cmd.exe is not marked. On GitHub's Windows Server 2022 runner (console host build 20348)
+a full-screen program was not seen as one and kept no screen, as that host draws its screen as
+the main one. Console 0.3.7 wakes a reader waiting for quiet when recording begins only on
+Windows, where a reader from the start waits for the first prompt: elsewhere that wake ended the
+wait early, and a ksh command typed then was taken as typed ahead (macOS CI). Agent 0.4.35 starts a batch file (an npm `codex.cmd` or `dsh.cmd`,
 which Node 24 refuses with EINVAL) through cmd.exe with each argument escaped, refuses an argument
 over several lines for one, and says the reason an ACP Agent gave for an internal error (a Claude
 Code older than the adapter's: `unknown option '--plugin-dir-no-mcp'`). Notebook 0.5.20 answers a
