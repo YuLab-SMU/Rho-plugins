@@ -301,8 +301,10 @@ test('installed ACP Agents are found on PATH by their own command, starting noth
   try {
     await fs.mkdir(bin);
     for (const name of ['kimi', 'dsh']) await fs.writeFile(path.join(bin, program(name)), '#!/bin/sh\nexit 1\n', { mode: 0o755 });
-    // Harness serves ACP only from its acp profile, so its launcher alone is not listed.
-    assert.deepEqual(installedAcpAgents({ PATH: bin, DSH_HOME: home }).map(a => [a.id, a.command.file, a.command.args]), [['kimi', path.join(bin, program('kimi')), ['acp']]]);
+    // Harness serves ACP only from its acp profile, so its launcher alone is not listed. Windows
+    // names the extension as PATHEXT spells it (.CMD), in a folder whose names ignore case.
+    const same = file => process.platform === 'win32' ? file.toLowerCase() : file;
+    assert.deepEqual(installedAcpAgents({ PATH: bin, DSH_HOME: home }).map(a => [a.id, same(a.command.file), a.command.args]), [['kimi', same(path.join(bin, program('kimi'))), ['acp']]]);
     await fs.mkdir(path.join(home, 'profiles', 'acp'), { recursive: true }); await fs.writeFile(path.join(home, 'profiles', 'acp', 'package.json'), '{}');
     assert.deepEqual(installedAcpAgents({ PATH: bin, DSH_HOME: home }).map(a => a.id), ['dsh', 'kimi']);
     assert.equal(knownAcpAgent({ file: path.join(bin, program('kimi')), args: ['acp'] })?.name, 'Kimi Code');

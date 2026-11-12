@@ -36,12 +36,23 @@ Codex uses the official `@agentclientprotocol/codex-acp` 2.3.0 (written against 
 Both adapters drive the person's installed client: `claude` / `CLAUDE_CODE_EXECUTABLE`
 and `codex` / `CODEX_PATH` select an executable, otherwise `claude` or `codex` on
 `PATH`. The adapters' bundled native clients are optional platform packages an
-application can omit (`npm install --omit=optional`). `CODEX_CONFIG` keeps
+application can omit (`npm install --omit=optional`). The Claude adapter's SDK (0.3.310) is
+written against Claude Code 2.1.310 and starts it with options an older Claude Code does not
+know: Claude Code 2.1.142 exited with `unknown option '--plugin-dir-no-mcp'` for a session that
+loads Rho's plugin directory, and that reason is what the conversation says, rather than the
+adapter's "Internal error". `CODEX_CONFIG` keeps
 the adapter's native provider settings. An explicit `model` merges into that config.
 No Claude-specific session metadata or permissions are sent to Codex.
 It uses stable ACP v1 over an owned stdio process. One connection carries multiple
 prompts; an explicit later prompt can load the recorded session after connection
 loss. Unsupported loading fails without creating another session or resending work.
+
+On Windows a program found with PATHEXT's extensions may be a batch file, as npm installs one
+(`codex.cmd`, `dsh.cmd`, `kimi.cmd`), which Node 24 refuses to start (EINVAL). `spawnProgram`
+(`process-group.ts`) runs it through `cmd.exe /d /s /c`, each argument quoted and cmd's own
+characters escaped twice, as cross-spawn does, so quotes, `%`, `^`, `&`, `|`, `<`, `>` and an empty
+argument arrive as given; an argument over several lines, which cmd ends a line at, is refused
+for a batch file. ACP commands, the Claude CLI and the file describer start that way.
 
 The embedding application's `session(identity)` callback must durably retain the
 ACP identity before `run()` dispatches the prompt. The native transcript ID is not

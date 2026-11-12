@@ -606,9 +606,10 @@ else if (args[0] === 'skill' && args[1] === 'resolve') {
   child.on('close', code => process.exit(code ?? 255));
 } else process.exit(2);
 `;
-// Windows starts a script only through a shell, and the stand-in server uses Unix signals and
-// process groups; remote places are not exercised there.
-const stand = { skip: process.platform === 'win32' && 'the stand-ins for ssh and serverctl are Unix scripts' };
+// Remote places are not built for Windows: they share one ssh connection per server through
+// ControlMaster and a socket under /tmp, which Windows' own OpenSSH does not offer, and end what a
+// session started there as a process group, which Windows does not have.
+const stand = { skip: process.platform === 'win32' && 'remote places run on macOS and Linux only' };
 async function server() {
   const home = await fs.realpath(await fs.mkdtemp(path.join(tmpdir(), 'rho-server-')));
   const ssh = path.join(home, 'ssh'), serverctl = path.join(home, 'serverctl');

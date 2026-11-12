@@ -218,13 +218,16 @@ export class KernelHost {
     this.serverctl = new Serverctl(options.serverctl ?? 'serverctl', { reuseS: 60, sessionS: limits.serverctlSessionS, readMs: limits.serverctlReadMs, skillBytes: limits.serverSkillBytes });
   }
   // A program named for a session: one in a folder of the project, such as the python of a
-  // virtual environment made there (.venv/bin/python). Its folder must be the project's own; the
-  // file itself may be the link a virtual environment makes to the Python it was made from, and
-  // it is started by that name so the environment is the one that runs.
+  // virtual environment made there (.venv/bin/python, on Windows .venv/Scripts/python.exe). Its
+  // folder must be the project's own; the file itself may be the link a virtual environment makes to
+  // the Python it was made from, and it is started by that name so the environment is the one that
+  // runs. A folder of the project that is not there names no program (on Windows a venv has no bin).
   private async program(named: string) {
     const root = await fs.realpath(this.root), file = path.resolve(root, named);
+    const inside = (folder: string) => folder === root || folder.startsWith(root + path.sep);
     const folder = await fs.realpath(path.dirname(file)).catch(() => null);
-    requireThat(folder && (folder === root || folder.startsWith(root + path.sep)), 'scope', `Name a program in a folder of this project, such as .venv/bin/python; ${named} is not.`, { interpreter: named });
+    requireThat(folder ? inside(folder) : inside(path.dirname(file)), 'scope', `Name a program in a folder of this project, such as .venv/bin/python; ${named} is not.`, { interpreter: named });
+    requireThat(folder, 'not_found', `${named} is not a program that can run here.`, { interpreter: named });
     const program = path.join(folder, path.basename(file));
     const runs = await fs.stat(program).then(s => s.isFile(), () => false) && await fs.access(program, fsConstants.X_OK).then(() => true, () => false);
     requireThat(runs, 'not_found', `${named} is not a program that can run here.`, { interpreter: named });

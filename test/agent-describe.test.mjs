@@ -7,11 +7,14 @@ import { describeFile, describeInput } from '../plugins/agent/dist/describe.js';
 import { compactCatalog, findModel, callCost, loadModelCatalog } from '../plugins/agent/dist/models.js';
 
 // A stand-in for Claude Code: it records its arguments and the message it was given on stdin,
-// then answers as a stream, as told.
+// then answers as a stream, as told. Windows starts it as npm starts a Node program, through a
+// batch file named claude.cmd.
 async function fake(answer) {
   const dir = await fs.mkdtemp(path.join(tmpdir(), 'rho-describe-'));
-  const bin = path.join(dir, 'claude');
-  await fs.writeFile(bin, `#!/usr/bin/env node
+  const windows = process.platform === 'win32', script = path.join(dir, windows ? 'claude.cjs' : 'claude');
+  const bin = windows ? path.join(dir, 'claude.cmd') : script;
+  if (windows) await fs.writeFile(bin, `@"${process.execPath}" "${script}" %*\r\n`);
+  await fs.writeFile(script, `#!/usr/bin/env node
 const fs = require('node:fs');
 let input = ''; process.stdin.on('data', d => input += d).on('end', () => {
   fs.writeFileSync(${JSON.stringify(path.join(dir, 'call.json'))}, JSON.stringify({ args: process.argv.slice(2), input: JSON.parse(input) }));
@@ -23,8 +26,7 @@ let input = ''; process.stdin.on('data', d => input += d).on('end', () => {
 `, { mode: 0o755 });
   return { bin, dir, call: async () => JSON.parse(await fs.readFile(path.join(dir, 'call.json'), 'utf8')) };
 }
-// Windows starts a script only through a shell, so the stand-in cannot be Claude Code there.
-const script = { skip: process.platform === 'win32' && 'the stand-in for Claude Code is a script' };
+const script = {};
 const used = { 'small-model': { inputTokens: 10, outputTokens: 40, cacheReadInputTokens: 0, cacheCreationInputTokens: 1000, costUSD: 0.012, costBasis: 'unknown' } };
 
 test('a file is described in one sentence by Claude Code with no tools, no MCP servers and no kept session', script, async () => {

@@ -1,6 +1,5 @@
-import { spawn } from 'node:child_process';
 import { visibleError } from './conversation.js';
-import { ownGroup, signalGroup } from './process-group.js';
+import { ownGroup, signalGroup, spawnProgram } from './process-group.js';
 import type { Tokens } from './models.js';
 
 // One sentence on what a file holds, written by the person's own Claude Code with every tool
@@ -55,7 +54,7 @@ export async function describeFile(o: DescribeFile): Promise<FileSentence> {
   ];
   const args = ['-p', '--tools', '', '--strict-mcp-config', '--no-session-persistence', '--input-format', 'stream-json', '--output-format', 'stream-json', '--verbose',
     '--system-prompt', describeInstructions[strategy], ...(o.model ? ['--model', o.model] : [])];
-  const child = spawn(o.binary, args, { cwd: o.cwd, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe'], env: process.env });
+  const child = spawnProgram(o.binary, args, { cwd: o.cwd, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe'], env: process.env });
   // Windows reuses a process id soon, so a client that has ended is not signalled there.
   const kill = (name: 'SIGTERM' | 'SIGKILL') => { if (child.pid && !(process.platform === 'win32' && (child.exitCode !== null || child.signalCode !== null))) void signalGroup(child.pid, name); };
   let reason: string | null = null, out = Buffer.alloc(0);

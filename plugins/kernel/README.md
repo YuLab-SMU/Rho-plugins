@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.5.19 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.5.20 keeps a live R session and a live Python
 session for a project and for each of its notebooks, on this machine or on a server: one the
 person manages with serverctl, reached through it, or one reached with ssh. An Agent's cells run
 in the project's own sessions unless it names a notebook.
@@ -93,7 +93,13 @@ reading of it that takes too long interrupts the copy alone, never the cell. The
 draws a picture with Cairo only: R's own PNG device on macOS ends a forked process, so
 an R without Cairo says the drawing shows when the cell ends. A session on Windows or
 on a server, a Python session, a cell that is still waiting, and a session too large
-to copy (below) answer `busy` with the reason until the cell ends. Measured on a Mac
+to copy (below) answer `busy` with the reason until the cell ends. Windows cannot fork
+a process: R there has no `parallel::mcparallel`, and refuses `mc.cores` above 1. The
+other ways were not taken, since none reads the session as it was: writing the session's
+values out when each cell starts costs every cell time with the session's size and
+cannot carry values that hold a connection or a pointer; the session itself answers
+nothing until its cell ends, and a reading taken from it mid-cell would show values the
+cell is changing; a snapshot of the process's memory cannot run R. Measured on a Mac
 with R 4.5.2, the copy adds about 10 ms to a cell (2 ms of it the fork in a small
 session, 9 ms beside a 4 GB matrix), and a reading of it takes 30 to 130 ms.
 

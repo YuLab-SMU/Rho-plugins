@@ -1,6 +1,6 @@
 # Console
 
-`@rho-workspace/plugin-console` 0.3.2 records the commands a person runs in a
+`@rho-workspace/plugin-console` 0.3.6 records the commands a person runs in a
 project folder and keeps what they print, and gives the person a terminal there.
 
 `ConsoleRunner` runs a typed command with the person's shell in the project folder
@@ -37,7 +37,26 @@ cursor and whether a full-screen program has the screen, after waiting, when ask
 past an offset to come and stop; `resize` sets the size; `close` hangs the shell up. A terminal lives while Rho runs and is not
 kept across a restart: when Rho closes, each shell is hung up as if its window were closed.
 A few lines of Python (`python3`, or the program named) open the pseudo-terminal on macOS and
-Linux, so the package needs no compiled module; on Windows `open` is refused as unavailable.
+Linux, so the package needs no compiled module.
+
+On Windows the pseudo-terminal is the console host Windows runs for one (`conhost.exe
+--headless`, the ConPTY host), and its first program a few lines of Windows PowerShell; both
+come with Windows, so nothing compiled ships there either. The shell is the one named, else
+`pwsh` on PATH (an execution alias of a Store or winget install counts), else Windows PowerShell,
+else `ComSpec`. The PowerShell bridge turns Ctrl+C back on for the shell, since a program started
+in the background passes on a flag that ignores it; says the shell's exit code, as the console
+host always ends with 0; and keeps the shell and all it starts in a job object of its own. A
+size goes to the console host as `CSI 8;rows;cols t`. Closing the terminal tells the bridge,
+then closes the console's input, which closes the console as closing its window does: the
+terminal's programs have the grace period less half a second to end, then the bridge ends those
+left (a subshell Git Bash forks as its console closes gets no close event of its own and stayed
+for minutes, holding the project folder); a console still there after `closeGraceMs` is ended
+with what it started (`taskkill /T /F`). A shell that ends by itself leaves what it started in
+the background running. The record says `windowsPty` (`conpty` and the Windows build), which a
+page gives its terminal emulator, since the console host repaints the screen itself when the
+size changes. Opening a terminal there takes about half a second more than the shell's own
+start, for the bridge; Windows PowerShell with a profile took 2.4 to 6.5 s to its first
+prompt on the machine checked, Git Bash about 3.7 s.
 
 A terminal records the commands run in it (`shell-marks.ts`, `terminal-commands.ts`). The shell
 starts with Rho's startup files around the person's own, which give it a history of its own,
@@ -63,12 +82,30 @@ ignore, each with a nonce only that shell holds, so a program printing one is ig
 - **mksh, pdksh, tcsh, csh** and other shells are not marked (`recording` stays false). mksh and
   pdksh scroll a long line sideways as it is typed, so the screen does not show it whole; they
   still keep Rho's history file.
+- **On Windows** the console host draws what a shell prints on its next frame but passes a mark
+  on at once, so a mark printed right after a command's output arrived before it in 5 of 30
+  trials; a shell there waits 50 ms before each mark, and every mark arrived in order in 30 of 30
+  (20 ms already did). Output is read from the screen as rows scroll off it and when the command's
+  end is marked, since the host draws blank rows by moving the cursor and the whole screen again
+  on a resize. **PowerShell** (pwsh and Windows PowerShell 5.1) gets a script after the person's
+  profile, passed as a command so the execution policy does not apply: PSReadLine's history file
+  becomes `history/pwsh_history` or `history/powershell_history` before the first line is read,
+  so the machine's history is neither read nor added to; the line PSReadLine hands over is marked
+  with the folder; before the next prompt, the status: 0 when the command succeeded, else the exit
+  code a program set during it, or one it set again with no PowerShell error, else 1. A prompt
+  the person replaces later is wrapped again when the next line is read; PSReadLine saves each
+  line as it is entered. **Git Bash** gets bash's hooks, with its folders as Windows paths
+  (`pwd -W`), and adds each line to its history file before the next prompt (`history -a`):
+  Windows ends a shell whose console closes before bash writes its history, which bash does on a
+  hang-up elsewhere. **cmd.exe** is not marked: its prompt cannot carry the last status and
+  cannot wait before a mark.
 
 `commandList` returns the recorded commands, newest first from an offset: the line, the folder,
 who typed it (everyone whose input reached the shell since the prompt before it, the first
 first) and who entered it, how it ended, and the start of what it printed. What a command
-printed is read from the terminal emulator line by line as each line feed completes one, so
-carriage returns and colours are applied and nothing depends on the scrollback; the echo of a
+printed is read from the terminal emulator line by line as each line feed completes one (on
+Windows as rows scroll off, above), so carriage returns and colours are applied and nothing
+depends on the scrollback; the echo of a
 line typed while it ran is not its output, and zsh's end-of-line mark is removed. What a
 full-screen program (an editor, `top`, `less`) drew is kept as the screen it showed when it
 left. When there is more than the record holds, or a screen, a file beside it keeps the first
