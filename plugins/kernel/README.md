@@ -1,9 +1,9 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.5.18 keeps a live R session and a live Python
-session for each notebook of a project, on this machine or on a server: one the person
-manages with serverctl, reached through it, or one reached with ssh. The project's own
-notebook is the one an Agent and the person share unless a notebook is named.
+`@rho-workspace/plugin-kernel` 0.5.19 keeps a live R session and a live Python
+session for a project and for each of its notebooks, on this machine or on a server: one the
+person manages with serverctl, reached through it, or one reached with ssh. An Agent's cells run
+in the project's own sessions unless it names a notebook.
 
 `KernelHost` runs each cell in its language's resident process, in the project
 folder: what one cell defines is there for the next, whoever ran it. R code runs
@@ -104,12 +104,13 @@ are the project's own notebook's. A value made in one notebook is not in another
 numbered by session. At most 8 sessions run at once in a project (`maxSessions`); a cell or
 start that would begin another is refused, naming those that run, until one is stopped. The
 Notebook view (`SessionPane`) given `notebook` lists the cells run in it and runs its own in its
-sessions; without it the view is the project's notebook and lists its own cells. In a
+sessions; without it the view is the Project notebook and lists the project's own cells. In a
 conversation's record it lists that conversation's cells wherever they ran and names the
 notebook of each, from the `notebooks` names the page hands it. A notebook shown in several
 views is one notebook. Variables, Plots and Data flow show the sessions of the notebook the
-person last showed, pressed or ran a cell in (`showNotebook`, `useShownNotebook`), with a choice
-in their header when more than one notebook has a session; Sessions lists every notebook's.
+person last showed, pressed or ran a cell in (`showNotebook`, `useShownNotebook`), at first the
+first Notebook drawn (`firstNotebook`), with a choice in their header when more than one
+notebook has a session; Sessions lists every notebook's.
 
 A cell keeps its `changeId` per caller: repeating the same identity returns the same
 cell and never runs it twice. Cells run one at a time in their session, in the order

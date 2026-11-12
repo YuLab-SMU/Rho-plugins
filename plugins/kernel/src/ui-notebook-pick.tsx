@@ -1,9 +1,10 @@
 import { showNotebook } from './ui-notebook-target.js';
 import type { NotebookNames, Session } from './ui-notebook.js';
 
-// A notebook by the name its view has on the page; the project's own is the Notebook. A notebook
-// whose view was closed keeps its sessions until they are stopped, and is named for that.
-export const notebookName = (notebook: string | null | undefined, names?: NotebookNames) => !notebook ? 'Notebook' : names?.[notebook] ?? 'A closed notebook';
+// A notebook by the name its view has on the page. The project's own sessions, which no notebook
+// names, are the Project notebook: an Agent's cells run there unless it names a notebook. A
+// notebook whose view was closed keeps its sessions until they are stopped, and is named for that.
+export const notebookName = (notebook: string | null | undefined, names?: NotebookNames) => !notebook ? 'Project notebook' : names?.[notebook] ?? 'A closed notebook';
 // The notebooks with a live session, and the one shown, to choose among. With one there is
 // nothing to choose and nothing is drawn.
 export function NotebookPick({ sessions, shown, names }: { sessions: readonly Session[]; shown: string | null; names?: NotebookNames }) {

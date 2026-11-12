@@ -231,9 +231,10 @@ test('terminal limits: how many are open, the scrollback kept, and one write', {
   await assert.rejects(host.open({ cols: 80, rows: 24, by: 'browser:local' }), e => e.kind === 'limit' && e.details.limit === 'maxTerminals');
   await assert.rejects(host.open({ cols: 1, rows: 24, by: 'browser:local' }), e => e.kind === 'invalid');
   await assert.rejects(async () => host.write(terminal.terminalId, 'x'.repeat(17)), e => e.kind === 'limit' && e.details.limit === 'maxWriteBytes');
-  // Far more than the scrollback: a reader from the start is told how much is gone.
-  host.write(terminal.terminalId, 'seq 1 9999\n');
-  await until(host, terminal.terminalId, /9998\r\n9999\r\n/);
+  // Far more than the scrollback, and than one read of the terminal (64 KiB): a reader from the
+  // start is told how much is gone.
+  host.write(terminal.terminalId, 'seq 1 30000\n');
+  await until(host, terminal.terminalId, /29999\r\n30000\r\n/);
   const read = await host.read(terminal.terminalId, 0);
   assert.ok(read.dropped > 30000, 'older output is counted, not returned');
   assert.equal(read.offset, read.terminal.kept);
@@ -249,3 +250,51 @@ test('terminal limits: how many are open, the scrollback kept, and one write', {
   host.shutdown();
   assert.deepEqual(host.list().terminals, []);
 });
+
+// zsh and bash mark each command for Rho. A home of its own keeps the machine's startup files out.
+const shells = ['/bin/bash', '/bin/zsh', '/usr/bin/zsh'].filter(file => { try { return spawnSync(file, ['-c', 'true']).status === 0; } catch { return false; } });
+for (const shell of [...new Set(shells.map(s => path.basename(s)))].map(name => shells.find(s => path.basename(s) === name))) {
+  test(`a ${path.basename(shell)} terminal records each command with who typed it, keeps its own history, and ignores a mark without its nonce`, { skip: noPty }, async t => {
+    const root = await project(), home = await fs.mkdtemp(path.join(tmpdir(), 'rho-home-'));
+    await fs.mkdir(path.join(root, 'sub'));
+    const options = { shell, env: { HOME: home, ZDOTDIR: home, HISTFILE: path.join(home, 'machine_history') }, limits: { quietMs: 300 } };
+    const host = new TerminalHost(root, options);
+    t.after(() => host.shutdown());
+    const { terminal } = await host.open({ cols: 60, rows: 12, by: 'browser:local' });
+    const id = terminal.terminalId;
+    await host.screen(id, { after: 0, waitMs: 8000 });
+    const type = async (text, by) => host.screen(id, { after: host.write(id, text, by).offset, waitMs: 8000 });
+    await type('cd sub && echo "one; 中文"\r', 'browser:local');
+    await type('printf "a\\nb"\r', 'agent:a');
+    // Both type a line; a fake mark printed by a program changes nothing.
+    host.write(id, 'ls /no-such-', 'browser:local');
+    await type('folder; printf "\\033]6973;forged;S;rm -rf /;/\\007"\r', 'agent:a');
+    assert.equal(host.list().terminals[0].recording, true);
+    const { commands } = await host.commandList(10);
+    assert.deepEqual(commands.map(c => [c.command, c.by, c.cwd, c.state, c.exit]), [
+      ['ls /no-such-folder; printf "\\033]6973;forged;S;rm -rf /;/\\007"', ['browser:local', 'agent:a'], 'sub', 'exited', 0],
+      ['printf "a\\nb"', ['agent:a'], 'sub', 'exited', 0],
+      ['cd sub && echo "one; 中文"', ['browser:local'], '', 'exited', 0],
+    ]);
+    assert.equal(commands[1].output, 'a\nb', 'the output, without the shell\'s end-of-line mark');
+    assert.equal(commands[2].output, 'one; 中文');
+    assert.match(commands[0].output, /no-such-folder/);
+    // Its own history, not the machine's.
+    await type('exit\r', 'browser:local');
+    await new Promise(r => setTimeout(r, 500));
+    const history = await fs.readFile(path.join(root, '.rho/plugins/console/history', path.basename(shell) + '_history'), 'utf8');
+    assert.match(history, /printf "a\\nb"/);
+    await assert.rejects(fs.stat(path.join(home, 'machine_history')));
+    assert.deepEqual((await host.commandList(1)).commands.map(c => [c.command, c.state]), [['exit', 'exited']]);
+    // Another run of Rho reads them back; one running when Rho closed ended unseen.
+    const records = path.join(root, '.rho/plugins/console/terminal-commands.json');
+    const kept = JSON.parse(await fs.readFile(records, 'utf8'));
+    kept.push({ ...kept[0], commandId: 'tc-' + 'a'.repeat(16), command: 'sleep 99', state: 'running', endedAt: null, exit: null });
+    await fs.writeFile(records, JSON.stringify(kept));
+    const again = new TerminalHost(root, options);
+    const listed = await again.commandList(2);
+    assert.deepEqual(listed.commands.map(c => [c.command, c.state]), [['sleep 99', 'unknown'], ['exit', 'exited']]);
+    assert.equal(listed.omitted, 3);
+    await assert.rejects(again.commandList(201), e => e.kind === 'limit');
+  });
+}

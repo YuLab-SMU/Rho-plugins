@@ -28,8 +28,10 @@ export const useAskedPlot = () => useSyncExternalStore(subscribe, () => plot);
 
 // The notebook whose sessions the Variables, Plots and Data flow views show: the one the person last
 // worked in on this page, as RStudio's environment pane follows the active session (null: the
-// project's own notebook). A Notebook says so when it is shown, pressed or runs a cell; the views
-// can choose another.
-let shownNotebook: string | null = null;
-export const showNotebook = (notebook: string | null) => { if (shownNotebook !== notebook) { shownNotebook = notebook; changed(); } };
+// project's own sessions, where an Agent's cells run unless it names a notebook). A Notebook says
+// so when it is shown, pressed or runs a cell; the views can choose another. Until one is chosen,
+// the first Notebook drawn is the one shown.
+let shownNotebook: string | null = null, chosen = false;
+export const showNotebook = (notebook: string | null) => { chosen = true; if (shownNotebook !== notebook) { shownNotebook = notebook; changed(); } };
+export const firstNotebook = (notebook: string | null) => { if (!chosen) { chosen = true; if (shownNotebook !== notebook) { shownNotebook = notebook; changed(); } } };
 export const useShownNotebook = () => useSyncExternalStore(subscribe, () => shownNotebook);

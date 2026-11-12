@@ -3,10 +3,11 @@
 // The page that shows them places the records among its own, such as the Agent's commands, and
 // supplies the scoped client.
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import type { ConsoleRecord } from './index.js';
+import type { ConsoleRecord, TerminalCommand } from './index.js';
 
 export interface UiClient { call(method: string, input: any, signal?: AbortSignal): Promise<any> }
 export type ConsoleCommand = ConsoleRecord;
+export type { TerminalCommand };
 // The protected resource is this tab: it shows at most this much of one command's output, reads a
 // running command again this often, and lists this many of the newest commands.
 export const consoleViewLimits = { shownBytes: 256 * 1024, pollMs: 700, listed: 50 };
@@ -30,6 +31,18 @@ export function useCommands(client: UiClient, projectId: string, cursor: number)
     error => setState({ off: refused(error), problem: failure(error) })), [client, projectId]);
   useEffect(() => { void read(); }, [read, cursor]);
   return { commands, ...state, read };
+}
+
+// The commands run in the project's terminals, read again each time the page's cursor moves.
+export function useTerminalCommands(client: UiClient, projectId: string, cursor: number) {
+  const [commands, setCommands] = useState<TerminalCommand[] | null>(null), [problem, setProblem] = useState('');
+  useEffect(() => {
+    let live = true;
+    client.call('console.terminal.commands', { projectId, limit: consoleViewLimits.listed }).then((value: { commands: TerminalCommand[] }) => { if (live) { setCommands(value.commands); setProblem(''); } },
+      error => { if (live) { if (refused(error)) setCommands([]); else setProblem(failure(error)); } });
+    return () => { live = false; };
+  }, [client, projectId, cursor]);
+  return { commands, problem };
 }
 
 // The person's own line. A request that failed keeps its identity, so pressing Run again for the
@@ -139,6 +152,36 @@ export function CommandRecord({ record, client, projectId, made, after, onRunAga
   </li>;
 }
 
+// One command run in a terminal: when, who typed it (`who` names each principal), the line, and
+// how it ended when that was not a clean exit; opened, the folder and what it printed.
+export function TerminalCommandRecord({ command, who, made, after }: { command: TerminalCommand; who: (principal: string) => string; made?: boolean; after?: ReactNode }) {
+  ensureStyles();
+  const [now, setNow] = useState(Date.now());
+  const running = command.state === 'running';
+  useEffect(() => { if (!running) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [running]);
+  const took = (command.endedAt ? Date.parse(command.endedAt) : now) - Date.parse(command.startedAt);
+  const clean = command.state === 'exited' && command.exit === 0;
+  const ending = [running ? 'Running' : command.state === 'unknown' ? 'Outcome unknown' : clean ? '' : 'Exit ' + (command.exit ?? '?'), took >= 1000 ? durationText(took) : ''].filter(Boolean).join(' · ');
+  const names = command.by.map(who), typed = names.length > 1 ? names.slice(0, -1).join(', ') + ' and ' + names.at(-1) : names[0];
+  const agent = command.by.some(by => by !== 'browser:local');
+  return <li className={'console-command terminal-command' + (made || running ? ' made' : '') + (!clean && !running ? ' problem' : '')}>
+    <details>
+      <summary>
+        <span className="console-time">{clock(Date.parse(command.startedAt))}</span>
+        <span className="console-what" title={command.command}><span className={'console-who' + (agent ? ' agent' : '')}>{typed}</span><code className="alone">{command.command}</code></span>
+        <span className={'console-end' + (running ? ' running' : clean ? '' : ' problem')}>{ending}</span>
+      </summary>
+      <div className="console-detail">
+        <p className="console-note">In {command.cwd ? command.cwd + '/' : 'the project folder'}{command.by.length > 1 ? ' · typed by ' + typed : ''}</p>
+        {command.output ? <pre className="console-output">{command.output}</pre> : <p className="console-note">{running ? 'Running. Its output shows in the terminal.' : 'Nothing it printed is kept here: it printed nothing, or drew a full screen.'}</p>}
+        {command.cut && <p className="console-note">Only the start of what it printed is kept here.</p>}
+        {command.problem && <p className="console-note">{command.problem}</p>}
+      </div>
+    </details>
+    {after}
+  </li>;
+}
+
 // The command line's and the records' own styles, in the application's tokens.
 const styles = `.console-command { border-top: 1px solid var(--color-divider); }
 .console-command summary { display: grid; grid-template-columns: 4.6em minmax(0, 1fr) auto; gap: 12px; align-items: baseline; padding: 8px 6px; margin: 0 -6px; border-radius: 6px; cursor: pointer; list-style: none; }
@@ -148,6 +191,8 @@ const styles = `.console-command { border-top: 1px solid var(--color-divider); }
 .console-what { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .console-what code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-meta); font-family: var(--font-mono); font-size: 12px; }
 .console-what code.alone { color: var(--color-ink); font-size: 13px; }
+.console-who { color: var(--color-meta); font-size: 11.5px; }
+.console-who.agent { color: var(--color-accent-strong); font-weight: 600; }
 .console-end { color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .console-end.problem { color: var(--color-failed); font-weight: 600; }
 .console-end.running { color: var(--color-accent); font-weight: 600; }

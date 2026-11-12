@@ -38,13 +38,27 @@ past an offset to come and stop; `resize` sets the size; `close` hangs the shell
 kept across a restart: when Rho closes, each shell is hung up as if its window were closed.
 A few lines of Python (`python3`, or the program named) open the pseudo-terminal on macOS and
 Linux, so the package needs no compiled module; on Windows `open` is refused as unavailable.
-What is typed and printed in a terminal is not in the record of commands.
+
+A zsh or bash terminal records its commands (`shell-marks.ts`). The shell starts with Rho's
+startup files around the person's own (for zsh a `ZDOTDIR` whose files read theirs, as VS Code's
+terminal does; for bash an init file that reads the login files), which give it a history file
+of its own under `.rho/plugins/console/history/`, apart from the machine's shell history, and
+two hooks. Before a command runs, the shell prints its line and folder as an escape sequence
+(OSC 6973) that terminals ignore; before the next prompt, its exit status. Each carries a nonce
+only that shell holds, so a program printing one is ignored. `commandList` returns the recorded
+commands, newest first: the line, the folder, who typed it (everyone whose input reached the
+shell since the prompt before it, the first first), how it ended, and the start of what it
+printed, read from the screen without zsh's end-of-line mark. They are kept in
+`terminal-commands.json` across restarts; one running when its terminal or Rho closed ended
+unseen (`unknown`). Other shells run without marks (`recording` stays false).
 
 Limits (`terminalLimits`, each configurable): at most 4 terminals in a project at once (an ended
 one makes room; with all of them live another is refused), the last 1 MiB of each one's output
 (a reader asking for older bytes is told how many are gone), 256 KiB and 25 s of waiting per
 read, 64 KiB per write, and for `screen` 2000 lines kept above the screen, at most 500 lines per
-reading and 400 ms of quiet before a waiting one returns.
+reading and 400 ms of quiet before a waiting one returns; 500 recorded commands (the oldest go
+first), each line up to 4096 characters and the first 16 KiB of what it printed (the rest is
+marked cut), at most 200 per listing.
 
 State lives under `.rho/plugins/console/` in the project. The package grants no
 authority: the application decides who may run commands. Rho lets only the person
@@ -59,7 +73,9 @@ until they run, so Run pressed again after a failed request never starts a comma
 and `prepare` puts a command from elsewhere in the line to check; `CommandLine` draws the
 line and `CommandRecord` one command, its output read as it arrives (at most 256 KiB shown,
 read again every 700 ms while it runs), with the page's own line under it, such as the files
-that changed while it ran. They add their own styles once, in the page's variables.
+that changed while it ran. `useTerminalCommands` reads the newest 50 terminal commands as the
+cursor moves, and `TerminalCommandRecord` draws one, naming who typed it through the page's
+`who`. They add their own styles once, in the page's variables.
 
 ```sh
 npm run build

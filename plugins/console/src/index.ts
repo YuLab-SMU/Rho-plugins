@@ -10,7 +10,7 @@ import { operationPresentation, presentation } from './presentation.js';
 import type { commandStates } from './contract.js';
 
 export type CommandState = typeof commandStates[number];
-export { TerminalHost, terminalLimits, type TerminalLimits, type TerminalRecord } from './terminal.js';
+export { TerminalHost, terminalLimits, type TerminalCommand, type TerminalCommandState, type TerminalLimits, type TerminalRecord } from './terminal.js';
 export interface ConsoleRecord {
   commandId: string; changeId: string; command: string; cwd: string; by: string;
   startedAt: string; endedAt: string | null; state: CommandState;
@@ -207,7 +207,7 @@ const content = [
   'The Console records commands the person at this machine runs in the project folder.',
   'Agents run their own commands with their own tools; an Agent may read this record with console.list and console.output.',
   'The person may also keep terminals open here, each a shell in the project folder, and you may use them too. console.terminal.list lists them with who opened each. console.terminal.screen reads what one shows now as text. console.terminal.write types into it as if typed there: end a command with "\\r". It returns the offset printed so far; pass it as after to console.terminal.screen with waitMs to wait until the output has come and stopped (quiet says it had). A full-screen program (an editor, top, less) has the screen while fullScreen is true; send its own keys, such as "q", to leave it.',
-  'Use a terminal for what the person has open or asks for there: a server they logged into, a program waiting for input, a command they want to watch. Work they need not watch is better done with your own tools. The person sees all that is typed and printed in a terminal, and your writes are recorded as your activity; what runs there is not in the Console\'s record of commands. console.terminal.open opens a terminal of your own, which the person can show beside theirs; wait for its prompt with console.terminal.screen (after 0, waitMs) before typing. You may close only the terminals you opened.',
+  'Use a terminal for what the person has open or asks for there: a server they logged into, a program waiting for input, a command they want to watch. Work they need not watch is better done with your own tools. The person sees all that is typed and printed in a terminal, and your writes are recorded as your activity. A terminal whose shell is zsh or bash (recording is true) records each command run in it with who typed it, the folder, the exit status and the start of what it printed; console.terminal.commands lists them, the newest first, so read the exit status there after the screen has settled. console.terminal.open opens a terminal of your own, which the person can show beside theirs; wait for its prompt with console.terminal.screen (after 0, waitMs) before typing. You may close only the terminals you opened.',
   'Use capability.list to see whether those reads are enabled for you.',
   'A command keeps its changeId: repeating it returns the same record and never runs it twice.',
   'How a command ended is what Rho observed: an exit code or signal, a requested stop, or unknown.',

@@ -157,7 +157,11 @@ another, and at most 8 sessions run at once in a project. Variables, Plots and D
 the notebook last worked in, and Sessions lists them by notebook. Console 0.3.3 lets an Agent use
 a terminal: `console.terminal.screen` reads what it shows as text (`@xterm/headless` 6.0.0, MIT),
 after waiting for output past an offset to come and stop; `write` keeps the latest input of
-anyone but the opener as `typedBy`.
+anyone but the opener as `typedBy`. Notebook 0.5.19 calls the project's own sessions the
+Project notebook and shows the first Notebook drawn until another is chosen. Console 0.3.4
+records each command run in a zsh or bash terminal (`console.terminal.commands`): who typed it,
+the folder, the exit status and the start of its output, from marks the shell prints with a
+nonce, and gives the shell a history file of its own; macOS zsh and bash were run, Linux was not.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

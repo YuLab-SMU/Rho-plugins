@@ -29,6 +29,7 @@ export const operationPresentation = {
   'console.terminal.open': { order: 50, displayName: 'Open a terminal', description: "Starts a shell on a terminal in the project folder. You and the Agent can both read and type in it.", readOnly: false, runsCode: true },
   'console.terminal.list': { order: 52, displayName: 'List terminals', description: "Lists the open terminals, with who opened each and who last typed there.", readOnly: true, runsCode: false },
   'console.terminal.screen': { order: 53, displayName: 'Read a terminal\'s screen', description: "Reads what a terminal shows now as text, after waiting for a command's output to settle.", readOnly: true, runsCode: false },
+  'console.terminal.commands': { order: 55, displayName: 'List terminal commands', description: "Lists the commands run in the terminals, newest first: who typed each, where, how it ended and what it printed.", readOnly: true, runsCode: false },
   'console.terminal.read': { order: 54, displayName: 'Read a terminal', description: "Reads what a terminal printed since the last read, for the page that draws it.", readOnly: true, runsCode: false },
   'console.terminal.write': { order: 56, displayName: 'Type in a terminal', description: "Sends typed text to the terminal's shell, as if typed there.", readOnly: false, runsCode: true },
   'console.terminal.resize': { order: 57, displayName: 'Size a terminal', description: "Tells the terminal how many columns and rows the page shows.", readOnly: false, runsCode: false },

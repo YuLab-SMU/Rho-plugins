@@ -114,7 +114,7 @@ export function SessionsPane({ client, snapshot, onCell, notebooks }: { client: 
         <p className="nb-proc-off">No session running; its first cell of each language starts one. {languages.map(l => startButton(l, book, 'Start ' + languageName[l]))}</p>
       </section>;
       return <section key={book ?? ''} className={'nb-proc-book' + (several && book === shownNotebook ? ' shown' : '')} aria-label={several ? named(book) : undefined}>
-        {several && <h2 className="nb-proc-book-name">{named(book)}{book === null && <small> · the project's, the Agent's unless it names another</small>}</h2>}
+        {several && <h2 className="nb-proc-book-name">{named(book)}{book === null && <small> · where an Agent's cells run unless it names a notebook</small>}</h2>}
         {languages.map(language => card(language, book))}
       </section>;
     })}

@@ -1,5 +1,5 @@
 import { objectSchema as obj, timelineContract } from '@rho-workspace/plugin-contracts';
-import { changeId, commandId, recordSchema, terminalId, terminalSchema, terminalSize } from './contract.js';
+import { changeId, commandId, recordSchema, terminalCommandSchema, terminalId, terminalSchema, terminalSize } from './contract.js';
 
 // Owner business contracts. Application project/authentication fields are separate.
 export const operationContracts = {
@@ -56,6 +56,12 @@ export const operationContracts = {
   'console.terminal.screen': {
     inputSchema: obj({ terminalId, after: { type: 'integer', minimum: 0 }, waitMs: { type: 'integer', minimum: 0, maximum: 25000 }, lines: { type: 'integer', minimum: 1, maximum: 500 } }, ['terminalId']),
     outputSchema: obj({ lines: { type: 'array', items: { type: 'string' } }, omitted: { type: 'integer', minimum: 0 }, cursor: obj({ row: { type: 'integer', minimum: 0 }, col: { type: 'integer', minimum: 0 } }), fullScreen: { type: 'boolean' }, offset: { type: 'integer', minimum: 0 }, quiet: { type: 'boolean' }, terminal: terminalSchema }),
+    requires: [] as string[], effect: 'read' as const,
+  },
+  // The commands run in the project's terminals, the newest first, each with who typed it.
+  'console.terminal.commands': {
+    inputSchema: obj({ limit: { type: 'integer', minimum: 1, maximum: 200 } }, []),
+    outputSchema: obj({ commands: { type: 'array', items: terminalCommandSchema }, omitted: { type: 'integer', minimum: 0 } }),
     requires: [] as string[], effect: 'read' as const,
   },
   'console.terminal.resize': {

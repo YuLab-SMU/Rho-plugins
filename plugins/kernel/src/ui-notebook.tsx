@@ -4,7 +4,7 @@ import { cellRelations, type CellRelations, type LineageCell } from './lineage.j
 import { CellScriptFlow } from './ui-flow.js';
 import { Icon } from './ui-icons.js';
 import { PlaceChip, usePlaces, whereOf } from './ui-servers.js';
-import { showNotebook, takeCell, takePlot, useAskedCell, useAskedPlot, useShownNotebook } from './ui-notebook-target.js';
+import { firstNotebook, showNotebook, takeCell, takePlot, useAskedCell, useAskedPlot, useShownNotebook } from './ui-notebook-target.js';
 import { NotebookPick } from './ui-notebook-pick.js';
 import { scopedCells } from './session-scope.js';
 import { call, refused, agentName, agentNames, clock, durationText, useShell, withShell, versionOf, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
@@ -621,6 +621,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   const latest = useMemo(() => latestSessions(read, notebook ?? null), [read, notebook]);
   // The other views follow the notebook the person shows, presses or runs a cell in.
   const mark = () => { if (!scope) showNotebook(notebook ?? null); };
+  useEffect(() => { if (!scope) firstNotebook(notebook ?? null); }, [notebook, scope]);
   const [language, setLanguage] = useState<Language | null>(null);
   const shownLanguage: Language = language ?? cells.at(-1)?.language ?? 'r';
   const [draft, setDraft] = useState('');
