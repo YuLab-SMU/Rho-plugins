@@ -550,6 +550,100 @@ def inspect_value(msg):
     except Exception as error:
         reply({'state': 'failed', 'problem': f'{type(error).__name__}: {error}'})
 
+# Resolve only names and ordinary attributes. Never call a property, __getattr__ or a function
+# merely to read its arguments. Function code supplies names without evaluating annotations.
+def completion_value(name):
+    import builtins, inspect
+    parts = name.split('.')
+    value = namespace.get(parts[0], vars(builtins).get(parts[0]))
+    bound = False
+    for part in parts[1:]:
+        parent = value
+        value = inspect.getattr_static(parent, part, None)
+        bound = not isinstance(parent, (type, types.ModuleType)) and isinstance(value, types.FunctionType)
+        if isinstance(value, staticmethod): value, bound = value.__func__, False
+        elif isinstance(value, classmethod): value, bound = value.__func__, True
+    if isinstance(value, types.MethodType): value, bound = value.__func__, True
+    if isinstance(value, type): value, bound = inspect.getattr_static(value, '__init__', None), True
+    return value, bound
+
+def argument_names(line):
+    import inspect, tokenize
+    tokens = []
+    try:
+        for token in tokenize.generate_tokens(io.StringIO(line).readline):
+            if token.type not in (tokenize.NEWLINE, tokenize.NL, tokenize.ENDMARKER, tokenize.INDENT, tokenize.DEDENT): tokens.append(token)
+    except (tokenize.TokenError, IndentationError): pass  # an unfinished call is expected
+    stack = []
+    for i, token in enumerate(tokens):
+        if token.type == tokenize.OP:
+            if token.string in '([{': stack.append((i, token.string))
+            elif token.string in ')]}' and stack: stack.pop()
+    if not stack or stack[-1][1] != '(': return None
+    start = stack[-1][0]
+    before = tokens[:start]
+    if not before or before[-1].type != tokenize.NAME: return None
+    i = len(before) - 1
+    while i >= 2 and before[i - 1].string == '.' and before[i - 2].type == tokenize.NAME: i -= 2
+    name = ''.join(t.string for t in before[i:])
+    # Split only the call's own arguments; commas in a nested expression are not separators.
+    segments, depth = [[]], 0
+    for token in tokens[start + 1:]:
+        if token.type == tokenize.OP:
+            if token.string == ',' and depth == 0: segments.append([]); continue
+            if token.string in '([{': depth += 1
+            elif token.string in ')]}': depth -= 1
+        segments[-1].append(token)
+    tail = segments[-1]
+    if tail and (len(tail) != 1 or tail[0].type != tokenize.NAME): return None
+    prefix = tail[0].string if tail else ''
+    supplied, positional = set(), 0
+    for segment in segments[:-1]:
+        if len(segment) >= 2 and segment[0].type == tokenize.NAME and segment[1].string == '=': supplied.add(segment[0].string)
+        elif segment and segment[0].string not in ('*', '**'): positional += 1
+    value, bound = completion_value(name)
+    if isinstance(value, types.FunctionType):
+        # Do not read annotations (which can be lazy), __signature__ or __wrapped__.
+        code = value.__code__
+        positional_names = list(code.co_varnames[:code.co_argcount])
+        names = positional_names[max(code.co_posonlyargcount, positional + int(bound)):]
+        names += list(code.co_varnames[code.co_argcount:code.co_argcount + code.co_kwonlyargcount])
+    elif isinstance(value, (types.BuiltinFunctionType, types.MethodDescriptorType)):
+        try: parameters = list(inspect.signature(value, follow_wrapped=False).parameters.values())
+        except (ValueError, TypeError): return None
+        names = []
+        for p in parameters[int(bound):]:
+            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) and positional: positional -= 1; continue
+            if p.kind in (p.POSITIONAL_OR_KEYWORD, p.KEYWORD_ONLY): names.append(p.name)
+    else: return None
+    return len(prefix), [{'label': n, 'type': 'argument'} for n in names if n.startswith(prefix) and n not in supplied]
+
+# Enumerate names from the session's import paths without importing packages. In particular,
+# walk_packages() would execute __init__.py while the person is only typing an import.
+def import_names(line):
+    import pkgutil
+    found = re.search(r'(?:^|;)\s*(?:from\s+([\w.]+)\s+import\s+(?:\w+\s*,\s*)*([\w]*)|import\s+(?:[\w.]+(?:\s+as\s+\w+)?\s*,\s*)*([\w.]*)|from\s+([\w.]*))$', line)
+    if not found: return None
+    parent, child, imported, source = found.groups()
+    token = child if parent else imported if imported is not None else source
+    if parent: head, prefix = parent, token
+    else: head, _, prefix = token.rpartition('.')
+    paths = list(sys.path)
+    if head:
+        for part in head.split('.'):
+            if not part.isidentifier(): return len(prefix), []
+            paths = [os.path.join(p or os.getcwd(), part) for p in paths if os.path.isdir(os.path.join(p or os.getcwd(), part))]
+    names = set(sys.builtin_module_names) if not head else set()
+    names.update(info.name for info in pkgutil.iter_modules(paths))
+    if head:
+        # Namespace-package folders have no __init__.py and pkgutil does not list them.
+        for folder in paths:
+            try: names.update(n for n in os.listdir(folder) if n.isidentifier() and os.path.isdir(os.path.join(folder, n)))
+            except OSError: pass
+        loaded = sys.modules.get(head)
+        if parent and loaded is not None: names.update(vars(loaded))
+    return len(prefix), [{'label': n, 'type': 'property' if parent else 'variable'} for n in sorted(names) if n.startswith(prefix) and (prefix.startswith('_') or not n.startswith('_'))]
+
 # The names that may follow a line being typed: the session's names, builtins and keywords, the
 # attributes of a value after a dot, and the keys of a dict or the columns of a table inside the
 # quotes of a subscript. A value is read only when it is named by plain names and dots; a call is
@@ -557,6 +651,14 @@ def inspect_value(msg):
 # before it, with how many characters of the line it replaces (back).
 def completions(line):
     import rlcompleter, keyword
+    imported = import_names(line)
+    if imported is not None: return imported
+    arguments = argument_names(line)
+    if arguments is not None and arguments[1]:
+        back, items = arguments
+        # Values remain available alongside argument names, as in the R console.
+        prefix = line[-back:] if back else ''
+        return back, items + [{'label': n, 'type': 'variable'} for n in namespace if prefix and n.startswith(prefix) and not n.startswith('_')]
     dotted = r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*'
     key = re.search(r'(' + dotted + r''')\s*\[\s*(['"])([^'"]*)$''', line)
     if key:

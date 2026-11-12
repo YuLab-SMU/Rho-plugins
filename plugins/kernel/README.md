@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.5.22 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.5.23 keeps a live R session and a live Python
 session for a project and for each of its notebooks, on this machine or on a server: one the
 person manages with serverctl, reached through it, or one reached with ssh. An Agent's cells run
 in the project's own sessions unless it names a notebook.
@@ -297,8 +297,10 @@ A cell is edited where it stands. Pressing its code, or Edit over its corner, ma
 type in with the caret where it was pressed; Shift+Enter runs it there and Esc leaves it as it
 was. The run is a new cell: `kernel.run` takes `replaces`, an ended cell of the same notebook and
 language, and the new cell names it. Nothing of the earlier cell is changed. The Notebook shows
-the newest run where the first one stood, with the earlier runs a click away under it; the
-console form stays the transcript, every run in turn. Run again runs in place too. A page in
+the newest run where the first one stood within the same session, with the earlier runs a click
+away under it. If that session has ended, the new run stands in its new session after the old
+session's end; the old session keeps its cells. The console form stays the transcript, every
+run in turn. Run again runs in place too. A page in
 front of a service that does not know `replaces` runs the code as a new cell at the end.
 
 The box is the page's editor when the page gives one (`codeBox` among the shell's services: it
@@ -309,8 +311,12 @@ session offers after the line up to the cursor, with where the name being typed 
 with its console's completion (its values and attached packages' names, a value's parts after
 `$` or `@`, `pkg::`, a call's arguments, files in quotes) and adds a table's columns inside the
 quotes of a subscript and the installed packages inside `library()`. Python answers with its
-names, a value's attributes after a dot and a dict's keys or a table's columns inside a
-subscript's quotes. A value named before `$` or a dot is read; a call is never run, and a Python
+names, a value's attributes after a dot, a dict's keys or a table's columns inside a
+subscript's quotes, keyword arguments of a named function or method, and modules in `import`
+and `from … import …`. Argument names exclude positional-only and already supplied parameters;
+reading function code avoids evaluating annotations. Module discovery lists the session's import
+paths without importing packages; a loaded module also offers its attributes after `from`.
+A value named before `$` or a dot is read; a call is never run, and a Python
 property is named without being read. It starts no session and waits for no cell: while one
 runs or waits it answers `busy`, and the views then offer the values the session listed last.
 At most `completeItems` (200) names are given with a count of the rest, a line of at most

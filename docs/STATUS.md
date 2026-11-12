@@ -177,14 +177,14 @@ ways to run it again over the code's corner, the language named on a cell only a
 both, and a new cell drawn as a cell with its code coloured as typed. A page may place the
 session's state and where it runs in a bar of its own (`toolbar`). Views only; the builder's
 reading in a real browser at three widths.
-Notebook 0.5.22 edits a cell where it stands and completes what is typed. `kernel.run` takes
+Notebook 0.5.23 edits a cell where it stands and completes what is typed. `kernel.run` takes
 `replaces`: a new cell in the place of an ended one of its notebook and language, the earlier run
 kept in the record and shown under it. Pressing a cell's code makes it a box to type in; that box
 and the new cell are the page's editor when the page gives one (`codeBox`). `kernel.complete`
 gives the names a live session offers after a line being typed, in R (its console's completion,
 plus a table's columns in a subscript and installed packages in `library()`) and in Python,
 without running a call, starting a session or waiting for a cell. The builder's reading in a real
-browser; not run in a conversation's Studio or on a server.
+browser. Python also completes keyword arguments and import names without calling a function, evaluating annotations or importing packages; a rerun after a session ends stands in its new session, leaving the old cells in theirs. Real R/Python sessions passed editing, completion, error repair and rerunning after stop locally and over SSH in Chrome; a conversation Studio passed with a controlled ACP peer and real Python cells ([application record](https://github.com/YuLab-SMU/Rho/blob/main/docs/NOTEBOOK-FOLLOWUP-EPISODE.md)). The owner suite ran 227/235, none failed, with five Windows-only and three unavailable Python plotting checks skipped.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

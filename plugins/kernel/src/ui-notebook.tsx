@@ -609,13 +609,13 @@ type Row = { at: number; order: number; key: string } & ({ cell: Cell; earlier: 
 
 // Where each cell stands in a notebook. A cell run in place of another (`replaces`) stands where
 // that one stood, and so on back to the first run there; the newest run is the one shown, with the
-// earlier ones behind it, oldest first. A cell whose earlier run is not among these cells stands
-// where it was run.
+// earlier ones behind it, oldest first. Re-running after a session ends belongs to the new
+// session: it stands at its actual time, leaving the old session's cells where they ran.
 export function inPlace(cells: Cell[]) {
   const byId = new Map(cells.map(c => [c.cellId, c])), first = new Map<string, string>(), runs = new Map<string, Cell[]>();
   for (const cell of cells) {
     let at = cell;
-    for (let steps = 0; at.replaces && byId.has(at.replaces) && steps < cells.length; steps++) at = byId.get(at.replaces)!;
+    for (let steps = 0; at.replaces && byId.get(at.replaces)?.sessionId === cell.sessionId && steps < cells.length; steps++) at = byId.get(at.replaces)!;
     first.set(cell.cellId, at.cellId);
     const list = runs.get(at.cellId); if (list) list.push(cell); else runs.set(at.cellId, [cell]);
   }

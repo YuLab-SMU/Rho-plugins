@@ -257,6 +257,50 @@ test('a live session completes the line being typed: it runs no call, prints not
   assert.equal((await host.read()).cells.length, 5);
 });
 
+test('Python completes arguments and imports without running a function, descriptor, annotation or package', async t => {
+  const root = await project(), host = new KernelHost(root);
+  t.after(() => host.close());
+  await fs.mkdir(path.join(root, 'rho_completion_package'));
+  await fs.writeFile(path.join(root, 'rho_completion_package', '__init__.py'), 'raise RuntimeError("PACKAGE WAS IMPORTED")\n');
+  await fs.writeFile(path.join(root, 'rho_completion_package', 'child.py'), 'raise RuntimeError("MODULE WAS IMPORTED")\n');
+  const setup = await host.run({ language: 'python', code: `
+def summarize(data, /, limit=10, *, precision=2):
+    raise RuntimeError("FUNCTION WAS CALLED")
+class Reader:
+    def read(self, filename, *, encoding="utf-8"): raise RuntimeError("METHOD WAS CALLED")
+    @property
+    def surprise(self): raise RuntimeError("PROPERTY WAS READ")
+reader = Reader()
+import types
+dynamic_module = types.ModuleType("dynamic_module")
+def dynamic(name): raise RuntimeError("DYNAMIC ATTRIBUTE WAS READ")
+dynamic_module.__getattr__ = dynamic
+def annotated(value: "print('ANNOTATION WAS EVALUATED')", *, precision=2): pass
+annotated.__signature__ = "do not consult this"
+`, changeId: 'define', by: 'browser:local', waitMs: 30000 });
+  assert.equal(setup.cell.state, 'done', setup.cell.problem);
+  const complete = async line => {
+    const got = await host.complete({ language: 'python', line });
+    assert.equal(got.state, 'shown', line + ': ' + got.problem);
+    return got;
+  };
+  let got = await complete('summarize([1, 2], li');
+  assert.deepEqual([got.from, got.items], [18, [{ label: 'limit', type: 'argument' }]]);
+  got = await complete('summarize([1, 2], limit=3, ');
+  assert.deepEqual(got.items, [{ label: 'precision', type: 'argument' }], 'used and positional-only parameters are left out');
+  assert.deepEqual((await complete('reader.read(enc')).items, [{ label: 'encoding', type: 'argument' }], 'a bound method does not offer self');
+  assert.deepEqual((await complete('annotated(pre')).items, [{ label: 'precision', type: 'argument' }]);
+  assert.deepEqual((await complete('reader.surprise(')).items, []);
+  assert.deepEqual((await complete('dynamic_module.missing(')).items, []);
+  assert.ok((await complete('print(fl')).items.some(i => i.label === 'flush' && i.type === 'argument'));
+  assert.ok((await complete('import jso')).items.some(i => i.label === 'json'));
+  assert.ok((await complete('import os, rho_completion_')).items.some(i => i.label === 'rho_completion_package'));
+  assert.deepEqual((await complete('from rho_completion_package import ch')).items, [{ label: 'child', type: 'property' }]);
+  assert.ok((await complete('import rho_completion_package.ch')).items.some(i => i.label === 'child'));
+  const after = await host.run({ language: 'python', code: 'import sys\nprint("rho_completion_package" in sys.modules)', changeId: 'after', by: 'browser:local', waitMs: 30000 });
+  assert.deepEqual([after.cell.number, text(after.cell)], [2, 'False\n'], 'completion imported nothing, printed nothing and added no cell');
+});
+
 test('completion gives at most its limit of names and counts the rest', async t => {
   const root = await project();
   const host = new KernelHost(root, { limits: { completeItems: 3 } });

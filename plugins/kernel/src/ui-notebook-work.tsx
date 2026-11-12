@@ -28,7 +28,7 @@ export function useNotebookWork(client: UiClient, projectId: string, cursor: num
 
 const firstLine = (code: string) => code.split('\n').map(line => line.trim()).find(line => line && !line.startsWith('#')) ?? 'A cell';
 
-export function NotebookWorkSection({ work, snapshot, onOpen }: { work: NotebookWork; snapshot: UiSnapshot; onOpen: () => void }) {
+export function NotebookWorkSection({ work, snapshot, onOpen }: { work: NotebookWork; snapshot: UiSnapshot; onOpen: (notebook?: string | null) => void }) {
   const { read, problem, cells } = work;
   if (!cells && !problem) return null;
   const agents = agentNames(snapshot);
@@ -38,7 +38,7 @@ export function NotebookWorkSection({ work, snapshot, onOpen }: { work: Notebook
     .sort((a, b) => Number(a.state === 'ended') - Number(b.state === 'ended') || b.startedAt.localeCompare(a.startedAt)).slice(0, notebookWorkLimits.sessions);
   const newest = [...(read?.cells ?? [])].reverse(), earlier = Math.max(0, cells - newest.length);
   return <section className="project-section notebook-work" aria-labelledby="notebook-work-title">
-    <div className="section-heading"><h2 id="notebook-work-title">Notebook</h2><button className="text-button" onClick={onOpen}>Open Notebook</button></div>
+    <div className="section-heading"><h2 id="notebook-work-title">Notebook</h2><button className="text-button" onClick={() => onOpen()}>Open Notebook</button></div>
     {problem && <p role="alert">{problem}</p>}
     {/* A live session runs on this machine unless a server runs it. An ended one may come with a
         copied project, such as the one Rho ships, so it names only the server it ran on. */}
@@ -47,7 +47,7 @@ export function NotebookWorkSection({ work, snapshot, onOpen }: { work: Notebook
       <span><strong>{versionOf(s)}</strong> {s.place ? 'on ' + s.place.label : s.state !== 'ended' ? 'on this machine' : ''}</span>
       <small>{s.state === 'ended' ? 'ended' : s.state} · {s.cells} {s.cells === 1 ? 'cell' : 'cells'}{s.state !== 'ended' ? ` · ${s.variables.length + s.variablesOmitted} ${s.variables.length + s.variablesOmitted === 1 ? 'value' : 'values'}` : ''}</small>
     </li>)}</ul>}
-    {newest.length > 0 && <div className="activity-list">{newest.map(cell => <button className="activity-row" key={cell.cellId} onClick={() => { askCell(cell.cellId); onOpen(); }}>
+    {newest.length > 0 && <div className="activity-list">{newest.map(cell => <button className="activity-row" key={cell.cellId} onClick={() => { askCell(cell.cellId); onOpen(cell.notebook ?? null); }}>
       <span className={'activity-symbol' + (cell.state === 'running' || cell.state === 'queued' ? ' active' : '')}><Icon name="code" size={16} /></span>
       <span className="activity-name"><strong>{cell.purpose || firstLine(cell.code)}</strong>
         <small>{author(cell.by)} · {when(cell.endedAt ?? cell.startedAt ?? cell.queuedAt).text}{stateWords[cell.state] ? ' · ' + stateWords[cell.state] : ''}</small></span>

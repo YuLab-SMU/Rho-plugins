@@ -8,8 +8,8 @@ export const operationContracts = {
   // session on this machine starts with, in a folder of the project (.venv/bin/python); the
   // project keeps it for the language's later sessions. A cell naming another program than the
   // live session's is refused. replaces names an ended cell of the same notebook and language:
-  // the new cell is run in its place, where a notebook shows it, and the earlier one stays in the
-  // record as an earlier run.
+  // a notebook shows the new cell in its place within the same session. In a new session it
+  // stands at its actual time. The earlier cell always stays in the record.
   'kernel.run': {
     inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, notebook: notebookId, replaces: cellId, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 }, place: placeRef, interpreter: { type: 'string', minLength: 1, maxLength: 1024 } }, ['language', 'code', 'changeId']),
     outputSchema: obj({ cell: cellSchema, session: sessionSchema }),
