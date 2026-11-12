@@ -76,8 +76,12 @@ export interface AgentProcessLimits {
   stopGraceMs: number; connectTimeoutMs: number;
 }
 export interface AgentMcpServer { name: string; command: string; args: string[]; env: Array<{ name: string; value: string }> }
+// An Agent's error says what failed in its JSON-RPC data when it has more than a code's name: the
+// Claude ACP adapter answers "Internal error" with the reason Claude Code did not start (such as an
+// option it does not know, from a Claude Code older than the adapter's) in data.details.
 export function visibleError(error: unknown, env: NodeJS.ProcessEnv = process.env) {
-  let text = error instanceof Error ? error.message : 'The Agent connection failed.';
+  const details = (error as { data?: { details?: unknown } } | null)?.data?.details;
+  let text = (error instanceof Error ? error.message : 'The Agent connection failed.') + (typeof details === 'string' && details.trim() ? ': ' + details.trim() : '');
   for (const [key, value] of Object.entries(env)) if (value && /TOKEN|KEY|SECRET|PASSWORD|BASE_URL/i.test(key)) text = text.split(value).join('[private]');
   return text.replace(/https?:\/\/[^\s"'<>]+/g, '[private URL]').slice(0, 2048);
 }

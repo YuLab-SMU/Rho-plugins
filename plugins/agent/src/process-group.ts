@@ -1,11 +1,34 @@
-import { execFile, type SpawnOptions } from 'node:child_process';
+import { execFile, spawn, type ChildProcessWithoutNullStreams, type SpawnOptions } from 'node:child_process';
 import path from 'node:path';
+import { locate } from './acp-command.js';
 
 // A process and what it starts, run so they can be interrupted and ended together. On Unix that is
 // a process group of its own. Windows has no process group a signal can name; there the process
 // gets a console of its own without a window (windowsHide, with no stdio inherited). What it starts
 // shares that console, so no window opens, and a console control event reaches all of them.
 export const ownGroup: Pick<SpawnOptions, 'detached' | 'windowsHide'> = process.platform === 'win32' ? { windowsHide: true } : { detached: true };
+
+// Windows finds a program named without a folder or extension by the extensions PATHEXT lists, as a
+// shell does (Node tries only .com and .exe), and runs a batch file (an npm shim such as codex.cmd
+// or an npm install of claude.cmd) only through cmd.exe, which Node no longer does for a program
+// it is asked to start. There the batch file and each argument are quoted as a program reads its
+// command line and cmd's own characters escaped with ^, twice, as cmd reads the line again when it
+// runs the batch file (the escaping cross-spawn uses); quotes, %, ^, &, |, <, > and an empty
+// argument reach the program as given. cmd ends a command line at a line break, so an argument
+// over several lines is refused for a batch file rather than cut. A program not found starts as
+// named, and fails as missing. Anything else starts as named.
+const cmdMeta = /([()\][%!^"`<>&|;, *?])/g;
+const batchArgument = (arg: string) => `"${arg.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\*)$/, '$1$1')}"`.replace(cmdMeta, '^$1').replace(cmdMeta, '^$1');
+export function spawnProgram(program: string, args: string[], options: SpawnOptions & { stdio: ['pipe', 'pipe', 'pipe'] }): ChildProcessWithoutNullStreams {
+  if (process.platform !== 'win32') return spawn(program, args, options) as ChildProcessWithoutNullStreams;
+  const file = locate(program, options.env ?? process.env);
+  // Node refuses to start a batch file's path at all (EINVAL); one that is not there is missing.
+  if (!file && /\.(cmd|bat)$/i.test(program)) throw Object.assign(new Error(`spawn ${program} ENOENT`), { code: 'ENOENT', syscall: 'spawn ' + program, path: program });
+  if (!file || !/\.(cmd|bat)$/i.test(file)) return spawn(file ?? program, args, options) as ChildProcessWithoutNullStreams;
+  if (args.some(arg => /[\r\n]/.test(arg))) throw new Error(`${path.basename(file)} is a batch file, which Windows cannot give an argument over several lines. Select the program it runs (an .exe) instead.`);
+  const line = [`"${file}"`.replace(cmdMeta, '^$1'), ...args.map(batchArgument)].join(' ');
+  return spawn(process.env.ComSpec ?? system32('cmd.exe'), ['/d', '/s', '/c', `"${line}"`], { ...options, windowsVerbatimArguments: true }) as ChildProcessWithoutNullStreams;
+}
 
 export type GroupSignal = 'SIGINT' | 'SIGTERM' | 'SIGKILL';
 const system32 = (file: string) => path.join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', file);

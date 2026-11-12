@@ -1,6 +1,6 @@
 # Current component status
 
-Updated: 2026-11-12.
+Updated: 2026-11-13.
 
 Kernel **0.5.10** lets an embedding conversation select exact Notebook `cellIds` from
 native tool receipts, so sessions sharing one connection grant do not acquire each
@@ -143,7 +143,7 @@ own there, while the view without one lists every cell and names the notebook of
 still one session per language, with one numbering and one set of values.
 Console 0.3.2 adds the person's terminal (`TerminalHost`, `console.terminal.*`): their shell on a
 pseudo-terminal that a few lines of Python open on macOS and Linux, with the last 1 MiB of output
-kept for the page that draws it. It ends with Rho, and Windows has none yet.
+kept for the page that draws it. It ends with Rho; Windows has one from Console 0.3.6 (below).
 Notebook 0.5.17 gives the live sessions one set of views. Sessions (`rho.sessions`) shows each
 language's process, where it runs, who started it, its cells and what it holds, with Interrupt,
 Restart, Stop and Start; `kernel.start` starts a session without a cell, the person's alone like
@@ -170,14 +170,14 @@ past the record's 16 KiB a file keeps the first 512 KiB and last 64 KiB with the
 and the last 4 screens a full-screen program left, under 64 MiB per project
 (`console.terminal.output` reads it in pages). macOS bash, zsh, /bin/sh, dash and ksh and Debian
 12 arm64 bash, fish 3.6, dash, ksh93u+m and mksh were run: 17 and 19 console tests passed.
-Notebook 0.5.20 draws a cell as notebooks do, after the user judged the gutter's language pill
+Notebook 0.5.21 draws a cell as notebooks do, after the user judged the gutter's language pill
 over a lone number and the chips beside the new cell's code ugly: the count beside the code's
 first line, who and why only for an Agent's or a named cell, how it ended under the code, the two
 ways to run it again over the code's corner, the language named on a cell only among cells of
 both, and a new cell drawn as a cell with its code coloured as typed. A page may place the
 session's state and where it runs in a bar of its own (`toolbar`). Views only; the builder's
 reading in a real browser at three widths.
-Notebook 0.5.21 edits a cell where it stands and completes what is typed. `kernel.run` takes
+Notebook 0.5.22 edits a cell where it stands and completes what is typed. `kernel.run` takes
 `replaces`: a new cell in the place of an ended one of its notebook and language, the earlier run
 kept in the record and shown under it. Pressing a cell's code makes it a box to type in; that box
 and the new cell are the page's editor when the page gives one (`codeBox`). `kernel.complete`
@@ -209,11 +209,36 @@ line of fixed text, with the project library path in the environment: on Rho's W
 Rscript 4.6.2 ran only the first line of a multi-line `-e`, and nothing of one naming a path with
 characters cmd treats specially, exiting 0 both times, so managed R runs there were refused as
 unknown. Its output is split on CRLF too.
-The owner suite passes 165/165 on macOS. On Windows 11 x64 (Node 22.23.4, R 4.5.1, Python
-3.13.9) it passes 158 of 166 and skips 8 that use Unix shell scripts as stand-ins: three for
-Claude Code (file descriptions) and five for ssh and serverctl (remote places). Real Claude
-Code and Codex were not run on Windows. Application composition and installation are checked
-by Rho, separately from component checks.
+Console 0.3.6 opens the terminal on Windows ([Rho#116](https://github.com/YuLab-SMU/Rho/issues/116)):
+the console host Windows runs for a pseudo-terminal (`conhost.exe --headless`, as ConPTY starts
+it) with a few lines of Windows PowerShell as its first program, both part of Windows, so nothing
+compiled ships. The bridge turns Ctrl+C back on for the shell (a program started in the background
+passes on a flag that ignores it: with it, Ctrl+C reached nothing), says the shell's exit code
+(the console host always ends with 0), and keeps the shell and all it starts in a job object it
+ends after the grace period when Rho closes the terminal (a subshell Git Bash forks as its console
+closes otherwise stayed for minutes, holding the folder). A size goes in as `CSI 8;rows;cols t`.
+The shell is the one named, else pwsh, Windows PowerShell or ComSpec. The console host passes a
+shell's marks on at once but draws its text on its next frame: with no wait 5 of 30 marks came
+before the output they followed, so a shell waits 50 ms before each (30 of 30 in order), and
+output is read as rows scroll off the screen or at the command's end, as the host repaints rows.
+PowerShell 5.1 and 7 are marked through PSReadLine (`PSConsoleHostReadLine`, `prompt`), with
+their history in Rho's file and exit codes unsigned; Git Bash through bash's hooks with Windows
+folders; cmd.exe is not marked. On GitHub's Windows Server 2022 runner (console host build 20348)
+a full-screen program was not seen as one and kept no screen, as that host draws its screen as
+the main one. Console 0.3.7 wakes a reader waiting for quiet when recording begins only on
+Windows, where a reader from the start waits for the first prompt: elsewhere that wake ended the
+wait early, and a ksh command typed then was taken as typed ahead (macOS CI). Agent 0.4.35 starts a batch file (an npm `codex.cmd` or `dsh.cmd`,
+which Node 24 refuses with EINVAL) through cmd.exe with each argument escaped, refuses an argument
+over several lines for one, and says the reason an ACP Agent gave for an internal error (a Claude
+Code older than the adapter's: `unknown option '--plugin-dir-no-mcp'`). Notebook 0.5.20 answers a
+program named in a missing folder of the project as `not_found` rather than outside it; Windows R
+cannot fork, so a session there stays `busy` while a cell runs (the kernel README says why).
+On Windows 11 x64 (Node 24.15.0, R 4.5.1, Miniconda Python 3.13.9, pwsh 7.7.0, Windows
+PowerShell 5.1, Git Bash 5.2) the owner suite passes 218 of 229 and skips 11: the three `/bin/sh`
+terminal tests, whose Windows counterparts pass, five for remote places (Unix only), the two
+fork tests and ComplexHeatmap (not installed). Real Claude Code ran in Rho on Windows (Rho's
+episode); Codex was not run. Application composition and installation are checked by Rho,
+separately from component checks.
 
 | Owner | Implemented boundary | Material limit |
 | --- | --- | --- |

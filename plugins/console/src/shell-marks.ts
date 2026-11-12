@@ -14,10 +14,24 @@ import { createHash } from 'node:crypto';
 // the continuation prompt (terminal-commands.ts). mksh and pdksh scroll a long line sideways as
 // it is typed, so the screen does not show it whole: they keep Rho's history but are not marked.
 // tcsh, csh and other shells run without marks and their commands are not recorded.
+//
+// On Windows the console host draws what a shell prints on its next frame but passes a mark on at
+// once, so a mark printed right after a command's output can arrive before that output. There the
+// shell waits markSettleMs before each mark, which let every mark arrive in order in 30 of 30
+// trials (20 ms already did; with no wait, 5 of 30 were out of order). PowerShell (pwsh and
+// Windows PowerShell) marks a command when its line editor, PSReadLine, hands the line over, and its
+// status before the next prompt. Git Bash gets bash's hooks, with its folders as Windows paths.
+// cmd.exe can do neither: its prompt cannot carry the last status and cannot wait, so its commands
+// are not recorded.
 export const markCode = 6973;
-export type MarkedShell = 'zsh' | 'bash' | 'fish' | 'sh';
+export const markSettleMs = 50;
+export type MarkedShell = 'zsh' | 'bash' | 'fish' | 'sh' | 'powershell';
 const shFamily = ['sh', 'dash', 'ash', 'ksh', 'ksh93', 'mksh', 'pdksh', 'oksh'];
 export const markedShell = (shell: string): MarkedShell | null => {
+  if (process.platform === 'win32') {
+    const name = path.basename(shell).toLowerCase().replace(/\.exe$/, '');
+    return name === 'pwsh' || name === 'powershell' ? 'powershell' : name === 'bash' ? 'bash' : name === 'sh' ? 'sh' : null;
+  }
   const name = path.basename(shell);
   return name === 'zsh' || name === 'bash' || name === 'fish' ? name : shFamily.includes(name) ? 'sh' : null;
 };
@@ -61,21 +75,80 @@ for __rho_file in "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
 done
 unset __rho_file
 `;
-const bashMarks = `if [ -n "$RHO_HISTFILE" ]; then HISTFILE=$RHO_HISTFILE; fi
+// Git Bash on Windows names its folders as Windows paths (pwd -W), and waits before each mark with
+// a timed read on a pipe of its own, which starts no program (sleep, its fallback, does). Windows
+// ends a shell whose console closes before bash writes its history, so each line is added to the
+// history file before the next prompt (history -a).
+const settle = markSettleMs / 1000;
+const bashWindows = `__rho_wait=$(mktemp -u 2>/dev/null) && mkfifo "$__rho_wait" 2>/dev/null && exec {__rho_wait_fd}<>"$__rho_wait"; rm -f "$__rho_wait"; unset __rho_wait
+__rho_settle() { if [ -n "$__rho_wait_fd" ]; then read -t ${settle} -u "$__rho_wait_fd"; else sleep ${settle}; fi; return 0; }
+`;
+const bashMarks = (windows: boolean) => `if [ -n "$RHO_HISTFILE" ]; then HISTFILE=$RHO_HISTFILE; fi
 unset RHO_HISTFILE
 __rho_nonce=$RHO_TERMINAL_NONCE; unset RHO_TERMINAL_NONCE
 __rho_ready=
 __rho_esc() { local c=\${1//\\\\/\\\\\\\\}; c=\${c//;/\\\\x3b}; c=\${c//$'\\n'/\\\\x0a}; c=\${c//$'\\r'/\\\\x0d}; c=\${c//$'\\t'/\\\\x09}; c=\${c//$'\\a'/\\\\x07}; c=\${c//$'\\033'/\\\\x1b}; printf '%s' "$c"; }
-__rho_preexec() {
+${windows ? bashWindows : ''}__rho_preexec() {
   [ -n "$__rho_ready" ] || return 0
   [ -n "$COMP_LINE" ] && return 0
   __rho_ready=
   local c; c=$(HISTTIMEFORMAT= builtin history 1); c=\${c#"\${c%%[![:space:]]*}"}; c=\${c#*[0-9][ *]}; c=\${c#"\${c%%[![:space:]]*}"}
-  printf '\\033]${markCode};%s;S;%s;%s\\007' "$__rho_nonce" "$(__rho_esc "$c")" "$(__rho_esc "$PWD")"
+  ${windows ? 'local d; d=$(builtin pwd -W); __rho_settle\n  ' : ''}printf '\\033]${markCode};%s;S;%s;%s\\007' "$__rho_nonce" "$(__rho_esc "$c")" "$(__rho_esc "${windows ? '$d' : '$PWD'}")"
 }
-__rho_precmd() { printf '\\033]${markCode};%s;F;%s\\007' "$__rho_nonce" "$__rho_status"; __rho_ready=1; }
+__rho_precmd() { ${windows ? 'builtin history -a; __rho_settle; ' : ''}printf '\\033]${markCode};%s;F;%s\\007' "$__rho_nonce" "$__rho_status"; __rho_ready=1; }
 trap '__rho_preexec' DEBUG
 PROMPT_COMMAND="__rho_status=\\$?;\${PROMPT_COMMAND:+$PROMPT_COMMAND;}__rho_precmd"
+`;
+
+// PowerShell (pwsh and Windows PowerShell 5.1): a script run with -NoExit -EncodedCommand after the
+// person's profile (a command, unlike a script file, is not held to the execution policy). With
+// PSReadLine loaded it sets PSReadLine's history file to Rho's, before the first line is read, and
+// wraps PSConsoleHostReadLine, which hands over each line typed, and prompt, which runs before each
+// prompt. The status is what PowerShell knows: 0 when the command succeeded; else the exit code a
+// program set during it, or the one it set again when no PowerShell error came with the failure,
+// unsigned as Windows has it (3221225786 for a program Ctrl+C ended); else 1. The person's prompt
+// then runs with $? as it was. A prompt replaced later is wrapped again
+// when the next line is read; the command before it is then recorded as not seen to end.
+const powershellMarks = `$global:__rho_marks = @{ nonce = $env:RHO_TERMINAL_NONCE; running = $false; code = $null; errors = 0; error = $null }
+Remove-Item Env:RHO_TERMINAL_NONCE -ErrorAction Ignore
+if ($env:RHO_HISTFILE -and (Get-Module PSReadLine)) { Set-PSReadLineOption -HistorySavePath $env:RHO_HISTFILE }
+Remove-Item Env:RHO_HISTFILE -ErrorAction Ignore
+if ($function:PSConsoleHostReadLine -and $global:__rho_marks.nonce) {
+  function global:__rho_esc([string]$text) { [regex]::Replace($text, '[\\\\;\\x00-\\x1f\\x7f]', { param($c) if ($c.Value -eq '\\') { '\\\\' } else { '\\x{0:x2}' -f [int][char]$c.Value } }) }
+  function global:__rho_mark([string]$text) { [System.Threading.Thread]::Sleep(${markSettleMs}); $Host.UI.Write([string][char]27 + ']${markCode};' + $global:__rho_marks.nonce + ';' + $text + [char]7) }
+  function global:__rho_wrap {
+    if ("$function:prompt" -match '__rho_status') { return }
+    $global:__rho_marks.prompt = $function:prompt
+    function global:prompt {
+      $ok = $global:?; $code = $global:LASTEXITCODE
+      $m = $global:__rho_marks; $__rho_status = ''
+      if ($m.running) {
+        $m.running = $false
+        $fresh = $global:Error.Count -ne $m.errors -or ($global:Error.Count -gt 0 -and -not [object]::ReferenceEquals($global:Error[0], $m.error))
+        $__rho_status = if ($ok) { 0 } elseif ($code -is [int] -and $code -ne 0 -and ($code -ne $m.code -or -not $fresh)) { $code } else { 1 }
+        # Windows exit codes are unsigned (0xC000013A for Ctrl+C); PowerShell holds them signed.
+        if ($__rho_status -lt 0) { $__rho_status = [int64]$__rho_status + 4294967296 }
+      }
+      __rho_mark "F;$__rho_status"
+      if (-not $ok) { Write-Error 'failure' -ErrorAction Ignore }
+      & $m.prompt
+    }
+  }
+  $global:__rho_marks.read = $function:PSConsoleHostReadLine
+  function global:PSConsoleHostReadLine {
+    $line = & $global:__rho_marks.read
+    $m = $global:__rho_marks
+    if ("$line".Trim()) {
+      $m.code = $global:LASTEXITCODE; $m.errors = $global:Error.Count; $m.error = if ($global:Error.Count) { $global:Error[0] } else { $null }
+      $folder = if ($PWD.Provider.Name -eq 'FileSystem') { $PWD.ProviderPath } else { '' }
+      __rho_mark ('S;' + (__rho_esc $line) + ';' + (__rho_esc $folder))
+      $m.running = $true
+    }
+    __rho_wrap
+    $line
+  }
+  __rho_wrap
+}
 `;
 
 // fish: a file sourced by --init-command, after the person's configuration. fish keeps its history
@@ -137,10 +210,17 @@ const header = '# Written by Rho for its terminals; see shell-marks.ts in Rho-pl
 const fishQuote = (text: string) => `'${text.replace(/[\\']/g, c => '\\' + c)}'`;
 
 // The files for a shell, written into the console's state folder (each run of Rho writes them
-// again, so a changed version of Rho takes effect), and how the shell is started with them.
-export async function shellMarks(kind: MarkedShell, folder: string, nonce: string, env: NodeJS.ProcessEnv, root = folder): Promise<{ args: string[]; env: NodeJS.ProcessEnv }> {
-  const history = path.join(folder, 'history');
+// again, so a changed version of Rho takes effect), and how the shell is started with them. A
+// PowerShell's script goes on its command line; `shell` names which PowerShell, for its history.
+export async function shellMarks(kind: MarkedShell, folder: string, nonce: string, env: NodeJS.ProcessEnv, root = folder, shell = ''): Promise<{ args: string[]; env: NodeJS.ProcessEnv }> {
+  const windows = process.platform === 'win32', history = path.join(folder, 'history');
+  // Git Bash takes a Windows path, and its sh finds bash-marks.sh beside its init file, with / between folders.
+  const posix = (file: string) => windows ? file.replace(/\\/g, '/') : file;
   await fs.mkdir(history, { recursive: true, mode: 0o700 });
+  if (kind === 'powershell') {
+    const name = path.basename(shell).toLowerCase().replace(/\.exe$/, '') === 'pwsh' ? 'pwsh' : 'powershell';
+    return { args: ['-NoLogo', '-NoExit', '-EncodedCommand', Buffer.from(powershellMarks, 'utf16le').toString('base64')], env: { RHO_HISTFILE: path.join(history, name + '_history'), RHO_TERMINAL_NONCE: nonce } };
+  }
   if (kind === 'fish') {
     const file = path.join(folder, 'fish-init.fish');
     await fs.writeFile(file, header + fishMarks, { mode: 0o600 });
@@ -150,8 +230,8 @@ export async function shellMarks(kind: MarkedShell, folder: string, nonce: strin
   if (kind === 'sh') {
     const file = path.join(folder, 'sh-init.sh');
     await fs.writeFile(file, header + shInit, { mode: 0o600 });
-    await fs.writeFile(path.join(folder, 'bash-marks.sh'), header + bashMarks, { mode: 0o600 });
-    return { args: ['-i'], env: { ENV: file, RHO_LOGIN: '1', ...(env.ENV ? { RHO_USER_ENV: env.ENV } : {}), RHO_HISTFILE: path.join(history, 'sh_history'), RHO_TERMINAL_NONCE: nonce } };
+    await fs.writeFile(path.join(folder, 'bash-marks.sh'), header + bashMarks(windows), { mode: 0o600 });
+    return { args: ['-i'], env: { ENV: posix(file), RHO_LOGIN: '1', ...(env.ENV ? { RHO_USER_ENV: env.ENV } : {}), RHO_HISTFILE: posix(path.join(history, 'sh_history')), RHO_TERMINAL_NONCE: nonce } };
   }
   if (kind === 'zsh') {
     const dir = path.join(folder, 'zsh');
@@ -161,6 +241,6 @@ export async function shellMarks(kind: MarkedShell, folder: string, nonce: strin
     return { args: ['-l'], env: { ZDOTDIR: dir, RHO_USER_ZDOTDIR: own || env.HOME || '', ...(own ? { RHO_ZDOTDIR_SET: '1' } : {}), RHO_HISTFILE: path.join(history, 'zsh_history'), RHO_TERMINAL_NONCE: nonce } };
   }
   const file = path.join(folder, 'bash-init.sh');
-  await fs.writeFile(file, header + bashLogin + bashMarks, { mode: 0o600 });
-  return { args: ['--init-file', file, '-i'], env: { RHO_HISTFILE: path.join(history, 'bash_history'), RHO_TERMINAL_NONCE: nonce } };
+  await fs.writeFile(file, header + bashLogin + bashMarks(windows), { mode: 0o600 });
+  return { args: ['--init-file', posix(file), '-i'], env: { RHO_HISTFILE: posix(path.join(history, 'bash_history')), RHO_TERMINAL_NONCE: nonce } };
 }

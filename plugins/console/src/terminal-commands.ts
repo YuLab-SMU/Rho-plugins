@@ -24,7 +24,9 @@ import { markCode, unescapeMark } from './shell-marks.js';
 // completes a line, so carriage returns, colours and cursor moves within a line are applied and
 // nothing depends on how much of the screen is kept. What a full-screen program (an editor, top,
 // less) drew is kept as the screen it showed when it left. A line rewritten after its line feed
-// (a progress display that moves the cursor up) is kept as it first stood.
+// (a progress display that moves the cursor up) is kept as it first stood. On Windows the console
+// host draws the screen in its own order, so there a row is read when it scrolls off the screen or
+// when the command's end is marked, as it stands then (rows()).
 //
 // The protected resources are the project's state folder and Rho's memory. At most maxCommands
 // records are kept (the oldest go first, with their output), each line up to commandChars
@@ -56,7 +58,8 @@ type Screen = InstanceType<typeof headless.Terminal>;
 type Marker = NonNullable<ReturnType<Screen['registerMarker']>>;
 type Buffer_ = Screen['buffer']['active'];
 type Line = NonNullable<ReturnType<Buffer_['getLine']>>;
-interface Running { command: TerminalCommand; head: string[]; headBytes: number; tail: string[]; tailBytes: number; cutBytes: number; screens: CommandScreen[]; fromScreen: boolean }
+// `last`: under the Windows console host, the last row of output taken (see rows()).
+interface Running { command: TerminalCommand; head: string[]; headBytes: number; tail: string[]; tailBytes: number; cutBytes: number; screens: CommandScreen[]; fromScreen: boolean; last?: Marker }
 // A line typed, as the terminal's line discipline edits it; `plain` when no key a line editor
 // takes (arrows, tab, other control keys) was in it, so its text is what the shell read.
 interface TypedLine { text: string; plain: boolean; seq: number; echoed: boolean }
@@ -67,6 +70,8 @@ export interface Tracking {
   typers: string[]; lastTyper: string | null; running: Running | null;
   prompt: (PromptEnd & { cwd: string }) | null; continued?: PromptEnd | null;
   input?: { text: string; plain: boolean }; lines?: TypedLine[]; seq?: number;
+  // Its screen is drawn by the Windows console host (ConPTY).
+  conpty?: boolean;
 }
 const maxLinesTyped = 50;
 
@@ -185,9 +190,11 @@ export class CommandLog {
   private more(running: Running, line: string) { running.command.command = Array.from(running.command.command + '\n' + line).slice(0, this.limits().commandChars).join(''); }
 
   // A terminal's emulator, watched: its shell's marks, the lines it completes and the full screens
-  // its programs leave. `opener` types when no input was seen.
-  watch(screen: Screen, terminalId: string, nonce: string, tracking: Tracking, opener: string, ready: () => void) {
+  // its programs leave. `opener` types when no input was seen. `conpty`: the Windows console host
+  // draws its screen.
+  watch(screen: Screen, terminalId: string, nonce: string, tracking: Tracking, opener: string, ready: () => void, conpty = false) {
     const buffer = () => screen.buffer.active;
+    tracking.conpty = conpty;
     screen.parser.registerOscHandler(markCode, data => { this.mark(screen, terminalId, nonce, tracking, opener, ready, data); return true; });
     screen.onLineFeed(() => {
       const b = buffer();
@@ -204,6 +211,7 @@ export class CommandLog {
         return;
       }
       if (running) {
+        if (tracking.conpty) return;
         const line = text(logical(b, y));
         // The terminal's echo of a line typed is not what the command printed.
         const echo = tracking.lines?.find(q => !q.echoed && q.plain && q.text.trim() && q.text.trim() === line.trim());
@@ -219,11 +227,37 @@ export class CommandLog {
       this.start(tracking, terminalId, got.text, prompt.cwd, opener, true);
       if (!got.shown && line) this.line(tracking.running!, line);
     });
+    // Under the console host, a row that scrolls off the screen is final (rows()).
+    screen.onScroll(() => {
+      const running = tracking.running, b = buffer();
+      if (tracking.conpty && running && b.type === 'normal') this.rows(screen, running, b.baseY - 1);
+    });
     // A full-screen program leaving: what it showed then.
     screen.parser.registerCsiHandler({ prefix: '?', final: 'l' }, params => {
       if (tracking.running && buffer().type === 'alternate' && params.some(p => p === 1049 || p === 1047 || p === 47)) this.frame(screen, tracking.running);
       return false;
     });
+  }
+
+  // Under the Windows console host a row on the screen reaches the terminal as the host draws it,
+  // in its own order: a blank row by moving the cursor past it, and the whole screen again, its
+  // rows still blank below the cursor, when the size changes or a full-screen program leaves. A row
+  // is final once it scrolls off the screen, as the host never draws scrollback again, or when the
+  // shell marks the command's end (it waits for the host to draw first). A command's output is the
+  // rows after the last one taken, up to `y`; a line that goes on below `y` is taken once whole.
+  private rows(screen: Screen, running: Running, y: number) {
+    const b = screen.buffer.active, last = running.last;
+    const from = last && !last.isDisposed && last.line >= 0 ? last.line + 1 : y;
+    let to = y;
+    if (b.getLine(y + 1)?.isWrapped) { while (to >= from && b.getLine(to)?.isWrapped) to--; to--; }
+    if (to < from) return;
+    for (let start = from, r = from; r <= to; r++) {
+      if (r < to && b.getLine(r + 1)?.isWrapped) continue;
+      this.line(running, text(logical(b, r, start)));
+      start = r + 1;
+    }
+    last?.dispose();
+    running.last = screen.registerMarker(to - b.baseY - b.cursorY);
   }
 
   private frame(screen: Screen, running: Running) {
@@ -254,15 +288,17 @@ export class CommandLog {
     while (running.tailBytes > limits.commandTailBytes && running.tail.length > 1) { const old = running.tail.shift()!; running.tailBytes -= bytes(old); running.cutBytes += bytes(old); }
   }
 
-  private start(tracking: Tracking, terminalId: string, line: string, folder: string, opener: string, fromScreen = false) {
+  private start(tracking: Tracking, terminalId: string, line: string, folder: string, opener: string, fromScreen = false, screen?: Screen) {
     const limits = this.limits(), at = now();
     const inside = (root: string) => { const relative = path.relative(root, folder); return relative.startsWith('..') || path.isAbsolute(relative) ? null : relative; };
     const cwd = folder ? inside(this.root) ?? (this.realRoot ? inside(this.realRoot) : null) ?? folder : '';
     const by = tracking.typers.length ? [...tracking.typers] : tracking.lastTyper ? [tracking.lastTyper] : [opener];
     const command: TerminalCommand = { commandId: 'tc-' + randomBytes(8).toString('hex'), terminalId, command: Array.from(line).slice(0, limits.commandChars).join(''), cwd, by, enteredBy: tracking.lastTyper ?? by.at(-1)!,
       startedAt: at, endedAt: null, state: 'running', exit: null, output: '', outputBytes: 0, stored: false, storedBytes: 0, screens: 0, cut: false, problem: null };
-    if (tracking.running) Object.assign(tracking.running.command, { state: 'unknown', endedAt: at, problem: 'Another command started before its end was seen.' });
-    tracking.running = { command, head: [], headBytes: 0, tail: [], tailBytes: 0, cutBytes: 0, screens: [], fromScreen };
+    if (tracking.running) { tracking.running.last?.dispose(); Object.assign(tracking.running.command, { state: 'unknown', endedAt: at, problem: 'Another command started before its end was seen.' }); }
+    // Under the console host, output starts below the row the command was typed on.
+    const last = tracking.conpty && screen?.buffer.active.type === 'normal' ? screen.registerMarker(-1) : undefined;
+    tracking.running = { command, head: [], headBytes: 0, tail: [], tailBytes: 0, cutBytes: 0, screens: [], fromScreen, ...(last ? { last } : {}) };
     tracking.typers = [];
     const commands = this.commands!;
     commands.push(command);
@@ -270,25 +306,30 @@ export class CommandLog {
     void this.save(); this.changed();
   }
 
-  // The command running ends: with a status, or (null) unseen.
+  // The command running ends: with a status, or (null) unseen. Its record says it ended once what
+  // it printed is kept and the older output past the budget let go, so a reader that sees it ended
+  // reads every record settled.
   async end(tracking: Tracking, status: number | null, problem?: string, screen?: Screen) {
     const running = tracking.running;
     if (!running) return;
     tracking.running = null;
+    running.last?.dispose();
     tracking.continued?.marker.dispose(); tracking.continued = null;
     if (screen?.buffer.active.type === 'alternate') this.frame(screen, running);
-    const command = running.command, limits = this.limits(), head = running.head.join(''), tail = running.tail.join('');
+    const command = running.command, limits = this.limits(), head = running.head.join(''), tail = running.tail.join(''), endedAt = now();
     const whole = (head + tail).replace(/\n$/, '');
     command.output = cutTo(head, limits.commandOutputBytes).replace(/\n$/, '');
     command.screens = running.screens.length; command.cut = running.cutBytes > 0;
-    Object.assign(command, status === null ? { state: 'unknown', exit: null, problem: problem ?? null } : { state: 'exited', exit: status }, { endedAt: now() });
+    let lost: string | null = null;
     if (bytes(command.output) < bytes(whole) || running.screens.length) {
       const kept: Stored = { head, tail, cutBytes: running.cutBytes, screens: running.screens };
       const size = bytes(JSON.stringify(kept));
       command.stored = true; command.storedBytes = size;
       try { await atomicJson(await this.outputFile(command.commandId), kept); await this.budget(); }
-      catch { command.stored = false; command.storedBytes = 0; command.problem = 'What it printed past the start could not be kept.'; }
+      catch { command.stored = false; command.storedBytes = 0; lost = 'What it printed past the start could not be kept.'; }
     }
+    Object.assign(command, status === null ? { state: 'unknown', exit: null, problem: problem ?? null } : { state: 'exited', exit: status }, { endedAt });
+    if (lost) command.problem = lost;
     void this.save(); this.changed();
   }
 
@@ -315,7 +356,7 @@ export class CommandLog {
       // The shell read the lines typed up to this one.
       const lines = tracking.lines ??= [], first = line.split('\n')[0]!.trim(), at = lines.findIndex(q => q.text.trim() === first);
       lines.splice(0, at >= 0 ? at + 1 : lines.length);
-      this.start(tracking, terminalId, line, folder, opener);
+      this.start(tracking, terminalId, line, folder, opener, false, screen);
     } else if (kind === 'F') {
       // Back at a prompt with no line shown since the last: the shell read a line typed before
       // that prompt appeared and ran it without showing it.
@@ -333,9 +374,17 @@ export class CommandLog {
         if (got?.text) { this.more(tracking.running, got.text); from = { line: continued.marker.line, col: continued.col }; }
         continued.marker.dispose();
       }
-      // A line the command printed without a final newline ends where the prompt begins.
+      // A line the command printed without a final newline ends where the prompt begins. Under the
+      // console host, the rows above it not taken yet come first.
       const running = tracking.running, y = b.baseY + b.cursorY;
-      if (running && b.type === 'normal' && (!from || (from.line >= 0 && from.line <= y))) {
+      let taken = false;
+      if (running && b.type === 'normal' && tracking.conpty) {
+        let begins = y;
+        while (begins > 0 && b.getLine(begins)?.isWrapped) begins--;
+        this.rows(screen, running, begins - 1);
+        taken = !!running.last && !running.last.isDisposed && running.last.line >= begins;
+      }
+      if (running && !taken && b.type === 'normal' && (!from || (from.line >= 0 && from.line <= y))) {
         const rows = from ? logical(b, y, from.line) : logical(b, y), last = text(rows, from?.col);
         if (last.trim()) this.line(running, withoutEndMark(rows, last).replace(/\s+$/, ''), false);
       }

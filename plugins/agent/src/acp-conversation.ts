@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { Readable, Writable, Transform } from 'node:stream';
 import { randomUUID } from 'node:crypto';
 import * as acp from '@agentclientprotocol/sdk';
@@ -7,7 +7,7 @@ import { visibleError, commandOutput } from './conversation.js';
 import { SessionObserver, configOptions, type SessionObservation, type ObservationOrigin, type sessionObservationLimits } from './session-observation.js';
 import { stopAcpProcess } from './acp-process.js';
 import { missingClient, type AcpAgent } from './acp-command.js';
-import { ownGroup } from './process-group.js';
+import { ownGroup, spawnProgram } from './process-group.js';
 
 const toolKinds: AgentToolKind[] = ['read', 'edit', 'delete', 'move', 'search', 'execute', 'think', 'fetch', 'switch_mode', 'other'];
 // A step keeps the meaning of what the Agent is doing, not a transcript of it.
@@ -134,7 +134,7 @@ export class AcpConversation implements AgentConversation {
     const env = { ...process.env, ...o.env }, command = o.command;
     const missing = o.client ? missingClient(o.client, env) : null;
     if (missing) { this.fault = missing; throw new Error(missing); }
-    const child = spawn(command.file, command.args, { cwd: o.cwd, env, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe'] });
+    const child = spawnProgram(command.file, command.args, { cwd: o.cwd, env, ...ownGroup, stdio: ['pipe', 'pipe', 'pipe'] });
     this.child = child; this.exit = null;
     this.childEnded = new Promise(resolve => {
       child.once('error', error => { this.fault = visibleError(error, env); this.connection?.close(); resolve(); });

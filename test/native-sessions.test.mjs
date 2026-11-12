@@ -26,7 +26,8 @@ test('a Codex session is listed only in its own project, in either order', async
 
   assert.deepEqual(titles(b), ['Fit a model in B']);
   assert.deepEqual(titles(a), ['Explain a figure in A'], 'a session passed over for B is still listed for A');
-  assert.match(listNativeSessions(a, sources).sessions[0].resume, /\/a' && codex resume /);
+  // cmd's own form on Windows: cd /d "...\a" && codex resume.
+  assert.match(listNativeSessions(a, sources).sessions[0].resume, process.platform === 'win32' ? /\\a" && codex resume / : /\/a' && codex resume /);
   assert.deepEqual(titles(b), ['Fit a model in B'], 'a session listed for A is not listed for B');
   assert.equal(nativeSession(b, 'codex', inA, sources), null);
   assert.equal(await readNativeSession(b, { session: inA }, sources), null, 'B cannot read A\'s session');
