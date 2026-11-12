@@ -5,24 +5,29 @@ const styles = `/* The Notebook: cells in the order they ran beside the live ses
 .nb-main { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .nb-cells { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
 
-/* One cell: its language and number in the gutter; who ran it, why and how it ended; then its code and what it printed. */
-.nb-cell { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr); gap: 14px; padding: 16px 0 14px; border-top: 1px solid var(--color-divider); scroll-margin-top: 16px; }
-.nb-cells > .nb-cell:first-child { border-top: 0; padding-top: 4px; }
-.nb-gutter { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; padding-top: 2px; }
-.nb-lang { padding: 1px 7px; border-radius: 999px; font-size: 11px; font-weight: 650; letter-spacing: .2px; }
-.nb-lang.r { background: var(--color-hue-sky); color: var(--color-hue-sky-ink); }
-.nb-lang.python { background: var(--color-hue-clay); color: var(--color-hue-clay-ink); }
-.nb-number { color: var(--color-meta); font: 12px var(--font-mono); font-variant-numeric: tabular-nums; }
-.nb-body { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-.nb-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: baseline; gap: 10px; }
-.nb-who { color: var(--color-meta); font-size: 12px; font-weight: 600; white-space: nowrap; }
+/* One cell: its count in the gutter beside its code; above the code, who ran it and why where that
+   is to be said; under it how it ended, then what it printed. Nothing is said twice: the language
+   and the session are the notebook's, and a cell names its language only among cells of both. */
+.nb-page { --nb-gutter: 3rem; --nb-gap: 8px; }
+.nb-cell { padding: 8px 0 8px calc(var(--nb-gutter) + var(--nb-gap)); border-radius: 8px; scroll-margin-top: 16px; }
+.nb-gutter { position: absolute; top: 0; right: calc(100% + var(--nb-gap)); width: var(--nb-gutter); padding-top: 8px; text-align: right; }
+.nb-number { display: block; color: var(--color-meta); font: 12px/19px var(--font-mono); font-variant-numeric: tabular-nums; white-space: pre; }
+.nb-number::before { content: "["; opacity: .55; }
+.nb-number::after { content: "]"; opacity: .55; }
+.nb-cell:is(.error, .interrupted, .unknown) .nb-number { color: var(--color-failed); }
+.nb-cell.running .nb-number { color: var(--color-accent); font-weight: 600; }
+.nb-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.nb-head { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding-left: 1px; }
+.nb-who { flex: none; color: var(--color-meta); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .nb-who .text-button { min-height: 0; padding: 0; color: var(--color-accent-strong); font-size: 12px; font-weight: 600; }
 .nb-who .text-button:hover { text-decoration: underline; background: none; }
 .nb-cell.mine .nb-who { color: var(--color-ink); }
-.nb-purpose { min-width: 0; color: var(--color-ink); font-size: 14px; font-weight: 600; line-height: 1.4; }
-.nb-elsewhere { margin-right: 8px; padding: 1px 7px; border-radius: 999px; background: var(--color-well); color: var(--color-meta); font-size: 11.5px; white-space: nowrap; }
-.nb-unnamed { color: var(--color-muted); font-weight: 500; }
-.nb-when { display: flex; gap: 8px; color: var(--color-meta); font-size: 12px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nb-purpose { min-width: 0; color: var(--color-ink); font-size: 13px; font-weight: 600; line-height: 1.4; }
+.nb-input { position: relative; min-width: 0; }
+/* How the cell ended and when, under its code as a notebook's cell status is. */
+.nb-status { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin: -2px 0 0; padding-left: 12px; color: var(--color-meta); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nb-cell-lang { margin-left: auto; padding-right: 2px; }
+.nb-elsewhere { padding: 0 7px; border-radius: 999px; background: var(--color-well); }
 .nb-ending { display: inline-flex; align-items: center; gap: 6px; }
 .nb-ending.running { color: var(--color-accent); font-weight: 600; }
 .nb-ending.waiting { color: var(--color-amber-text); font-weight: 600; }
@@ -47,34 +52,45 @@ const styles = `/* The Notebook: cells in the order they ran beside the live ses
 .nb-saved-what { overflow-wrap: anywhere; }
 .nb-body > .nb-note { padding-left: 12px; }
 .nb-problem { padding-left: 12px; color: var(--color-amber-text); font-size: 12.5px; }
-.nb-actions { display: flex; gap: 16px; padding-left: 12px; }
-.nb-actions .text-button { display: inline-flex; align-items: center; gap: 5px; min-height: 0; padding: 2px 0; color: var(--color-meta); font-size: 12px; font-weight: 600; }
-.nb-actions .text-button:hover { color: var(--color-accent-strong); background: none; }
+/* Running a cell again: a small bar over the corner of its code, shown with the pointer or the focus. */
+.nb-actions { position: absolute; top: 5px; right: 6px; display: flex; gap: 1px; padding: 2px; border: 1px solid var(--color-hairline); border-radius: 7px; background: var(--color-surface); box-shadow: 0 1px 3px rgb(0 0 0 / 8%); opacity: 0; transition: opacity .12s; }
+.nb-cell:hover .nb-actions, .nb-cell:focus-within .nb-actions { opacity: 1; }
+@media (hover: none) { .nb-actions { opacity: 1; } }
+.nb-actions button { display: grid; place-content: center; width: 24px; height: 22px; min-height: 0; padding: 0; border: 0; border-radius: 5px; background: none; box-shadow: none; color: var(--color-muted); }
+.nb-actions button:hover { background: var(--color-hover); color: var(--color-accent-strong); }
 .nb-cell.running .nb-code pre { box-shadow: inset 3px 0 0 var(--color-accent); }
 .nb-cell.queued .nb-code pre { box-shadow: inset 3px 0 0 var(--color-amber-line); }
 
 /* Where a session started or ended, among the cells. */
-.nb-mark { display: flex; flex-direction: column; gap: 2px; padding: 8px 0 8px calc(3.4rem + 14px); color: var(--color-meta); font-size: 12px; }
-.nb-mark > span { display: flex; align-items: center; gap: 10px; }
-.nb-mark > span::after { content: ""; flex: 1; height: 1px; background: var(--color-hairline); }
-.nb-mark.ended > span { color: var(--color-ink); font-weight: 600; }
+.nb-mark { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 6px calc(var(--nb-gutter) + var(--nb-gap)); color: var(--color-meta); font-size: 11.5px; }
+.nb-mark > span { display: flex; align-items: center; gap: 10px; padding-left: 1px; }
+.nb-mark > span::after { content: ""; flex: 1; height: 1px; background: var(--color-divider); }
 .nb-mark.problem > span { color: var(--color-amber-text); }
-.nb-mark small { color: var(--color-meta); font-size: 12px; }
-.nb-cells > .nb-mark + .nb-cell { border-top: 0; padding-top: 6px; }
+.nb-mark small { padding-left: 1px; color: var(--color-meta); font-size: 11.5px; }
 
 .nb-empty { display: flex; flex-direction: column; gap: 8px; padding: 28px 0 20px; }
 .nb-empty h2 { font-size: 18px; }
 .nb-empty p { max-width: 62ch; color: var(--color-muted); font-size: 14px; line-height: 1.55; }
 .nb-empty-line { color: var(--color-meta); font-size: 13px; }
 
-/* The person's own cell stays at the foot of the page while the cells scroll. */
-.nb-composer { position: sticky; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 10px 12px 10px; border: 1px solid var(--color-hairline-strong); border-radius: 12px; background: var(--color-surface); box-shadow: 0 -10px 18px -12px rgb(0 0 0 / 18%); }
-.nb-composer:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
-.nb-compose-bar { display: flex; align-items: center; gap: 12px; min-width: 0; }
-.nb-compose-bar label { min-width: 0; overflow: hidden; color: var(--color-meta); font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
-.nb-composer textarea { width: 100%; min-height: 0; padding: 4px 2px; border: 0; outline: 0; resize: none; background: none; box-shadow: none; font: 13px/1.5 var(--font-mono); color: var(--color-ink); }
-.nb-compose-foot { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
-.nb-compose-foot small { margin-right: auto; color: var(--color-meta); font-size: 12px; }
+/* The new cell stays at the foot of the page while the cells scroll, drawn as a cell: the
+   gutter's empty count, the code, and under the code its language and Run. */
+.nb-composer { position: sticky; bottom: 0; z-index: 2; display: flex; flex-direction: column; gap: 6px; margin-top: 2px; padding: 8px 0 12px calc(var(--nb-gutter) + var(--nb-gap)); }
+.nb-view .nb-composer { background: var(--color-surface); }
+.nb-view .nb-composer::before { content: ""; position: absolute; right: 0; bottom: 100%; left: 0; height: 12px; background: linear-gradient(to top, var(--color-surface), transparent); pointer-events: none; }
+.nb-new { position: relative; display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--color-hairline-strong); border-radius: 8px; background: var(--color-surface); }
+.nb-new:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
+.nb-new { --nb-pad: 8px 11px 2px; }
+.nb-editor { position: relative; display: flex; min-width: 0; }
+.nb-new textarea, .nb-ink { margin: 0; padding: var(--nb-pad); border: 0; border-radius: 0; background: none; font: 12.5px/1.5 var(--font-mono); letter-spacing: 0; tab-size: 4; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; }
+.nb-new textarea { display: block; width: 100%; min-height: 0; outline: 0; resize: none; box-shadow: none; color: var(--color-ink); }
+.nb-ink { position: absolute; inset: 0; overflow: hidden; color: var(--color-ink); pointer-events: none; }
+.nb-ink code { font: inherit; }
+.nb-editor.inked textarea { color: transparent; caret-color: var(--color-ink); scrollbar-width: none; }
+.nb-editor.inked textarea::placeholder { color: var(--color-meta); }
+.nb-compose-foot { display: flex; align-items: center; gap: 2px; min-width: 0; padding: 2px 5px 5px 5px; }
+.nb-compose-foot small { margin-left: auto; padding: 0 8px; overflow: hidden; color: var(--color-meta); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.nb-compose-foot > button { flex: none; min-height: 26px; padding: 2px 11px 2px 9px; gap: 5px; border-radius: 6px; font-size: 12.5px; font-weight: 600; }
 .nb-tabs { display: inline-flex; flex: none; padding: 2px; border-radius: 8px; background: var(--color-well); }
 .nb-tabs button { min-height: 0; padding: 3px 10px; border: 0; border-radius: 6px; background: none; color: var(--color-muted); font-size: 12px; font-weight: 600; box-shadow: none; }
 .nb-tabs button[aria-pressed="true"] { background: var(--color-surface); color: var(--color-ink); box-shadow: 0 1px 2px rgb(0 0 0 / 10%); }
@@ -136,18 +152,17 @@ button.nb-cell-link:hover { background: var(--color-hover); text-decoration: und
 .nb-view { flex: 1; min-height: 0; overflow-y: auto; container-type: inline-size; }
 .nb-page.in-view { padding: 12px 18px 0; }
 .nb-page.in-view .nb-rail { top: 12px; max-height: none; overflow: visible; }
-.nb-compose-note { margin: 0; color: var(--color-meta); font-size: 12px; }
-.nb-page.compact:not(.roomy) .nb-compose-note { flex-basis: 100%; order: -1; }
+.nb-compose-note { margin: 0; padding: 8px 12px 0; color: var(--color-meta); font-size: 12px; }
 /* Narrow: the cells fill the view, the sessions fold into one line above them. */
 .nb-page.compact { display: block; padding: 10px 14px 0; }
-.nb-page.compact .nb-cell { grid-template-columns: 2.6rem minmax(0, 1fr); gap: 10px; }
-.nb-page.compact .nb-mark { padding-left: calc(2.6rem + 10px); }
-/* There the person's cell is one line that grows as they write: language, code, Run. */
-.nb-page.compact:not(.roomy) .nb-composer { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-bottom: 10px; padding: 6px 6px 6px 8px; border-radius: 10px; }
-.nb-page.compact:not(.roomy) .nb-compose-bar label, .nb-page.compact:not(.roomy) .nb-compose-foot small { display: none; }
-.nb-page.compact:not(.roomy) .nb-composer textarea { flex: 1 1 8rem; width: auto; min-width: 0; }
-.nb-page.compact:not(.roomy) .nb-compose-foot button { min-height: 30px; padding: 4px 12px; }
-.nb-page.compact:not(.roomy) .nb-composer .inline-error { flex-basis: 100%; }
+.nb-page.compact { --nb-gutter: 2.4rem; }
+/* There the new cell is one line that grows as they write: the code, its language, Run. */
+.nb-page.compact:not(.roomy) .nb-new { flex-direction: row; flex-wrap: wrap; align-items: flex-end; }
+.nb-page.compact:not(.roomy) .nb-new { --nb-pad: 8px 11px; }
+.nb-page.compact:not(.roomy) .nb-editor { flex: 1 1 8rem; }
+.nb-page.compact:not(.roomy) .nb-compose-foot { flex: none; max-width: 100%; margin-left: auto; padding: 4px 5px; }
+.nb-page.compact:not(.roomy) .nb-compose-foot small { display: none; }
+.nb-page.compact:not(.roomy) .nb-compose-note { flex-basis: 100%; }
 .nb-strip { margin-bottom: 6px; border-bottom: 1px solid var(--color-divider); }
 .nb-strip > summary { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 4px 0 8px; color: var(--color-meta); font-size: 12px; cursor: pointer; }
 .nb-strip-session { display: inline-flex; align-items: center; gap: 6px; }
@@ -156,22 +171,17 @@ button.nb-cell-link:hover { background: var(--color-hover); text-decoration: und
 .nb-strip > .nb-rail-section { padding-bottom: 10px; }
 /* A very narrow view puts the code on a line of its own, above its language and Run. */
 @container (max-width: 420px) {
-  .nb-page.compact:not(.roomy) .nb-composer textarea { flex-basis: 100%; }
-  .nb-page.compact:not(.roomy) .nb-compose-bar { order: 1; }
-  .nb-page.compact:not(.roomy) .nb-compose-foot { order: 2; margin-left: auto; }
+  .nb-page.compact:not(.roomy) .nb-new { --nb-pad: 8px 11px 2px; }
+  .nb-page.compact:not(.roomy) .nb-editor { flex-basis: 100%; }
 }
 @container (max-width: 820px) {
   .nb-page { grid-template-columns: minmax(0, 1fr); gap: 18px; }
   .nb-rail { position: static; order: -1; max-height: none; overflow: visible; display: grid; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 16px; }
 }
 @container (max-width: 560px) {
-  .nb-cell, .nb-page.compact .nb-cell { grid-template-columns: minmax(0, 1fr); gap: 6px; }
-  .nb-gutter { flex-direction: row; align-items: center; justify-content: flex-start; }
-  .nb-head { grid-template-columns: minmax(0, 1fr) auto; }
-  .nb-who { grid-row: 2; grid-column: 1 / -1; }
-  .nb-mark { padding-left: 0; }
+  .nb-page, .nb-page.compact { --nb-gutter: 0rem; --nb-gap: 0px; }
+  .nb-gutter { display: none; }
   .nb-plot { margin-left: 0; }
-  .nb-compose-bar label { display: none; }
 }
 
 /* The sessions' variables and plots as views of their own, beside a script and the Notebook. */
@@ -209,13 +219,17 @@ button.nb-cell-link:hover { background: var(--color-hover); text-decoration: und
 .nb-plot-link img, .nb-plot-link .nb-plot-wait { display: block; width: 100%; aspect-ratio: 7 / 5; object-fit: contain; border-radius: 5px; background: #fff; }
 .nb-plot-link .nb-plot-wait.gone { display: grid; place-content: center; color: var(--color-meta); }
 .nb-plot-link > span:last-child { display: inline-flex; align-items: center; gap: 5px; padding: 0 2px; }
-.nb-session-chip { display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 0; margin-left: auto; padding: 2px 8px; border: 1px solid var(--color-hairline); border-radius: 999px; background: none; color: var(--color-muted); font: 500 11.5px var(--font-ui); white-space: nowrap; }
-.nb-session-chip:hover { border-color: var(--color-hairline-strong); background: var(--color-hover); color: var(--color-ink); }
+.nb-session-chip { display: inline-flex; flex: none; align-items: center; gap: 6px; min-height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: none; box-shadow: none; color: var(--color-muted); font: 500 12px var(--font-ui); white-space: nowrap; }
+.nb-session-chip:hover { background: var(--color-hover); color: var(--color-ink); }
+/* In the bar of the page that shows the notebook, the session's controls come before its other controls. */
+.nb-kernel { display: inline-flex; align-items: center; gap: 2px; order: -1; min-width: 0; }
+.nb-kernel .sv-chip > summary, .nb-compose-foot .sv-chip > summary { min-height: 24px; padding: 0 7px; border: 0; border-radius: 6px; font-size: 12px; font-weight: 500; }
+.nb-kernel .sv-chip > summary:hover, .nb-compose-foot .sv-chip > summary:hover { background: var(--color-hover); }
+.nb-kernel .sv-chip-menu { top: calc(100% + 4px); right: 0; bottom: auto; left: auto; }
 .nb-session-chip.idle .nb-dot, .nb-env-state.idle .nb-dot, .nb-proc.idle .nb-dot { background: var(--color-verified); }
 .nb-session-chip.busy .nb-dot, .nb-env-state.busy .nb-dot, .nb-proc.busy .nb-proc-state .nb-dot { background: var(--color-accent); animation: pulse 1.6s ease-out infinite; }
 .nb-session-chip.starting .nb-dot, .nb-env-state.starting .nb-dot, .nb-proc.starting .nb-dot { background: var(--color-amber); }
 .nb-session-chip.off .nb-dot, .nb-proc.off .nb-dot { background: none; border: 1.5px solid var(--color-control-border); }
-.nb-page.compact:not(.roomy) .nb-session-chip { order: 3; margin-left: 0; }
 .nbc-bar-state { font-weight: 500 !important; }
 
 /* The values of a session as an environment pane: a table of them by kind, each unfolding in place. */
@@ -341,12 +355,9 @@ th.nb-env-bytes .nb-env-sort { margin-left: auto; }
 .nbc-prompt-line textarea { flex: 1; min-width: 0; min-height: 0; margin: 0; padding: 0; border: 0; outline: 0; resize: none; overflow: hidden; background: none; box-shadow: none; color: var(--color-ink); font: inherit; white-space: pre; }
 .nbc-busy { flex: none; margin-left: 10px; color: var(--color-accent); font: 600 12px/1.6 var(--font-ui); white-space: nowrap; }
 /* The language chip a cell carries, at the line where code is written: small, in its language's colour. */
-.nb-lang-switch { display: inline-flex; flex: none; align-items: center; gap: 2px; min-height: 0; padding: 0 5px 0 7px; border: 0; border-radius: 999px; font: 650 11px/18px var(--font-ui); letter-spacing: .2px; box-shadow: none; }
-.nb-lang-switch > svg { opacity: .55; }
-.nb-lang-switch:hover > svg { opacity: 1; }
-.nb-lang-switch.r, .nb-lang-switch.r:hover { background: var(--color-hue-sky); color: var(--color-hue-sky-ink); }
-.nb-lang-switch.python, .nb-lang-switch.python:hover { background: var(--color-hue-clay); color: var(--color-hue-clay-ink); }
-.nb-lang-switch:hover { filter: brightness(.96); }
+.nb-lang-switch { display: inline-flex; flex: none; align-items: center; gap: 3px; min-height: 0; padding: 0 5px 0 7px; border: 0; border-radius: 6px; background: none; box-shadow: none; color: var(--color-muted); font: 600 12px/24px var(--font-ui); }
+.nb-lang-switch > svg { opacity: .6; }
+.nb-lang-switch:hover { background: var(--color-hover); color: var(--color-ink); }
 /* The Servers view: where the live sessions run, what a connection to each place last saw, and
    a place's files as its server lists them. */
 .sv-pane { container-type: inline-size; }

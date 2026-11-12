@@ -1,6 +1,6 @@
 # Current component status
 
-Updated: 2026-11-08.
+Updated: 2026-11-12.
 
 Kernel **0.5.10** lets an embedding conversation select exact Notebook `cellIds` from
 native tool receipts, so sessions sharing one connection grant do not acquire each
@@ -170,6 +170,13 @@ past the record's 16 KiB a file keeps the first 512 KiB and last 64 KiB with the
 and the last 4 screens a full-screen program left, under 64 MiB per project
 (`console.terminal.output` reads it in pages). macOS bash, zsh, /bin/sh, dash and ksh and Debian
 12 arm64 bash, fish 3.6, dash, ksh93u+m and mksh were run: 17 and 19 console tests passed.
+Notebook 0.5.20 draws a cell as notebooks do, after the user judged the gutter's language pill
+over a lone number and the chips beside the new cell's code ugly: the count beside the code's
+first line, who and why only for an Agent's or a named cell, how it ended under the code, the two
+ways to run it again over the code's corner, the language named on a cell only among cells of
+both, and a new cell drawn as a cell with its code coloured as typed. A page may place the
+session's state and where it runs in a bar of its own (`toolbar`). Views only; the builder's
+reading in a real browser at three widths.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

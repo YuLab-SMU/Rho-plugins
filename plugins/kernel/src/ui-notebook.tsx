@@ -227,8 +227,12 @@ export function useRelations(cells: Cell[]) {
   }, [cells]);
 }
 
-function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgain, onConversation, onObject, relations, onCell, elsewhere, onPlot, plotNumber }: {
-  elsewhere?: string; onPlot?: (cellId: string, plot: number) => void; plotNumber?: (cellId: string, plot: number) => number | undefined;
+// One cell, as a notebook draws it: its place in the order run in the gutter, the code, how it ended
+// under the code, then what it printed. A cell an Agent ran, or one run for a stated purpose, says
+// who and why above its code; the person's own cells need no title. The language is written on a
+// cell only where the notebook holds cells of both (`mixed`); else the notebook's bar says it once.
+function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgain, onConversation, onObject, relations, onCell, elsewhere, onPlot, plotNumber, mixed }: {
+  elsewhere?: string; onPlot?: (cellId: string, plot: number) => void; plotNumber?: (cellId: string, plot: number) => number | undefined; mixed?: boolean;
   cell: Cell; author: Author; who: (by: string) => Author; client: UiClient; projectId: string; now: number;
   onEdit: (cell: Cell) => void; onRunAgain: (cell: Cell) => void; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void;
   relations?: CellRelations; onCell?: (cellId: string) => void;
@@ -239,17 +243,30 @@ function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgai
     ? <button className="nb-value" title={'Look at ' + name} onClick={() => onObject(cell.language, name)}>{name}</button>
     : <code className="nb-value">{name}</code>;
   const interrupted = cell.interrupt ? `Interrupted by ${who(cell.interrupt.by).name === 'You' ? 'you' : who(cell.interrupt.by).name} at ${at(cell.interrupt.at)}.` : null;
-  return <li className={'nb-cell ' + cell.state + (cell.by === me ? ' mine' : '')} id={'cell-' + cell.cellId}>
-    <div className="nb-gutter" aria-hidden="true"><span className={'nb-lang ' + cell.language}>{languageName[cell.language]}</span><span className="nb-number">{cell.number}</span></div>
+  const name = `${languageName[cell.language]} cell ${cell.number}`, titled = !!cell.purpose || cell.by !== me;
+  return <li className={'nb-cell ' + cell.state + ' ' + cell.language + (cell.by === me ? ' mine' : '')} id={'cell-' + cell.cellId}>
     <div className="nb-body">
-      <header className="nb-head">
+      {titled && <header className="nb-head">
         <span className="nb-who">{author.conversationId
           ? <button className="text-button" title={author.title ? 'Open ' + author.title : undefined} onClick={() => onConversation(author.conversationId!)}>{author.name}</button>
           : author.name}</span>
-        <span className="nb-purpose">{cell.purpose ?? <span className="nb-unnamed">{languageName[cell.language]} cell {cell.number}</span>}</span>
-        <span className="nb-when">{elsewhere && <span className="nb-elsewhere" title={'Run in ' + elsewhere + ', in the same session'}>{elsewhere}</span>}<time dateTime={cell.queuedAt}>{at(cell.queuedAt)}</time><Ending cell={cell} now={now} /></span>
-      </header>
-      <Code code={cell.code} language={cell.language} />
+        {cell.purpose && <span className="nb-purpose">{cell.purpose}</span>}
+      </header>}
+      <div className="nb-input">
+        <div className="nb-gutter" aria-hidden="true"><span className="nb-number" title={name}>{cell.state === 'running' ? '*' : cell.state === 'queued' ? ' ' : cell.number}</span></div>
+        <Code code={cell.code} language={cell.language} />
+        {settled && <div className="nb-actions" role="group" aria-label={'Run ' + name + ' again'}>
+          <button type="button" aria-label="Edit and run" title="Edit and run: its code goes to the new cell" onClick={() => onEdit(cell)}><Icon name="pencil" size={14} /></button>
+          <button type="button" aria-label="Run again" title="Run again, as a new cell" onClick={() => onRunAgain(cell)}><Icon name="run" size={14} /></button>
+        </div>}
+      </div>
+      <p className="nb-status">
+        <span className="visually-hidden">{name}{titled ? '' : ', run by you'}.</span>
+        <Ending cell={cell} now={now} />
+        <time dateTime={cell.queuedAt}>{at(cell.queuedAt)}</time>
+        {elsewhere && <span className="nb-elsewhere" title={'Run in ' + elsewhere + ', in the same session'}>{elsewhere}</span>}
+        {mixed && <span className="nb-cell-lang" aria-hidden="true">{languageName[cell.language]}</span>}
+      </p>
       <Outputs cell={cell} client={client} projectId={projectId} onPlot={onPlot} plotNumber={plotNumber} />
       {settled && (reads.length > 0 || (cell.defined?.length ?? 0) > 0 || (cell.removed?.length ?? 0) > 0) && <p className="nb-values">
         {reads.length > 0 && <><span>Read</span>{reads.map(({ name, from }) => <span key={name} className="nb-rel">{value(name)}{from && <>from <CellLink cell={from} language={cell.language} onCell={onCell} what="made it" /></>}</span>)}</>}
@@ -261,10 +278,6 @@ function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgai
       </p>}
       {settled && <CellScriptFlow code={cell.code} language={cell.language} />}
       {(interrupted || (cell.problem && cell.state !== 'interrupted')) && <p className="nb-problem">{interrupted ?? cell.problem}</p>}
-      {settled && <div className="nb-actions">
-        <button className="text-button" onClick={() => onEdit(cell)}><Icon name="pencil" size={13} />Edit and run</button>
-        <button className="text-button" onClick={() => onRunAgain(cell)}><Icon name="run" size={13} />Run again</button>
-      </div>}
     </div>
   </li>;
 }
@@ -274,11 +287,11 @@ function Mark({ session, edge, who }: { session: Session; edge: 'start' | 'end';
   const name = languageName[session.language];
   if (edge === 'start') {
     const by = who(session.startedBy).name;
-    return <li className="nb-mark"><span>{name} session started{session.place ? ' ' + whereOf(session) : ''}{session.version ? ' · ' + versionOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</span></li>;
+    return <li className="nb-mark"><span>{session.version ? versionOf(session) : name + ' session'} started{session.place ? ' ' + whereOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</span></li>;
   }
   return <li className={'nb-mark ended' + (session.ending === 'stopped' ? '' : ' problem')}>
     <span>{name} session ended at {at(session.endedAt!)} · {endedHow(session, who)}.</span>
-    {session.problem && session.ending !== 'stopped' && <small>{session.ending === 'disconnected' ? `Its process there${session.pid ? ` (${session.pid})` : ''} was not seen to end.` : session.problem}</small>}
+    {session.problem && session.ending !== 'stopped' && session.ending !== 'rho-closed' && <small>{session.ending === 'disconnected' ? `Its process there${session.pid ? ` (${session.pid})` : ''} was not seen to end.` : session.problem}</small>}
   </li>;
 }
 
@@ -377,28 +390,54 @@ function SessionChip({ language, session, onSessions }: { language: Language; se
   </button>;
 }
 
-function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small, place, state, own }: {
-  own?: boolean; language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean; place?: React.ReactNode; state?: React.ReactNode;
+// The code being written is coloured as the cells above are: the page's highlighting is drawn under
+// the box the person types in, in its font, wrapping and scroll, and the box's own letters are
+// clear. What is typed shows at once in plain ink and takes its colours when they are ready.
+function Inked({ code, language, box }: { code: string; language: Language; box: React.RefObject<HTMLTextAreaElement | null> }) {
+  const text = useRef<HTMLElement>(null), ink = useRef<HTMLPreElement>(null), { highlight } = useShell();
+  useLayoutEffect(() => {
+    let live = true;
+    // A last line break is a line in the box; here it takes one more to be drawn as one.
+    if (text.current) text.current.textContent = code + '\n';
+    highlight?.(code, language).then(fragment => { if (live && fragment && text.current) text.current.replaceChildren(fragment, '\n'); }, () => {});
+    return () => { live = false; };
+  }, [code, language, highlight]);
+  useEffect(() => {
+    const element = box.current;
+    if (!element) return;
+    const follow = () => { if (ink.current) { ink.current.scrollTop = element.scrollTop; ink.current.scrollLeft = element.scrollLeft; } };
+    follow(); element.addEventListener('scroll', follow, { passive: true });
+    return () => element.removeEventListener('scroll', follow);
+  });
+  return <pre className="nb-ink" ref={ink} aria-hidden="true"><code ref={text} /></pre>;
+}
+
+// The new cell is drawn as a cell: the gutter's empty count, then the code to run. Under the code,
+// the language it runs in at one end and Run at the other. Where the session runs and how it is
+// doing (`kernel`) sit there too, unless the page that shows the notebook has a bar for them.
+function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small, kernel, own }: {
+  own?: boolean; language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean; kernel?: React.ReactNode;
   onRun: () => void; onInterrupt: () => void; running: boolean; input: React.RefObject<HTMLTextAreaElement | null>;
 }) {
-  const id = useId(), lines = Math.max(small ? 1 : 2, Math.min(small ? 8 : 14, draft.split('\n').length));
-  const mac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+  const lines = Math.min(small ? 8 : 14, draft.split('\n').length), { highlight } = useShell();
   return <form className="nb-composer" onSubmit={event => { event.preventDefault(); onRun(); }}>
-    <div className="nb-compose-bar">
-      <LanguageChip language={language} own={own} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
-      {place}
-      <label htmlFor={id}>Runs in {runsIn(language, own)}</label>
-      {state}
-    </div>
-    {note && <p className="nb-compose-note">{note}</p>}
-    <textarea id={id} ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off"
-      placeholder={placeholder}
-      onChange={event => setDraft(event.target.value)}
-      onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey || event.shiftKey) && !event.nativeEvent.isComposing) { event.preventDefault(); onRun(); } }} />
-    <div className="nb-compose-foot">
-      <small>{mac ? '⌘' : 'Ctrl'}+Enter or Shift+Enter runs it</small>
-      {running && <button type="button" className="secondary" onClick={onInterrupt}>Interrupt</button>}
-      <button type="submit" className="primary" disabled={busy || !draft.trim()}>{busy ? 'Sending…' : 'Run'}</button>
+    <div className="nb-new">
+      <div className="nb-gutter" aria-hidden="true"><span className="nb-number"> </span></div>
+      {note && <p className="nb-compose-note">{note}</p>}
+      <div className={'nb-editor' + (highlight ? ' inked' : '')}>
+        {highlight && <Inked code={draft} language={language} box={input} />}
+        <textarea ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off" wrap="soft"
+          aria-label={`New ${languageName[language]} cell, run in ${runsIn(language, own)}`} placeholder={placeholder}
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey || event.shiftKey) && !event.nativeEvent.isComposing) { event.preventDefault(); onRun(); } }} />
+      </div>
+      <div className="nb-compose-foot">
+        <LanguageChip language={language} own={own} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
+        {kernel}
+        <small>Shift+Enter to run</small>
+        {running && <button type="button" className="secondary" onClick={onInterrupt}>Interrupt</button>}
+        <button type="submit" className="primary" disabled={busy || !draft.trim()}><Icon name="run" size={12} stroke={2} />{busy ? 'Sending…' : 'Run'}</button>
+      </div>
     </div>
     {problem && <p className="inline-error" role="alert">{problem}</p>}
   </form>;
@@ -466,7 +505,7 @@ function ConsoleCell({ cell, author, who, client, projectId, now, plotsBeside, p
 }
 function ConsoleMark({ session, edge, who }: { session: Session; edge: 'start' | 'end'; who: (by: string) => Author }) {
   const name = languageName[session.language];
-  if (edge === 'start') { const by = who(session.startedBy).name; return <p className="nbc-mark">{name} session started{session.place ? ' ' + whereOf(session) : ''}{session.version ? ' · ' + versionOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</p>; }
+  if (edge === 'start') { const by = who(session.startedBy).name; return <p className="nbc-mark">{session.version ? versionOf(session) : name + ' session'} started{session.place ? ' ' + whereOf(session) : ''} · by {by === 'You' ? 'you' : by} at {at(session.startedAt)}</p>; }
   return <p className={'nbc-mark ended' + (session.ending === 'stopped' ? '' : ' problem')}>{name} session ended at {at(session.endedAt!)} · {endedHow(session, who)}.</p>;
 }
 // The sessions above the console: their state, Interrupt while a cell runs, Stop, and Clear.
@@ -572,6 +611,10 @@ export interface Beside { variables?: boolean; plots?: boolean }
 // a plot opens in the Plots view, the sessions' state in the Sessions view and a value in its own
 // view (onObject), so it keeps no plots, variables or sessions of its own beside the cells.
 export interface Linked { plot(cellId: string, plot: number): void; sessions(): void }
+// The page that shows the notebook may have a bar of its own for a view's controls (a Studio view's
+// header). Given the session's controls, it returns them placed there; without one they stay under
+// the new cell.
+export type Toolbar = (controls: ReactNode) => ReactNode;
 // `notebook` makes the view one notebook among several, each with R and Python sessions of its
 // own: it lists the cells run in it and runs its own in its sessions. Without it the view is the
 // project's notebook, whose sessions the Agent works in unless it names another. A notebook shown
@@ -579,7 +622,7 @@ export interface Linked { plot(cellId: string, plot: number): void; sessions(): 
 // view lists that conversation's cells wherever they ran and names a notebook of another
 // (`notebooks`: identity to name).
 export type NotebookNames = Readonly<Record<string, string>>;
-export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject, beside, linked, form, scope, shell, notebook, notebooks }: { client: UiClient; snapshot: UiSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string, notebook?: string) => void; scope?: SessionScope; shell?: KernelShell; beside?: Beside; linked?: Linked; form?: NotebookForm; notebook?: string; notebooks?: NotebookNames }) {
+export function SessionPane({ client, snapshot, prepared, onTaken, onConversation, onObject, beside, linked, toolbar, form, scope, shell, notebook, notebooks }: { toolbar?: Toolbar; client: UiClient; snapshot: UiSnapshot; prepared?: Prepared | null; onTaken?: () => void; onConversation?: (id: string) => void; onObject?: (language: Language, name: string, notebook?: string) => void; scope?: SessionScope; shell?: KernelShell; beside?: Beside; linked?: Linked; form?: NotebookForm; notebook?: string; notebooks?: NotebookNames }) {
   const box = useRef<HTMLDivElement>(null);
   const [wide, setWide] = useState(false), [shown, setShown] = useState(0);
   // A view the shell hides or moves leaves the page and loses its scroll; each time it shows at
@@ -596,7 +639,7 @@ export function SessionPane({ client, snapshot, prepared, onTaken, onConversatio
     return () => observer.disconnect();
   }, []);
   return withShell(shell, <WithFacts snapshot={snapshot}><div className="nb-view" ref={box}>
-    <NotebookBody client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken} onObject={onObject} beside={beside} linked={linked} form={form} scope={scope} notebook={notebook} notebooks={notebooks} />
+    <NotebookBody client={client} snapshot={snapshot} onConversation={onConversation ?? (() => {})} compact={!wide} inView shown={shown} prepared={prepared} onTaken={onTaken} onObject={onObject} beside={beside} linked={linked} toolbar={toolbar} form={form} scope={scope} notebook={notebook} notebooks={notebooks} />
   </div></WithFacts>);
 }
 
@@ -605,8 +648,8 @@ export function SessionPane({ client, snapshot, prepared, onTaken, onConversatio
 export function NotebookPage({ shell, ...props }: Parameters<typeof NotebookBody>[0] & { shell?: KernelShell }) {
   return withShell(shell, <WithFacts snapshot={props.snapshot}><NotebookBody {...props} /></WithFacts>);
 }
-function NotebookBody({ client, snapshot, onConversation, onObject, scope, compact: narrow = false, inView = false, shown = 0, prepared, onTaken, beside = {}, linked, form = 'notebook', notebook, notebooks }: {
-  client: UiClient; snapshot: UiSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string, notebook?: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void; beside?: Beside; linked?: Linked; form?: NotebookForm;
+function NotebookBody({ client, snapshot, onConversation, onObject, scope, compact: narrow = false, inView = false, shown = 0, prepared, onTaken, beside = {}, linked, toolbar, form = 'notebook', notebook, notebooks }: {
+  toolbar?: Toolbar; client: UiClient; snapshot: UiSnapshot; onConversation: (id: string) => void; onObject?: (language: Language, name: string, notebook?: string) => void; compact?: boolean; inView?: boolean; shown?: number; prepared?: Prepared | null; onTaken?: () => void; beside?: Beside; linked?: Linked; form?: NotebookForm;
   scope?: SessionScope; notebook?: string; notebooks?: NotebookNames }) {
   const projectId = snapshot.project.id;
   // Linked to the other views, the cells take the whole view at any width.
@@ -741,6 +784,8 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
     element.classList.remove('flash'); void element.offsetWidth; element.classList.add('flash');
   };
   const relations = useRelations(cells);
+  // A cell says its language only in a notebook that holds cells of both.
+  const mixed = useMemo(() => new Set(cells.map(c => c.language)).size > 1, [cells]);
   // A value named here opens as a value of this notebook's session.
   const openObject = onObject && ((language: Language, name: string) => onObject(language, name, notebook));
 
@@ -749,9 +794,14 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   const composing = (scope?.at ?? null) === null;
   // Where the language's next cell runs, when the project names any server.
   const placeChip = <PlaceChip client={client} projectId={projectId} language={shownLanguage} session={latest[shownLanguage]} places={places} onChanged={setPlaces} />;
+  // What runs the next cell, said once: the session's state, which opens the Sessions view, and
+  // where it runs. The page's bar holds them when it has one; else they sit under the new cell.
+  // A narrow view's bar keeps the session's state alone; where it runs stays with the new cell.
+  const sessionChip = linked && <SessionChip language={shownLanguage} session={latest[shownLanguage]} onSessions={linked.sessions} />;
+  const barred = composing && form === 'notebook' && toolbar ? toolbar(<div className="nb-kernel" role="group" aria-label="The session the next cell runs in">{sessionChip}{!narrow && placeChip}</div>) : null;
+  const kernel = toolbar ? narrow ? placeChip : undefined : <>{sessionChip}{placeChip}</>;
   const composer = (small: boolean) => composing && <Composer own={!!notebook} small={small} language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} busy={busy} problem={runProblem} note={note} onRun={() => void run(draft, shownLanguage)}
-    running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} place={placeChip}
-    state={linked && <SessionChip language={shownLanguage} session={latest[shownLanguage]} onSessions={linked.sessions} />} />;
+    running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} kernel={kernel} />;
   const nothing = scope?.at != null ? 'No cells by then.' : notebook ? 'Nothing has run in this notebook yet. It has R and Python sessions of its own, which its first cell of each language starts; values of the other notebooks are not here.' : scope ? 'No cells in this conversation yet. What you run here runs in the sessions you share with the Agent.' : 'Nothing has run in the live sessions yet. What you run here runs in the sessions you share with the Agent.';
   // In a narrow view the cells take the whole view; the sessions and their values fold above them.
   const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended' && (!scope || cells.some(c => c.sessionId === latest[l]!.sessionId)));
@@ -787,6 +837,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
     </div>;
   }
   if (compact) return <div className={'nb-page compact' + (linked ? ' linked' : '') + (narrow ? '' : ' roomy')} ref={page} onPointerDownCapture={mark} onFocusCapture={mark}>
+    {barred}
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {live.length > 0 && !beside.variables && !linked && <details className="nb-strip">
@@ -796,7 +847,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
         : !cells.length ? <p className="nb-empty-line">{nothing}</p>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} onPlot={linked && current.has(row.cell.sessionId) ? linked.plot : undefined} plotNumber={plotNumber} />
+          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} onPlot={linked && current.has(row.cell.sessionId) ? linked.plot : undefined} plotNumber={plotNumber} mixed={mixed} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && linked && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
       {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
@@ -804,6 +855,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
     </div>
   </div>;
   return <div className={'nb-page' + (inView ? ' in-view' : '')} ref={page} onPointerDownCapture={mark} onFocusCapture={mark}>
+    {barred}
     <div className="nb-main">
       {problem && <p className="inline-error" role="alert">{problem}</p>}
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
@@ -812,7 +864,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
           <p>When the Agent runs R or Python in this project's live sessions, each cell shows here with its purpose, its code, what it printed, its plots and the values it left. Your own cells run in the same sessions, so you can look at what the Agent made.</p>
         </div>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} />
+          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} mixed={mixed} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
       {composer(false)}

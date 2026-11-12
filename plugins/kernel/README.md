@@ -1,6 +1,6 @@
 # Notebook
 
-`@rho-workspace/plugin-kernel` 0.5.19 keeps a live R session and a live Python
+`@rho-workspace/plugin-kernel` 0.5.20 keeps a live R session and a live Python
 session for a project and for each of its notebooks, on this machine or on a server: one the
 person manages with serverctl, reached through it, or one reached with ssh. An Agent's cells run
 in the project's own sessions unless it names a notebook.
@@ -275,6 +275,17 @@ Interrupt, Restart and Stop, and Start when none is live (`kernel.start`, which 
 without a cell). When the page passes `linked` (`plot`, `sessions`), the Notebook shows each plot
 as a thumbnail numbered as Plots numbers it and its session as a chip, and hands these to the
 page instead of drawing its own plot strip and variables pane.
+
+The Notebook draws a cell as notebooks do. The gutter holds its count beside the first line of
+its code (`[3]`, `[*]` while it runs, red when it failed). Who ran it and why stand above the
+code only for an Agent's cell or a cell with a purpose. How it ended and when stand under the
+code, and what it printed follows. Edit and run and Run again are a small bar over the corner of
+the code, shown with the pointer or the focus. The language and the session are said once: a
+cell names its language only in a notebook that holds cells of both. The new cell at the foot is
+drawn as a cell, with its code coloured as it is typed when the page gives `highlight`; under
+the code are the language it runs in and Run. The session's state and where it runs sit there
+too, unless the page passes `toolbar`, a function that places those controls in a bar of its own
+(a narrow view keeps where it runs with the new cell).
 
 Data flow draws how each result came about as a graph of values, one node per value or file: the
 files read at the top, the results at the bottom (the files written and the plots drawn, else the
