@@ -7,7 +7,8 @@ import { PlaceChip, usePlaces, whereOf } from './ui-servers.js';
 import { firstNotebook, showNotebook, takeCell, takePlot, useAskedCell, useAskedPlot, useShownNotebook } from './ui-notebook-target.js';
 import { NotebookPick } from './ui-notebook-pick.js';
 import { scopedCells } from './session-scope.js';
-import { call, refused, agentName, agentNames, clock, durationText, useShell, withShell, versionOf, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
+import { CodeBox, type CodeBoxHandle } from './ui-code-box.js';
+import { call, refused, agentName, agentNames, clock, durationText, useShell, withShell, versionOf, type Completions, type KernelShell, type SessionScope, type UiClient, type UiSnapshot, type KernelOutputs } from './ui-base.js';
 export { versionOf };
 
 // The project's live R and Python sessions, which the person shares with their Agent. Cells
@@ -113,7 +114,9 @@ function PlotLink({ client, projectId, cell, output, number, onPlot }: { client:
   </button>;
 }
 
-export function Code({ code, language }: { code: string; language: Language }) {
+// onPress: the code can be written over where it stands; a press that selects nothing asks for
+// that, at the point pressed.
+export function Code({ code, language, onPress }: { code: string; language: Language; onPress?: (at: { x: number; y: number }) => void }) {
   const lines = code.replace(/\n+$/, '').split('\n');
   const [whole, setWhole] = useState(false);
   const long = lines.length > notebookViewLimits.codeLines + 2;
@@ -126,7 +129,7 @@ export function Code({ code, language }: { code: string; language: Language }) {
     return () => { live = false; };
   }, [shown, language, highlight]);
   return <div className="nb-code">
-    <pre><code ref={ref}>{shown}</code></pre>
+    <pre className={onPress ? 'editable' : undefined} onClick={onPress && (event => { if (window.getSelection()?.isCollapsed !== false) onPress({ x: event.clientX, y: event.clientY }); })}><code ref={ref}>{shown}</code></pre>
     {long && <button className="text-button nb-more" onClick={() => setWhole(!whole)}>{whole ? 'Show less' : `Show all ${lines.length} lines`}</button>}
   </div>;
 }
@@ -231,10 +234,15 @@ export function useRelations(cells: Cell[]) {
 // under the code, then what it printed. A cell an Agent ran, or one run for a stated purpose, says
 // who and why above its code; the person's own cells need no title. The language is written on a
 // cell only where the notebook holds cells of both (`mixed`); else the notebook's bar says it once.
-function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgain, onConversation, onObject, relations, onCell, elsewhere, onPlot, plotNumber, mixed }: {
-  elsewhere?: string; onPlot?: (cellId: string, plot: number) => void; plotNumber?: (cellId: string, plot: number) => number | undefined; mixed?: boolean;
+// Its code is written over where it stands: pressing the code, or Edit, makes it a box to type in,
+// and running it there runs a new cell in this one's place. The runs it took the place of stay in
+// the record and are listed under it (`earlier`).
+function CellView({ cell, earlier = [], author, who, client, projectId, now, onRun, complete, onConversation, onObject, relations, onCell, elsewhere, onPlot, plotNumber, mixed }: {
+  elsewhere?: string; onPlot?: (cellId: string, plot: number) => void; plotNumber?: (cellId: string, plot: number) => number | undefined; mixed?: boolean; earlier?: Cell[];
   cell: Cell; author: Author; who: (by: string) => Author; client: UiClient; projectId: string; now: number;
-  onEdit: (cell: Cell) => void; onRunAgain: (cell: Cell) => void; onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void;
+  // Runs code in this cell's place and answers why it could not be sent, or nothing.
+  onRun?: (cell: Cell, code: string) => Promise<string>; complete?: (cell: Cell) => (line: string) => Promise<Completions | null>;
+  onConversation: (id: string) => void; onObject?: (language: Language, name: string) => void;
   relations?: CellRelations; onCell?: (cellId: string) => void;
 }) {
   const settled = !['queued', 'running'].includes(cell.state);
@@ -244,7 +252,22 @@ function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgai
     : <code className="nb-value">{name}</code>;
   const interrupted = cell.interrupt ? `Interrupted by ${who(cell.interrupt.by).name === 'You' ? 'you' : who(cell.interrupt.by).name} at ${at(cell.interrupt.at)}.` : null;
   const name = `${languageName[cell.language]} cell ${cell.number}`, titled = !!cell.purpose || cell.by !== me;
-  return <li className={'nb-cell ' + cell.state + ' ' + cell.language + (cell.by === me ? ' mine' : '')} id={'cell-' + cell.cellId}>
+  // The code being written over this cell: where the keyboard goes once the box is there (the
+  // point pressed, or its end), and whether the box has taken the code's place yet.
+  const [edit, setEdit] = useState<{ draft: string; at: { x: number; y: number } | true; ready: boolean } | null>(null);
+  const [sending, setSending] = useState(false), [refusal, setRefusal] = useState(''), [history, setHistory] = useState(false);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const editable = !!onRun && settled;
+  const begin = (at: { x: number; y: number } | true) => { if (editable && !edit) { setRefusal(''); setEdit({ draft: cell.code, at, ready: false }); } };
+  const leave = (toButton = false) => { setEdit(null); setRefusal(''); if (toButton) requestAnimationFrame(() => editButton.current?.focus()); };
+  const send = async (code: string) => {
+    if (!onRun || sending || !code.trim()) return;
+    setSending(true); setRefusal('');
+    const why = await onRun(cell, code);
+    setSending(false);
+    if (why) setRefusal(why); else setEdit(null);
+  };
+  return <li className={'nb-cell ' + cell.state + ' ' + cell.language + (cell.by === me ? ' mine' : '') + (edit ? ' editing' : '')} id={'cell-' + cell.cellId}>
     <div className="nb-body">
       {titled && <header className="nb-head">
         <span className="nb-who">{author.conversationId
@@ -252,19 +275,31 @@ function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgai
           : author.name}</span>
         {cell.purpose && <span className="nb-purpose">{cell.purpose}</span>}
       </header>}
-      <div className="nb-input">
+      {/* Code left as it was is a cell again once the keyboard leaves it. */}
+      <div className="nb-input" onBlur={event => { if (edit && !sending && edit.draft === cell.code && !event.currentTarget.contains(event.relatedTarget as Node | null)) leave(); }}>
         <div className="nb-gutter" aria-hidden="true"><span className="nb-number" title={name}>{cell.state === 'running' ? '*' : cell.state === 'queued' ? ' ' : cell.number}</span></div>
-        <Code code={cell.code} language={cell.language} />
-        {settled && <div className="nb-actions" role="group" aria-label={'Run ' + name + ' again'}>
-          <button type="button" aria-label="Edit and run" title="Edit and run: its code goes to the new cell" onClick={() => onEdit(cell)}><Icon name="pencil" size={14} /></button>
-          <button type="button" aria-label="Run again" title="Run again, as a new cell" onClick={() => onRunAgain(cell)}><Icon name="run" size={14} /></button>
+        {!edit?.ready && <Code code={cell.code} language={cell.language} onPress={editable ? begin : undefined} />}
+        {edit && <div className={'nb-edit' + (edit.ready ? '' : ' waiting')}>
+          <CodeBox value={edit.draft} onChange={draft => setEdit(was => was && { ...was, draft })} language={cell.language} label={name + ', edited where it stands'} focusAt={edit.at}
+            onRun={() => void send(edit.draft)} onCancel={() => leave(true)} complete={complete?.(cell)} onReady={() => setEdit(was => was && { ...was, ready: true })} />
+          <div className="nb-edit-foot">
+            <small>Shift+Enter runs it here · Esc leaves it as it was</small>
+            <button type="button" className="secondary" disabled={sending} onClick={() => leave(true)}>Cancel</button>
+            <button type="button" className="primary" disabled={sending || !edit.draft.trim()} onClick={() => void send(edit.draft)}><Icon name="run" size={12} stroke={2} />{sending ? 'Sending…' : 'Run'}</button>
+          </div>
+        </div>}
+        {editable && !edit && <div className="nb-actions" role="group" aria-label={'Change or run ' + name}>
+          <button ref={editButton} type="button" aria-label="Edit" title="Edit its code here" onClick={() => begin(true)}><Icon name="pencil" size={14} /></button>
+          <button type="button" aria-label="Run again" title="Run again, here" disabled={sending} onClick={() => void send(cell.code)}><Icon name="run" size={14} /></button>
         </div>}
       </div>
+      {refusal && <p className="inline-error" role="alert">{refusal}</p>}
       <p className="nb-status">
         <span className="visually-hidden">{name}{titled ? '' : ', run by you'}.</span>
         <Ending cell={cell} now={now} />
         <time dateTime={cell.queuedAt}>{at(cell.queuedAt)}</time>
         {elsewhere && <span className="nb-elsewhere" title={'Run in ' + elsewhere + ', in the same session'}>{elsewhere}</span>}
+        {earlier.length > 0 && <button type="button" className="text-button nb-earlier-toggle" aria-expanded={history} onClick={() => setHistory(!history)}>{earlier.length} earlier {earlier.length === 1 ? 'run' : 'runs'}</button>}
         {mixed && <span className="nb-cell-lang" aria-hidden="true">{languageName[cell.language]}</span>}
       </p>
       <Outputs cell={cell} client={client} projectId={projectId} onPlot={onPlot} plotNumber={plotNumber} />
@@ -278,6 +313,8 @@ function CellView({ cell, author, who, client, projectId, now, onEdit, onRunAgai
       </p>}
       {settled && <CellScriptFlow code={cell.code} language={cell.language} />}
       {(interrupted || (cell.problem && cell.state !== 'interrupted')) && <p className="nb-problem">{interrupted ?? cell.problem}</p>}
+      {history && earlier.length > 0 && <ol className="nb-earlier" aria-label={'Earlier runs in the place of ' + name}>{earlier.map(run => <CellView key={run.cellId} cell={run} author={who(run.by)} who={who} client={client} projectId={projectId} now={now}
+        onConversation={onConversation} relations={relations} onCell={onCell} mixed={mixed} />)}</ol>}
     </div>
   </li>;
 }
@@ -390,47 +427,19 @@ function SessionChip({ language, session, onSessions }: { language: Language; se
   </button>;
 }
 
-// The code being written is coloured as the cells above are: the page's highlighting is drawn under
-// the box the person types in, in its font, wrapping and scroll, and the box's own letters are
-// clear. What is typed shows at once in plain ink and takes its colours when they are ready.
-function Inked({ code, language, box }: { code: string; language: Language; box: React.RefObject<HTMLTextAreaElement | null> }) {
-  const text = useRef<HTMLElement>(null), ink = useRef<HTMLPreElement>(null), { highlight } = useShell();
-  useLayoutEffect(() => {
-    let live = true;
-    // A last line break is a line in the box; here it takes one more to be drawn as one.
-    if (text.current) text.current.textContent = code + '\n';
-    highlight?.(code, language).then(fragment => { if (live && fragment && text.current) text.current.replaceChildren(fragment, '\n'); }, () => {});
-    return () => { live = false; };
-  }, [code, language, highlight]);
-  useEffect(() => {
-    const element = box.current;
-    if (!element) return;
-    const follow = () => { if (ink.current) { ink.current.scrollTop = element.scrollTop; ink.current.scrollLeft = element.scrollLeft; } };
-    follow(); element.addEventListener('scroll', follow, { passive: true });
-    return () => element.removeEventListener('scroll', follow);
-  });
-  return <pre className="nb-ink" ref={ink} aria-hidden="true"><code ref={text} /></pre>;
-}
-
 // The new cell is drawn as a cell: the gutter's empty count, then the code to run. Under the code,
 // the language it runs in at one end and Run at the other. Where the session runs and how it is
 // doing (`kernel`) sit there too, unless the page that shows the notebook has a bar for them.
-function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small, kernel, own }: {
-  own?: boolean; language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean; kernel?: React.ReactNode;
-  onRun: () => void; onInterrupt: () => void; running: boolean; input: React.RefObject<HTMLTextAreaElement | null>;
+function Composer({ language, setLanguage, draft, setDraft, busy, problem, note, onRun, onInterrupt, running, input, placeholder, small, kernel, own, complete }: {
+  own?: boolean; language: Language; setLanguage: (l: Language) => void; draft: string; setDraft: (t: string) => void; busy: boolean; problem: string; note?: string; placeholder: string; small?: boolean;
+  onRun: () => void; onInterrupt: () => void; running: boolean; input: React.RefObject<CodeBoxHandle | null>; kernel?: ReactNode; complete?: (line: string) => Promise<Completions | null>;
 }) {
-  const lines = Math.min(small ? 8 : 14, draft.split('\n').length), { highlight } = useShell();
-  return <form className="nb-composer" onSubmit={event => { event.preventDefault(); onRun(); }}>
+  const lines = Math.min(small ? 8 : 14, draft.split('\n').length);
+  return <form className={'nb-composer' + (small ? ' small' : '')} onSubmit={event => { event.preventDefault(); onRun(); }}>
     <div className="nb-new">
       <div className="nb-gutter" aria-hidden="true"><span className="nb-number"> </span></div>
       {note && <p className="nb-compose-note">{note}</p>}
-      <div className={'nb-editor' + (highlight ? ' inked' : '')}>
-        {highlight && <Inked code={draft} language={language} box={input} />}
-        <textarea ref={input} rows={lines} value={draft} spellCheck={false} autoComplete="off" autoCapitalize="off" wrap="soft"
-          aria-label={`New ${languageName[language]} cell, run in ${runsIn(language, own)}`} placeholder={placeholder}
-          onChange={event => setDraft(event.target.value)}
-          onKeyDown={event => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey || event.shiftKey) && !event.nativeEvent.isComposing) { event.preventDefault(); onRun(); } }} />
-      </div>
+      <CodeBox handle={input} value={draft} onChange={setDraft} language={language} wrap lines={lines} label={`New ${languageName[language]} cell, run in ${runsIn(language, own)}`} placeholder={placeholder} onRun={onRun} complete={complete} />
       <div className="nb-compose-foot">
         <LanguageChip language={language} own={own} onLanguage={l => { setLanguage(l); input.current?.focus(); }} />
         {kernel}
@@ -596,7 +605,26 @@ function scrollerOf(element: HTMLElement | null): Element {
   return document.scrollingElement ?? document.documentElement;
 }
 
-type Row = { at: number; order: number; key: string } & ({ cell: Cell } | { session: Session; edge: 'start' | 'end' });
+type Row = { at: number; order: number; key: string } & ({ cell: Cell; earlier: Cell[] } | { session: Session; edge: 'start' | 'end' });
+
+// Where each cell stands in a notebook. A cell run in place of another (`replaces`) stands where
+// that one stood, and so on back to the first run there; the newest run is the one shown, with the
+// earlier ones behind it, oldest first. A cell whose earlier run is not among these cells stands
+// where it was run.
+export function inPlace(cells: Cell[]) {
+  const byId = new Map(cells.map(c => [c.cellId, c])), first = new Map<string, string>(), runs = new Map<string, Cell[]>();
+  for (const cell of cells) {
+    let at = cell;
+    for (let steps = 0; at.replaces && byId.has(at.replaces) && steps < cells.length; steps++) at = byId.get(at.replaces)!;
+    first.set(cell.cellId, at.cellId);
+    const list = runs.get(at.cellId); if (list) list.push(cell); else runs.set(at.cellId, [cell]);
+  }
+  return {
+    shown: [...runs].map(([place, list]) => ({ place, at: byId.get(place)!.queuedAt, cell: list.at(-1)!, earlier: list.slice(0, -1) })),
+    // The cell shown where this one stands: itself, or the run that took its place.
+    shownFor: (cellId: string) => runs.get(first.get(cellId) ?? '')?.at(-1)?.cellId ?? cellId,
+  };
+}
 
 // The Notebook as a view of a Studio page. In a conversation's Studio it shows that
 // conversation's part of the sessions: the sessions its Agent ran cells in, with every cell
@@ -675,7 +703,9 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   const [cleared, setCleared] = useState(0);
   const [askProblem, setAskProblem] = useState('');
   const pending = useRef<{ code: string; language: Language; changeId: string } | null>(null);
-  const input = useRef<HTMLTextAreaElement>(null);
+  // The console's prompt is a text box; the notebook's new cell is a code box.
+  const input = useRef<HTMLTextAreaElement>(null), newCell = useRef<CodeBoxHandle>(null);
+  const toInput = () => requestAnimationFrame(() => { if (newCell.current) { newCell.current.focus(); newCell.current.scrollIntoView(); } else { input.current?.focus(); input.current?.scrollIntoView({ block: 'nearest' }); } });
   const list = useRef<HTMLOListElement>(null);
   const page = useRef<HTMLDivElement>(null);
   const running = cells.some(c => c.state === 'running');
@@ -683,7 +713,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   useEffect(() => {
     if (!prepared) return;
     setLanguage(prepared.language); setDraft(prepared.code); setNote(prepared.note); setRunProblem(''); onTaken?.();
-    requestAnimationFrame(() => { input.current?.focus(); input.current?.scrollIntoView({ block: 'nearest' }); });
+    toInput();
   }, [prepared?.key]);
   const [now, setNow] = useState(Date.now());
   useEffect(() => { if (!running) return; const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, [running]);
@@ -692,8 +722,11 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   // a session that ended comes first and the one that started next (an Agent starting its own
   // session again with another program does both at once); one that started and ended then shows
   // its start before its end.
+  // A notebook shows each cell where it stands; the console is the transcript, every run in turn.
+  const placed = useMemo(() => inPlace(cells), [cells]);
   const rows = useMemo(() => {
-    const out: Row[] = cells.map(cell => ({ at: Date.parse(cell.queuedAt), order: 2, key: cell.cellId, cell }));
+    const out: Row[] = form === 'console' ? cells.map(cell => ({ at: Date.parse(cell.queuedAt), order: 2, key: cell.cellId, cell, earlier: [] }))
+      : placed.shown.map(p => ({ at: Date.parse(p.at), order: 2, key: p.place, cell: p.cell, earlier: p.earlier }));
     const first = out[0]?.at ?? Infinity, until = scope?.at ?? Infinity;
     for (const session of read?.sessions ?? []) {
       const has = cells.some(c => c.sessionId === session.sessionId);
@@ -703,12 +736,13 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
       if (session.endedAt && Date.parse(session.endedAt) <= until && (has || Date.parse(session.endedAt) >= first)) out.push({ at: Date.parse(session.endedAt), order: session.endedAt === session.startedAt ? 3 : 0, key: session.sessionId + ':end', session, edge: 'end' });
     }
     return out.sort((a, b) => a.at - b.at || a.order - b.order);
-  }, [cells, read?.sessions, scope?.at]);
+  }, [cells, placed, form, read?.sessions, scope?.at]);
   useEffect(() => { if (shown && inView && page.current?.offsetWidth) mark(); }, [shown]);
 
   // A new cell, and output arriving in the last one, stay in view while the reader is at the end.
-  const last = cells.at(-1);
-  const tail = last ? `${cells.length}:${last.state}:${last.outputs.length}:${last.kept}` : '';
+  // A cell run again where it stands, further up, moves nothing.
+  const last = form === 'console' ? cells.at(-1) : placed.shown.at(-1)?.cell;
+  const tail = last ? `${form === 'console' ? cells.length : placed.shown.length}:${last.cellId}:${last.state}:${last.outputs.length}:${last.kept}` : '';
   const atEnd = useRef(true);
   // Only the reader's own moves (wheel, touch, keys, the scroll bar) decide whether they are at the
   // end; the browser keeping their place as content grows, or a view taken off the page, does not.
@@ -734,7 +768,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
     const cellId = takeCell(id => cells.some(c => c.cellId === id));
     if (!cellId) return;
     atEnd.current = false;
-    requestAnimationFrame(() => { const element = page.current?.querySelector<HTMLElement>(`[id="cell-${cellId}"]`); if (!element) return; element.scrollIntoView({ block: 'start' }); element.classList.remove('flash'); void element.offsetWidth; element.classList.add('flash'); });
+    requestAnimationFrame(() => { const element = page.current?.querySelector<HTMLElement>(`[id="cell-${placed.shownFor(cellId)}"]`); if (!element) return; element.scrollIntoView({ block: 'start' }); element.classList.remove('flash'); void element.offsetWidth; element.classList.add('flash'); });
   }, [read, narrow, askedCell, shown, cells]);
   // Output that grows after it is drawn (highlighted code, a plot read later) keeps the newest
   // cell in view for a reader who was there.
@@ -756,6 +790,37 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
     } catch (error) { setRunProblem(failure(error)); }
     finally { setBusy(false); }
   }
+  // A cell run where it stands: a new cell in the same notebook and language, in that one's place.
+  // Sending it again after a failure names the same cell, so it is not run twice.
+  const sent = useRef(new Map<string, { code: string; changeId: string }>());
+  async function runInPlace(cell: Cell, code: string) {
+    let asked = sent.current.get(cell.cellId);
+    if (asked?.code !== code) sent.current.set(cell.cellId, asked = { code, changeId: 'notebook-' + crypto.randomUUID() });
+    mark();
+    try {
+      await call(client, 'kernel.run', { projectId, language: cell.language, code, changeId: asked.changeId, replaces: cell.cellId, ...(cell.notebook ? { notebook: cell.notebook } : {}) });
+      sent.current.delete(cell.cellId); void again(); return '';
+    } catch (error) {
+      // A service older than this page runs no cell in place and says so of the field: the code
+      // runs as a new cell at the end, as it did there.
+      const refusal = (error as { error?: { kind?: string; details?: { problems?: Array<{ keyword?: string; fix?: string }> } } }).error;
+      if (refusal?.kind !== 'invalid' || !refusal.details?.problems?.some(problem => problem.keyword === 'additionalProperties' && problem.fix?.includes('"replaces"'))) return failure(error);
+      try {
+        await call(client, 'kernel.run', { projectId, language: cell.language, code, changeId: asked.changeId, ...(cell.notebook ? { notebook: cell.notebook } : {}) });
+        sent.current.delete(cell.cellId); atEnd.current = true; void again(); return '';
+      } catch (second) { return failure(second); }
+    }
+  }
+  // The names the live session offers after the line being typed. With no session to ask, or one
+  // that is running a cell, the values it listed last are offered by the name being typed.
+  const completeIn = (lang: Language, of: string | undefined) => async (line: string): Promise<Completions | null> => {
+    const got = await call(client, 'kernel.complete', { projectId, language: lang, line, ...(of ? { notebook: of } : {}) }).catch(() => null);
+    if (got?.state === 'shown') return got.items.length ? { from: got.from, items: got.items } : null;
+    const word = line.match(/[A-Za-z_.][\w.]*$/)?.[0] ?? '';
+    const names = word ? (latestSessions(read, of ?? null)[lang]?.variables ?? []).filter(v => v.name.startsWith(word) && v.name !== word) : [];
+    return names.length ? { from: line.length - word.length, items: names.map(v => ({ label: v.name, type: 'variable' })) } : null;
+  };
+  const completeCell = (cell: Cell) => completeIn(cell.language, cell.notebook);
   // Interrupting names the cell running now and stopping names the session, so neither reaches
   // a later one.
   async function interrupt(lang: Language) {
@@ -774,11 +839,11 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
     catch (error) { setAskProblem(failure(error)); }
     finally { setAsking(''); }
   }
-  const edit = (cell: Cell) => { setLanguage(cell.language); setDraft(cell.code); requestAnimationFrame(() => { input.current?.focus(); input.current?.scrollIntoView({ block: 'nearest' }); }); };
   const plots = useMemo(() => cells.flatMap(cell => cell.outputs.filter(o => o.kind === 'plot').map(output => ({ cell, output }))).slice(-notebookViewLimits.railPlots).reverse(), [cells]);
   // A cell gone to is brought into view and marked for a moment.
   const show = (cellId: string) => {
-    const element = page.current?.querySelector<HTMLElement>(`[id="cell-${cellId}"]`) ?? document.getElementById('cell-' + cellId);
+    const shown = placed.shownFor(cellId);
+    const element = page.current?.querySelector<HTMLElement>(`[id="cell-${shown}"]`) ?? document.getElementById('cell-' + shown);
     if (!element) return;
     element.scrollIntoView({ block: 'start', behavior: 'smooth' });
     element.classList.remove('flash'); void element.offsetWidth; element.classList.add('flash');
@@ -801,7 +866,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
   const barred = composing && form === 'notebook' && toolbar ? toolbar(<div className="nb-kernel" role="group" aria-label="The session the next cell runs in">{sessionChip}{!narrow && placeChip}</div>) : null;
   const kernel = toolbar ? narrow ? placeChip : undefined : <>{sessionChip}{placeChip}</>;
   const composer = (small: boolean) => composing && <Composer own={!!notebook} small={small} language={shownLanguage} setLanguage={setLanguage} draft={draft} setDraft={text => { setDraft(text); if (!text) setNote(''); }} busy={busy} problem={runProblem} note={note} onRun={() => void run(draft, shownLanguage)}
-    running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={input} placeholder={example(shownLanguage, latest[shownLanguage])} kernel={kernel} />;
+    running={latest[shownLanguage]?.state === 'busy'} onInterrupt={() => void interrupt(shownLanguage)} input={newCell} placeholder={example(shownLanguage, latest[shownLanguage])} kernel={kernel} complete={completeIn(shownLanguage, notebook)} />;
   const nothing = scope?.at != null ? 'No cells by then.' : notebook ? 'Nothing has run in this notebook yet. It has R and Python sessions of its own, which its first cell of each language starts; values of the other notebooks are not here.' : scope ? 'No cells in this conversation yet. What you run here runs in the sessions you share with the Agent.' : 'Nothing has run in the live sessions yet. What you run here runs in the sessions you share with the Agent.';
   // In a narrow view the cells take the whole view; the sessions and their values fold above them.
   const live = languages.filter(l => latest[l] && latest[l]!.state !== 'ended' && (!scope || cells.some(c => c.sessionId === latest[l]!.sessionId)));
@@ -847,7 +912,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
       {!read ? <p className="nb-empty-line">Reading the live sessions…</p>
         : !cells.length ? <p className="nb-empty-line">{nothing}</p>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} onPlot={linked && current.has(row.cell.sessionId) ? linked.plot : undefined} plotNumber={plotNumber} mixed={mixed} />
+          ? <CellView key={row.key} cell={row.cell} earlier={row.earlier} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onRun={composing ? runInPlace : undefined} complete={completeCell} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} onPlot={linked && current.has(row.cell.sessionId) ? linked.plot : undefined} plotNumber={plotNumber} mixed={mixed} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && linked && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
       {askProblem && <p className="inline-error" role="alert">{askProblem}</p>}
@@ -864,7 +929,7 @@ function NotebookBody({ client, snapshot, onConversation, onObject, scope, compa
           <p>When the Agent runs R or Python in this project's live sessions, each cell shows here with its purpose, its code, what it printed, its plots and the values it left. Your own cells run in the same sessions, so you can look at what the Agent made.</p>
         </div>
         : <ol className="nb-cells" ref={list}>{rows.map(row => 'cell' in row
-          ? <CellView key={row.key} cell={row.cell} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onEdit={edit} onRunAgain={cell => void run(cell.code, cell.language)} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} mixed={mixed} />
+          ? <CellView key={row.key} cell={row.cell} earlier={row.earlier} elsewhere={elsewhere(row.cell)} author={who(row.cell.by)} who={who} client={client} projectId={projectId} now={now} onRun={composing ? runInPlace : undefined} complete={completeCell} onConversation={onConversation} onObject={current.has(row.cell.sessionId) ? openObject : undefined} relations={relations.bySession.get(row.cell.sessionId)} onCell={show} mixed={mixed} />
           : <Mark key={row.key} session={row.session} edge={row.edge} who={who} />)}</ol>}
       {read && read.omitted > 0 && <p className="nb-note">{read.omitted} earlier {read.omitted === 1 ? 'cell is' : 'cells are'} kept but not shown.</p>}
       {composer(false)}

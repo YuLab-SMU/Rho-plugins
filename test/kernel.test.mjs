@@ -177,6 +177,97 @@ test('a change identity names one cell; cells run one at a time in the order the
   await host.close();
 });
 
+test('a cell run in place of an earlier one names it, and both stay in the record', async t => {
+  const root = await project();
+  const host = new KernelHost(root, { rscript });
+  t.after(() => host.close());
+  const first = await host.run({ language: 'python', code: 'x = 1\nx', changeId: 'one', by: 'agent:a', waitMs: 30000 });
+  const again = await host.run({ language: 'python', code: 'x = 2\nx', changeId: 'two', by: 'browser:local', replaces: first.cell.cellId, waitMs: 30000 });
+  assert.equal(again.cell.replaces, first.cell.cellId);
+  assert.equal(again.cell.sessionId, first.cell.sessionId, 'it runs in the same session');
+  assert.deepEqual([again.cell.number, text(again.cell)], [2, '2\n']);
+  // The earlier run is in the record as it ended; nothing of it is changed.
+  let { cells } = await host.read();
+  assert.deepEqual(cells.map(c => [c.number, c.by, text(c), c.replaces ?? null]), [[1, 'agent:a', '1\n', null], [2, 'browser:local', '2\n', first.cell.cellId]]);
+  // The same identity is the same cell, run once.
+  assert.equal((await host.run({ language: 'python', code: 'x = 2\nx', changeId: 'two', by: 'browser:local', replaces: first.cell.cellId })).cell.cellId, again.cell.cellId);
+  // A run takes the place of an ended cell of its own notebook and language, and of no other.
+  await assert.rejects(host.run({ language: 'python', code: '1', changeId: 'gone', by: 'browser:local', replaces: 'k-0000000000000000' }), e => e.kind === 'not_found');
+  await assert.rejects(host.run({ language: 'python', code: '1', changeId: 'elsewhere', by: 'browser:local', notebook: 'nb-1', replaces: first.cell.cellId }), e => e.kind === 'invalid');
+  await assert.rejects(host.run({ language: 'r', code: '1', changeId: 'other', by: 'browser:local', replaces: first.cell.cellId }), e => e.kind === 'invalid');
+  const slow = await host.run({ language: 'python', code: 'import time\ntime.sleep(0.5)', changeId: 'slow', by: 'agent:a' });
+  await assert.rejects(host.run({ language: 'python', code: '1', changeId: 'early', by: 'browser:local', replaces: slow.cell.cellId }), e => e.kind === 'conflict');
+  await settled(host, slow.cell.cellId);
+  const read = await host.read(); cells = read.cells;
+  assert.equal(cells.length, 3, 'a refused run adds no cell');
+  assert.deepEqual(read.sessions.map(s => s.language), ['python'], 'and starts no session');
+});
+
+test('a live session completes the line being typed: it runs no call, prints nothing and adds no cell', async t => {
+  const root = await project();
+  await fs.writeFile(path.join(root, 'de.csv'), 'gene,log2fc\nA,1\n');
+  const host = new KernelHost(root, { rscript, limits: { inspectForkShare: 0 } });
+  t.after(() => host.close());
+  assert.equal((await host.complete({ language: 'python', line: 'cou' })).state, 'none', 'completing starts no session');
+  assert.deepEqual((await host.read()).sessions, []);
+  const names = async (language, line) => {
+    const got = await host.complete({ language, line });
+    assert.equal(got.state, 'shown', line + ': ' + got.problem);
+    return { from: got.from, labels: got.items.map(i => i.label), type: Object.fromEntries(got.items.map(i => [i.label, i.type])) };
+  };
+  await host.run({ language: 'python', code: 'import math\ncounts = {"alpha": 1, "beta col": 2}\nvalue_one = 41\nclass T:\n    @property\n    def p(self):\n        print("READ"); return 1\n    def meth(self): return 2\nobj = T()\ndef f():\n    print("CALLED"); return obj', changeId: 'py', by: 'browser:local', waitMs: 30000 });
+  let got = await names('python', 'x = value');
+  assert.deepEqual([got.from, got.labels, got.type.value_one], [4, ['value_one'], 'variable']);
+  got = await names('python', 'counts["be');
+  assert.deepEqual([got.from, got.labels, got.type['beta col']], [8, ['beta col'], 'property'], 'a dict names its keys inside the quotes');
+  got = await names('python', 'math.sq');
+  assert.deepEqual([got.from, got.labels, got.type.sqrt], [5, ['sqrt'], 'function']);
+  got = await names('python', 'obj.');
+  assert.deepEqual([got.from, got.labels.sort(), got.type.p, got.type.meth], [4, ['meth', 'p'], 'property', 'function'], 'a property is named without being read');
+  assert.deepEqual((await names('python', 'f().')).labels, [], 'a call is not run to complete after it');
+  assert.equal((await names('python', 'imp')).type.import, 'keyword');
+  const after = await host.run({ language: 'python', code: 'value_one + 1', changeId: 'py2', by: 'browser:local', waitMs: 30000 });
+  assert.deepEqual([after.cell.number, text(after.cell)], [2, '42\n'], 'completing printed nothing into the session and added no cell');
+
+  await host.run({ language: 'r', code: 'de <- read.csv("de.csv")\nodd <- data.frame(`beta col` = 1, check.names = FALSE)\ng <- function() { cat("CALLED\\n"); de }', changeId: 'r', by: 'browser:local', waitMs: 60000 });
+  got = await names('r', 'summary(de$');
+  assert.deepEqual([got.from, got.labels, got.type.gene], [11, ['gene', 'log2fc'], 'property']);
+  got = await names('r', 'de[["lo');
+  assert.deepEqual([got.from, got.labels], [5, ['log2fc']], 'a table names its columns inside the quotes of a subscript');
+  assert.deepEqual((await names('r', 'odd$')).labels, ['`beta col`'], 'a name R does not read as written is given in backticks');
+  got = await names('r', 'mean(x, na.r');
+  assert.deepEqual([got.from, got.type['na.rm']], [8, 'argument']);
+  got = await names('r', 'read.csv("d');
+  assert.deepEqual([got.from, got.labels, got.type['de.csv']], [10, ['de.csv'], 'file']);
+  got = await names('r', 'stats::medi');
+  assert.equal(got.from, 7); assert.ok(got.labels.includes('median'), got.labels.join(' '));
+  got = await names('r', 'd');
+  assert.deepEqual([got.type.de, got.type.g], ['variable', undefined]);
+  assert.equal((await names('r', 'g')).type.g, 'function');
+  assert.ok((await names('r', 'library(stat')).labels.includes('stats'), 'installed packages are named inside library()');
+  assert.deepEqual((await names('r', 'g()$')).labels, [], 'a call is not run to complete after it');
+  const rAfter = await host.run({ language: 'r', code: 'nrow(de)', changeId: 'r2', by: 'browser:local', waitMs: 30000 });
+  assert.deepEqual([rAfter.cell.number, text(rAfter.cell)], [2, '[1] 1\n']);
+
+  // While a cell runs or waits the answer is busy; nothing waits for the cell.
+  const slow = await host.run({ language: 'python', code: 'import time\ntime.sleep(0.6)', changeId: 'slow', by: 'agent:a' });
+  assert.equal((await host.complete({ language: 'python', line: 'cou' })).state, 'busy');
+  await settled(host, slow.cell.cellId);
+  await assert.rejects(host.complete({ language: 'python', line: 'x'.repeat(kernelLimits.completeLineChars + 1) }), e => e.kind === 'invalid' && e.details.limit === 'completeLineChars');
+  assert.equal((await host.read()).cells.length, 5);
+});
+
+test('completion gives at most its limit of names and counts the rest', async t => {
+  const root = await project();
+  const host = new KernelHost(root, { limits: { completeItems: 3 } });
+  t.after(() => host.close());
+  await host.run({ language: 'python', code: 'a1 = a2 = a3 = a4 = a5 = 0', changeId: 'py', by: 'browser:local', waitMs: 30000 });
+  const got = await host.complete({ language: 'python', line: 'a' });
+  assert.equal(got.state, 'shown');
+  assert.equal(got.items.length, 3);
+  assert.ok(got.omitted >= 2, 'the names left out are counted: ' + got.omitted);
+});
+
 test('each notebook has its own sessions: a cell keeps its notebook, and a value made in one is not in another', async () => {
   const root = await project();
   const host = new KernelHost(root, { limits: { maxSessions: 3 } });

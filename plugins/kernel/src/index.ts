@@ -14,7 +14,7 @@ import { Serverctl } from './servers.js';
 import { operationContracts } from './operations.js';
 import { operationPresentation, presentation, viewPresentations } from './presentation.js';
 import type { cellStates, languages, sessionStates } from './contract.js';
-import { notebookPattern } from './contract.js';
+import { completionTypes, notebookPattern } from './contract.js';
 
 export type Language = typeof languages[number];
 export interface Variable { name: string; type: string; size: string; bytes: number; summary: string }
@@ -60,7 +60,10 @@ export interface CellRecord {
   // record. Cells recorded before have neither.
   program?: string | null; version?: string | null;
   saved?: SavedFigure[];
+  // The earlier cell it was run in place of.
+  replaces?: string;
 }
+export type Completion = { label: string; type: typeof completionTypes[number] };
 export type InspectInput = { language: Language; notebook?: string; name: string; path?: number[]; offset?: number; limit?: number; sort?: { column: number; descending: boolean }; picture?: boolean };
 // The protected resources are this machine's processes and memory, and the project's state
 // folder. Each notebook has at most one session per language, and at most maxSessions sessions
@@ -96,6 +99,10 @@ export const lineageLimits = { files: 32 };
 // own limit for a command, after which serverctl ends it; a server's skill is read up to
 // serverSkillBytes.
 export const kernelLimits = { maxCells: 500, maxSessions: 8, maxQueued: 16, maxCodeBytes: 65536, maxOutputBytes: 256 * 1024, maxPlots: 8, maxPlotBytes: 4 * 1024 * 1024, maxFigureBytes: 16 * 1024 * 1024, maxVariables: 200, maxWaitMs: 600000, startTimeoutMs: 30000, stopGraceMs: 3000, maxEndedSessions: 20,
+  // Completing a line: a line of at most completeLineChars is asked of the session, which gives
+  // at most completeItems names and counts the rest; one that has not answered within
+  // completeTimeoutMs is interrupted and the answer is timeout.
+  completeItems: 200, completeTimeoutMs: 2000, completeLineChars: 4096,
   inspectRows: 50, inspectColumns: 50, inspectChildren: 200, inspectCellChars: 120, inspectTextBytes: 16 * 1024, inspectSortRows: 1000000, inspectTimeoutMs: 10000, inspectGiveUpMs: 5000, inspectForkShare: 0.25, inspectForkStartMs: 2000, inspectPictureBytes: 1024 * 1024,
   maxPlaces: 16, remoteStartTimeoutMs: 90000, remoteCheckTimeoutMs: 60000, remoteListTimeoutMs: 30000, remoteSignalTimeoutMs: 15000, remoteEntries: 500, remoteListBytes: 1024 * 1024, remoteCopyBytes: 64 * 1024 * 1024, remoteCopyTimeoutMs: 600000, maxCopies: 500,
   serverctlReadMs: 15000, serverctlSessionS: 7 * 24 * 3600, serverSkillBytes: 256 * 1024 };
@@ -284,7 +291,7 @@ export class KernelHost {
     return { events, omitted: Math.max(0, this.cells.length - limit) };
   }
 
-  async run(input: { language: Language; code: string; purpose?: string; notebook?: string; changeId: string; by: string; waitMs?: number; place?: string; interpreter?: string }) {
+  async run(input: { language: Language; code: string; purpose?: string; notebook?: string; replaces?: string; changeId: string; by: string; waitMs?: number; place?: string; interpreter?: string }) {
     await this.load();
     const cell = await this.exclusive(() => this.queue(input));
     // Waiting for the cell holds nothing: other requests, an interrupt among them, go on.
@@ -296,13 +303,20 @@ export class KernelHost {
     return { cell: structuredClone(cell), session: structuredClone(this.sessions!.find(s => s.sessionId === cell.sessionId)!) };
   }
 
-  private async queue(input: { language: Language; code: string; purpose?: string; notebook?: string; changeId: string; by: string; place?: string; interpreter?: string }) {
+  private async queue(input: { language: Language; code: string; purpose?: string; notebook?: string; replaces?: string; changeId: string; by: string; place?: string; interpreter?: string }) {
     const known = this.cells.find(c => c.changeId === input.changeId && c.by === input.by);
     if (known) {
       requireThat(known.code === input.code && known.language === input.language, 'conflict', 'This change identity already names a different cell.');
     } else {
       requireThat(input.code.trim().length > 0 && Buffer.byteLength(input.code) <= this.limits.maxCodeBytes, 'invalid', `Write code of at most ${this.limits.maxCodeBytes} bytes.`, { limit: 'maxCodeBytes' });
       requireThat(input.notebook === undefined || new RegExp(notebookPattern).test(input.notebook), 'invalid', 'Name the notebook by the identity its cells carry.');
+      // A cell run in place of an earlier one: that one has ended and is of this notebook and language.
+      const replaced = input.replaces === undefined ? undefined : this.cells.find(c => c.cellId === input.replaces);
+      if (input.replaces !== undefined) {
+        requireThat(replaced, 'not_found', 'The cell to run in place of is no longer in the record. Run the code as a new cell.');
+        requireThat(replaced.language === input.language && (replaced.notebook ?? null) === (input.notebook ?? null), 'invalid', 'A cell is run in place of one of its own notebook and language.');
+        requireThat(ended(replaced.state), 'conflict', 'That cell has not ended. Wait for it or interrupt it, then run it again.');
+      }
       const live = await this.ensure(input.language, input.by, input.place, input.interpreter, input.notebook);
       requireThat(live.queue.length < this.limits.maxQueued, 'limit', `At most ${this.limits.maxQueued} cells wait in a session. Wait for some to run or interrupt the one running.`, { limit: 'maxQueued', maximum: this.limits.maxQueued });
       // The oldest finished cells make room, with their plots.
@@ -315,7 +329,7 @@ export class KernelHost {
       }
       live.record.cells++;
       const cell: CellRecord = { cellId: id('k-'), changeId: input.changeId, by: input.by, sessionId: live.record.sessionId, language: input.language, code: input.code, purpose: input.purpose?.trim().slice(0, 200) || null,
-        ...(input.notebook ? { notebook: input.notebook } : {}),
+        ...(input.notebook ? { notebook: input.notebook } : {}), ...(replaced ? { replaces: replaced.cellId } : {}),
         queuedAt: now(), startedAt: null, endedAt: null, state: 'queued', number: live.record.cells, outputs: [], bytes: 0, kept: 0, cut: false, interrupt: null, problem: null, defined: [], removed: [], used: [], files: [] };
       this.cells.push(cell); live.queue.push(cell);
       this.changed();
@@ -525,7 +539,7 @@ export class KernelHost {
       }
       this.changed(); await this.pump(live); return;
     }
-    if (msg.kind === 'inspected') { const looking = live.looking; if (looking && looking.id === msg.id) looking.done(msg); return; }
+    if (msg.kind === 'inspected' || msg.kind === 'completed') { const looking = live.looking; if (looking && looking.id === msg.id) looking.done(msg); return; }
     if (!cell || msg.id !== cell.cellId) return;
     if (['stdout', 'stderr', 'warning', 'error'].includes(msg.kind)) { this.append(cell, msg.kind, String(msg.text ?? '')); this.soon(); return; }
     if (msg.kind === 'plot') {
@@ -698,6 +712,43 @@ export class KernelHost {
         // The session stays held until it answers, whatever the caller was told.
         live.looking = { id: lookId, done: msg => { clearTimeout(slow); clearTimeout(giveUp); if (live.looking?.id === lookId) live.looking = null; tell(msg); void this.pump(live); } };
         live.child.stdin!.write(JSON.stringify({ op: 'inspect', id: lookId, ...this.question(input) }) + '\n');
+      });
+    });
+    live.lookups = reading.catch(() => {});
+    return reading;
+  }
+  // The names that may follow a line being typed, asked of the live session between cells. It
+  // starts no session and waits for no cell: while one runs or waits the answer is busy. The
+  // session is held while it answers; one that has not answered within completeTimeoutMs is
+  // interrupted, and the cells waiting go on whether it answers or not.
+  async complete(input: { language: Language; notebook?: string; line: string }) {
+    await this.load();
+    const limits = this.limits, live = this.live.get(slot(input.language, input.notebook));
+    requireThat(input.line.length <= limits.completeLineChars, 'invalid', `A line of at most ${limits.completeLineChars} characters is completed.`, { limit: 'completeLineChars' });
+    const answer = (state: string, extra: { from?: number; items?: Completion[]; omitted?: number; problem?: string | null } = {}) => ({ state, sessionId: live?.record.sessionId ?? null, from: extra.from ?? input.line.length, items: extra.items ?? [], omitted: extra.omitted ?? 0, problem: extra.problem ?? null });
+    if (!live || live.stopping) return answer('none');
+    const busy = () => live.record.state !== 'idle' || !!live.current || live.queue.length > 0;
+    if (busy()) return answer('busy');
+    const reading = live.lookups.then(() => {
+      if (busy() || live.stopping) return answer(live.record.state === 'ended' ? 'ended' : 'busy');
+      return new Promise<ReturnType<typeof answer>>(resolve => {
+        const lookId = id('i-');
+        let told = false;
+        const tell = (got: ReturnType<typeof answer>) => { if (!told) { told = true; resolve(got); } };
+        const slow = setTimeout(() => this.signal(live, 'SIGINT'), limits.completeTimeoutMs);
+        const giveUp = setTimeout(() => tell(answer('timeout', { problem: 'The session took too long to complete the line.' })), limits.completeTimeoutMs + limits.inspectGiveUpMs);
+        // The session stays held until it answers, whatever the caller was told.
+        live.looking = { id: lookId, done: msg => {
+          clearTimeout(slow); clearTimeout(giveUp); if (live.looking?.id === lookId) live.looking = null;
+          void this.pump(live);
+          if (msg.state !== 'shown') return tell(answer(['timeout', 'failed', 'ended'].includes(msg.state) ? msg.state : 'failed', { problem: typeof msg.problem === 'string' ? msg.problem.slice(0, 500) : null }));
+          // The session counts the name being completed in characters; the line is counted here as it was sent.
+          const back = Math.max(0, Math.min(Number(msg.back) || 0, [...input.line].length)), typed = back ? [...input.line].slice(-back).join('') : '';
+          const all: Completion[] = (Array.isArray(msg.items) ? msg.items : []).filter((i: any) => typeof i?.label === 'string' && i.label.length > 0 && i.label.length <= 512)
+            .map((i: any): Completion => ({ label: i.label, type: (completionTypes as readonly string[]).includes(i.type) ? i.type : 'name' }));
+          tell(answer('shown', { from: input.line.length - typed.length, items: all.slice(0, limits.completeItems), omitted: Math.max(0, Number(msg.omitted) || 0) + Math.max(0, all.length - limits.completeItems) }));
+        } };
+        live.child.stdin!.write(JSON.stringify({ op: 'complete', id: lookId, line: input.line, maxItems: limits.completeItems }) + '\n');
       });
     });
     live.lookups = reading.catch(() => {});
@@ -927,6 +978,7 @@ const content = [
   'A project has live R and Python sessions of its own, where your cells run unless you name a notebook, and each notebook the person opens in a workspace has its own R and Python sessions.',
   'To look at data, check a value or try a model, run code with kernel.run (language "r" or "python") instead of a one-off Rscript -e or python3 -c: what you define stays in the session for the next cell, and the person sees each cell, its output, its plots and the variables.',
   'Give each cell a short purpose. Pass waitMs to wait for it to finish; kernel.read reads it later.',
+  'To run a corrected version of an earlier cell, pass replaces with that cell\'s cellId: the new cell is run in its place, where the person\'s notebook shows it, and the earlier run stays in the record under it. A cell that adds a step is a new cell.',
   'A cell or session that kernel.read lists with a notebook belongs to that notebook; pass the same notebook to kernel.run (and kernel.inspect) to work there, and leave it out to work in the project\'s sessions. When the person asks for work in their notebook, the Notebook views of their workspace, with each one\'s notebook, are in the interface context of their message. Values made in one notebook are not in another.',
   'A session starts with the first cell of its language in its notebook. Interrupt a cell that runs too long with kernel.interrupt; only the person stops a session.',
   'Results meant to last still go to files from a script, so they can be rebuilt without the session. Run the script in the session (source("analysis.R"), exec(open("analysis.py").read())) rather than with Rscript or python3 from a shell: a figure file stays readable mark by mark only while it holds the bytes a cell saved.',

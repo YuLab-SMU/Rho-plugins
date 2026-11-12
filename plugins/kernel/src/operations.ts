@@ -1,5 +1,5 @@
 import { objectSchema as obj, timelineContract } from '@rho-workspace/plugin-contracts';
-import { cellId, cellSchema, changeId, notebookId, copySchema, inspectStates, language, objectSchema, placeCheckSchema, placeId, placeInput, placeRef, placesSchema, remoteEntrySchema, server, serverSkillTextSchema, serversSchema, sessionId, sessionSchema, sortInput } from './contract.js';
+import { cellId, cellSchema, changeId, notebookId, completeStates, completionSchema, copySchema, inspectStates, language, objectSchema, placeCheckSchema, placeId, placeInput, placeRef, placesSchema, remoteEntrySchema, server, serverSkillTextSchema, serversSchema, sessionId, sessionSchema, sortInput } from './contract.js';
 
 // Owner business contracts. Application project/authentication fields are separate.
 export const operationContracts = {
@@ -7,9 +7,11 @@ export const operationContracts = {
   // naming another place than the live session's is refused. interpreter names the program a
   // session on this machine starts with, in a folder of the project (.venv/bin/python); the
   // project keeps it for the language's later sessions. A cell naming another program than the
-  // live session's is refused.
+  // live session's is refused. replaces names an ended cell of the same notebook and language:
+  // the new cell is run in its place, where a notebook shows it, and the earlier one stays in the
+  // record as an earlier run.
   'kernel.run': {
-    inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, notebook: notebookId, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 }, place: placeRef, interpreter: { type: 'string', minLength: 1, maxLength: 1024 } }, ['language', 'code', 'changeId']),
+    inputSchema: obj({ language, code: { type: 'string', minLength: 1, maxLength: 65536 }, purpose: { type: 'string', maxLength: 200 }, notebook: notebookId, replaces: cellId, changeId, waitMs: { type: 'integer', minimum: 0, maximum: 600000 }, place: placeRef, interpreter: { type: 'string', minLength: 1, maxLength: 1024 } }, ['language', 'code', 'changeId']),
     outputSchema: obj({ cell: cellSchema, session: sessionSchema }),
     requires: [] as string[], effect: 'native' as const,
   },
@@ -34,6 +36,17 @@ export const operationContracts = {
   'kernel.inspect': {
     inputSchema: obj({ language, notebook: notebookId, name: { type: 'string', minLength: 1, maxLength: 256 }, path: { type: 'array', items: { type: 'integer', minimum: 0 }, maxItems: 16 }, offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200 }, sort: sortInput, picture: { type: 'boolean' } }, ['language', 'name']),
     outputSchema: obj({ state: { enum: [...inspectStates] }, sessionId: { anyOf: [sessionId, { type: 'null' }] }, afterCell: { type: 'integer', minimum: 0 }, runningCell: { anyOf: [{ type: 'integer', minimum: 1 }, { type: 'null' }] }, readAt: { type: 'string', minLength: 1 }, problem: { anyOf: [{ type: 'string' }, { type: 'null' }] }, object: { anyOf: [objectSchema, { type: 'null' }] } }),
+    requires: [] as string[], effect: 'read' as const,
+  },
+  // The names that may follow a line being typed, as the live session completes them: its values
+  // and the names of its packages, the parts of a value after $ or a dot, a table's columns in
+  // quotes, a call's arguments, files. line is the line up to the cursor; from is where the name
+  // being completed starts in it. A value named before $ or a dot is read; a call is never run. It
+  // starts no session and waits for no cell. At most the plugin's limit of names is given, with
+  // how many more there are.
+  'kernel.complete': {
+    inputSchema: obj({ language, notebook: notebookId, line: { type: 'string', maxLength: 4096 } }, ['language', 'line']),
+    outputSchema: obj({ state: { enum: [...completeStates] }, sessionId: { anyOf: [sessionId, { type: 'null' }] }, from: { type: 'integer', minimum: 0 }, items: { type: 'array', items: completionSchema }, omitted: { type: 'integer', minimum: 0 }, problem: { anyOf: [{ type: 'string' }, { type: 'null' }] } }),
     requires: [] as string[], effect: 'read' as const,
   },
   // Each names what it acts on, so a repeated request never reaches a later cell or session.

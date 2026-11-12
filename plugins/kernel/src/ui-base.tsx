@@ -8,7 +8,7 @@ export interface UiClient { call(method: string, input: any, signal?: AbortSigna
 type Out<K extends keyof KernelHost> = KernelHost[K] extends (...args: any[]) => infer R ? Awaited<R> : never;
 // What each operation the views call returns, as the session host returns it.
 export interface KernelOutputs {
-  'kernel.run': Out<'run'>; 'kernel.read': Out<'read'>; 'kernel.inspect': Inspected; 'kernel.plot': Out<'plot'>;
+  'kernel.run': Out<'run'>; 'kernel.read': Out<'read'>; 'kernel.inspect': Inspected; 'kernel.complete': Out<'complete'>; 'kernel.plot': Out<'plot'>;
   'kernel.interrupt': Out<'interrupt'>; 'kernel.start': Out<'start'>; 'kernel.stop': Out<'stop'>; 'kernel.places': Out<'places'>; 'kernel.place.set': Out<'setPlace'>;
   'kernel.place.check': Out<'check'>; 'kernel.place.list': Out<'list'>; 'kernel.place.copy': Out<'copy'>;
   'kernel.servers': Out<'servers'>; 'kernel.server.skill': Out<'serverSkill'>;
@@ -67,8 +67,26 @@ export interface FigureSlot {
   // A short name for the plot where it is mentioned elsewhere: "R cell 4, plot 1".
   name?: string; fit?: boolean; cursor?: number; fallback: ReactNode; author?: (by: string) => { name: string; mine: boolean };
 }
+// The names that may follow a line being typed: `from` is where the name being typed starts in
+// that line, and each name says what it is (completionTypes in contract.ts).
+export interface Completions { from: number; items: ReadonlyArray<{ label: string; type: string }> }
+// A box to write code in, as the page's own editor makes one in `parent`: the language's colours,
+// matching brackets, indentation, undo, and the names `complete` offers for the line up to the
+// cursor. It tells each change, runs on Shift+Enter (or Enter with Ctrl or Cmd) and leaves on
+// Escape when given onCancel. The page owns how it looks and its keys beyond those.
+export interface CodeBoxOptions {
+  language: string; value: string; label: string; placeholder?: string; wrap?: boolean;
+  onChange(value: string): void; onRun?(): void; onCancel?(): void;
+  complete?(line: string): Promise<Completions | null>;
+}
+export interface CodeBox {
+  setValue(value: string): void; update(now: { language?: string; label?: string; placeholder?: string }): void;
+  // Takes the keyboard, at the end of the code or at a point of the page.
+  focus(at?: { x: number; y: number }): void; destroy(): void;
+}
 export interface KernelShell {
   highlight?(code: string, language: string): Promise<DocumentFragment | null>;
+  codeBox?(parent: HTMLElement, options: CodeBoxOptions): Promise<CodeBox>;
   openPath?(path: string): void;
   markdown?(text: string): ReactNode;
   figure?(slot: FigureSlot): ReactNode;

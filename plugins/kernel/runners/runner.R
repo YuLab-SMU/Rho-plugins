@@ -618,6 +618,59 @@ serve_fork <- function(box, session, held) {
   }
 }
 
+# The names that may follow a line being typed, as R's own completion gives them at the console
+# (utils): the session's values and the names of attached packages, a value's parts after $ or @,
+# a package's names after ::, a call's arguments, and files inside quotes. Two more that the
+# console lacks: the names of a session's value inside the quotes of a subscript (de[["lo), and
+# the installed packages inside library() and its kin. A value named before $ is read, as the
+# console reads it; a call is not run. Each name is given without what was typed before it (df$
+# or stats::), with how many characters of the line it replaces (back).
+keywords <- c("if", "else", "repeat", "while", "function", "for", "next", "break", "in", "TRUE", "FALSE", "NULL", "NA", "Inf", "NaN", "NA_integer_", "NA_real_", "NA_character_", "NA_complex_")
+complete <- function(msg) {
+  reply <- function(x) emit(c(list(id = msg$id, kind = "completed"), x))
+  tryCatch({
+    u <- asNamespace("utils"); line <- msg$line; most <- msg$maxItems %||% 200L
+    listed <- function(names, typed, type) {
+      names <- names[startsWith(names, typed)]; shown <- utils::head(names, most)
+      reply(list(state = "shown", back = nchar(typed), omitted = length(names) - length(shown), items = lapply(shown, function(n) list(label = n, type = type))))
+    }
+    held <- regmatches(line, regexec("([A-Za-z.][A-Za-z0-9._]*)\\s*\\[\\[?[^]\"']*[\"']([^\"']*)$", line))[[1]]
+    if (length(held) && exists(held[2], envir = globalenv(), inherits = FALSE)) {
+      x <- get(held[2], envir = globalenv(), inherits = FALSE)
+      names <- if (length(dim(x)) == 2L) colnames(x) else names(x)
+      if (is.character(names) && length(names)) return(listed(unique(names[nzchar(names)]), held[3], "property"))
+    }
+    attached <- regmatches(line, regexec("(?:library|require|requireNamespace|loadNamespace)\\(\\s*[\"']?([A-Za-z0-9.]*)$", line, perl = TRUE))[[1]]
+    if (length(attached)) return(listed(sort(unique(.packages(all.available = TRUE))), attached[2], "name"))
+    found <- character(); token <- ""; file <- FALSE
+    # What a value's own code prints while it is read stays out of the session's output.
+    invisible(utils::capture.output(suppressMessages(suppressWarnings({
+      u$.assignLinebuffer(line); u$.assignEnd(nchar(line)); u$.guessTokenFromLine(); u$.completeToken()
+      token <- u$.CompletionEnv[["token"]] %||% ""; file <- isTRUE(tryCatch(u$isInsideQuotes(), error = function(e) FALSE))
+      found <- unique(u$.retrieveCompletions())
+    }))))
+    found <- found[!is.na(found) & nzchar(found)]
+    # What was typed before the name: up to the last $, @ or ::, or a file's folder.
+    cut <- regmatches(token, regexpr(if (file) "^.*/" else "^.*(\\$|@|:::?)", token))
+    head <- if (length(cut) && all(startsWith(found, cut))) cut else ""
+    names <- substring(found, nchar(head) + 1L); names <- names[nzchar(names)]
+    part <- if (file) "file" else if (nzchar(head)) (if (grepl(":$", head)) "name" else "property") else ""
+    type <- function(n) {
+      if (nzchar(part)) return(part)
+      if (endsWith(n, "=")) return("argument")
+      if (endsWith(n, "::")) return("name")
+      if (n %in% keywords) return("keyword")
+      if (!exists(n, envir = globalenv(), inherits = FALSE)) return("name")
+      if (is.function(get(n, envir = globalenv(), inherits = FALSE))) "function" else "variable"
+    }
+    shown <- utils::head(names, most)
+    reply(list(state = "shown", back = nchar(token) - nchar(head), omitted = length(names) - length(shown),
+      # A part whose name is not one R reads as written is given in backticks.
+      items = lapply(shown, function(n) list(label = if (identical(part, "property")) sym(n) else sub("=$", "", n), type = type(n)))))
+  }, interrupt = function(e) reply(list(state = "timeout", problem = "Completing the line took too long and was stopped.")),
+     error = function(e) reply(list(state = "failed", problem = conditionMessage(e))))
+}
+
 emit(list(kind = "ready", version = R.version.string, executable = file.path(R.home("bin"), if (.Platform$OS.type == "windows") "Rscript.exe" else "Rscript"), pid = Sys.getpid(), host = Sys.info()[["nodename"]], folder = getwd(), variables = variables(200)))
 repeat {
   line <- tryCatch(readLines(input, n = 1), interrupt = function(e) NA)
@@ -625,6 +678,7 @@ repeat {
   if (length(line) == 0) break
   msg <- jsonlite::fromJSON(line, simplifyVector = FALSE)
   if (identical(msg$op, "run")) tryCatch(run(msg), interrupt = function(e) say(list(id = msg$id, kind = "done", ok = FALSE, interrupted = TRUE, variables = variables(msg$maxVariables))))
+  if (identical(msg$op, "complete")) complete(msg)
   if (identical(msg$op, "inspect")) tryCatch(inspect(msg), interrupt = function(e) emit(list(id = msg$id, kind = "inspected", state = "timeout", problem = "Reading the value took too long and was stopped.")))
 }
 })

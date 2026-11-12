@@ -27,6 +27,7 @@ export const operationPresentation = {
   'kernel.events': { order: 25, displayName: 'Read who ran what', description: "Lists the cells run in the sessions, newest first: who ran each, when, where and how it ended.", readOnly: true, runsCode: false },
   'kernel.plot': { order: 30, displayName: 'Read a plot', description: "Reads one plot a cell drew, as a PNG image.", readOnly: true, runsCode: false },
   'kernel.inspect': { order: 35, displayName: 'Look at a value', description: "Describes one value of a live session: a table's rows and columns, a model's fit and coefficients, a list's parts, a vector's values, a function's code.", readOnly: true, runsCode: false },
+  'kernel.complete': { order: 37, displayName: 'Complete a name', description: "Lists the names a live session offers after a line being typed: its values, a table's columns, a call's arguments, files.", readOnly: true, runsCode: false },
   'kernel.interrupt': { order: 40, displayName: 'Interrupt a cell', description: "Stops the cell that is running; the session and its variables stay.", readOnly: false, runsCode: false },
   'kernel.start': { order: 45, displayName: 'Start a session', description: "Starts the project's R or Python session without running a cell; a live one is left as it is.", readOnly: false, runsCode: false },
   'kernel.stop': { order: 50, displayName: 'Stop a session', description: "Ends a session; its variables are gone.", readOnly: false, runsCode: false },

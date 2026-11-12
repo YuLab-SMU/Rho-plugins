@@ -112,6 +112,9 @@ export const cellSchema = obj({
   program: maybe({ type: 'string' }), version: maybe({ type: 'string' }),
   // Plots the code saved to project files, each kept as a figure of the file's bytes.
   saved: { type: 'array', items: savedFigureSchema },
+  // The earlier cell this one was run in place of: a notebook shows it where that cell stood.
+  // Both stay in the record.
+  replaces: cellId,
 }, ['cellId', 'changeId', 'by', 'sessionId', 'language', 'code', 'purpose', 'queuedAt', 'startedAt', 'endedAt', 'state', 'number', 'outputs', 'bytes', 'kept', 'cut', 'interrupt', 'problem']);
 
 // One value of a live session as its session describes it: the kind of thing it is, short facts,
@@ -138,4 +141,12 @@ export const objectSchema = obj({
 // missing: no such value or part; timeout: reading it took too long and was stopped; failed: the
 // session could not describe it; ended: the session ended while it was read.
 export const inspectStates = ['shown', 'busy', 'none', 'missing', 'timeout', 'failed', 'ended'] as const;
+// What a session offers after a line being typed. shown: the names it found; busy: a cell is
+// running or waiting; none: no live session of that language; timeout: it took too long and was
+// stopped; failed: the session could not complete the line; ended: the session ended meanwhile.
+export const completeStates = ['shown', 'busy', 'none', 'timeout', 'failed', 'ended'] as const;
+// What a name is, as far as the session says without reading it: one of its own values or
+// functions, a part of a value, a call's argument, a keyword, a file, or a name of a package.
+export const completionTypes = ['variable', 'function', 'property', 'argument', 'keyword', 'file', 'name'] as const;
+export const completionSchema = obj({ label: text, type: { enum: [...completionTypes] } });
 export const sortInput = sortSchema;

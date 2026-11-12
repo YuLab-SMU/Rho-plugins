@@ -550,6 +550,51 @@ def inspect_value(msg):
     except Exception as error:
         reply({'state': 'failed', 'problem': f'{type(error).__name__}: {error}'})
 
+# The names that may follow a line being typed: the session's names, builtins and keywords, the
+# attributes of a value after a dot, and the keys of a dict or the columns of a table inside the
+# quotes of a subscript. A value is read only when it is named by plain names and dots; a call is
+# never run, and a property is named without being read. Each name comes without what was typed
+# before it, with how many characters of the line it replaces (back).
+def completions(line):
+    import rlcompleter, keyword
+    dotted = r'[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*'
+    key = re.search(r'(' + dotted + r''')\s*\[\s*(['"])([^'"]*)$''', line)
+    if key:
+        try: holder = eval(key.group(1), namespace)
+        except Exception: holder = None
+        names = holder.keys() if isinstance(holder, dict) else getattr(holder, 'columns', [])
+        try: names = [n for n in names if isinstance(n, str) and n.startswith(key.group(3))]
+        except Exception: names = []
+        return len(key.group(3)), [{'label': n, 'type': 'property'} for n in names]
+    found = re.search(dotted + r'\.?$', line)
+    token = found.group(0) if found else ''
+    if not token: return 0, []
+    completer, texts, i = rlcompleter.Completer(namespace), [], 0
+    while i < 5000:
+        try: text = completer.complete(token, i)
+        except Exception: text = None
+        if text is None: break
+        texts.append(text); i += 1
+    head = token.rsplit('.', 1)[0] + '.' if '.' in token else ''
+    items, seen = [], set()
+    for text in texts:
+        name = re.sub(r'[( )]+$', '', text)[len(head):]
+        if not name or name in seen or (head and name.startswith('__') and not token.rsplit('.', 1)[1].startswith('_')): continue
+        seen.add(name)
+        items.append({'label': name, 'type': 'keyword' if not head and keyword.iskeyword(name) else 'function' if text.rstrip().endswith(('(', ')')) else 'property' if head else 'variable'})
+    return len(token) - len(head), items
+
+def complete_line(msg):
+    reply = lambda answer: emit({'id': msg['id'], 'kind': 'completed', **answer})
+    try:
+        most = msg.get('maxItems') or 200
+        back, items = completions(msg.get('line') or '')
+        reply({'state': 'shown', 'back': back, 'items': items[:most], 'omitted': max(0, len(items) - most)})
+    except KeyboardInterrupt:
+        reply({'state': 'timeout', 'problem': 'Completing the line took too long and was stopped.'})
+    except Exception as error:
+        reply({'state': 'failed', 'problem': f'{type(error).__name__}: {error}'})
+
 emit({'kind': 'ready', 'version': 'Python ' + sys.version.split()[0], 'executable': sys.executable, 'pid': os.getpid(), 'host': platform.node(), 'folder': os.getcwd(), 'variables': variables(200)})
 while True:
     try:
@@ -560,6 +605,7 @@ while True:
     try:
         msg = json.loads(line)
         if msg.get('op') == 'run': run(msg)
+        if msg.get('op') == 'complete': complete_line(msg)
         if msg.get('op') == 'inspect': inspect_value(msg)
     except KeyboardInterrupt:
         continue

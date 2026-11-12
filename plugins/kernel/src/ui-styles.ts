@@ -35,6 +35,7 @@ const styles = `/* The Notebook: cells in the order they ran beside the live ses
 
 .nb-code { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; align-self: stretch; }
 .nb-code pre { width: 100%; margin: 0; padding: 9px 12px; overflow-x: auto; border-radius: 8px; background: var(--color-well); font: 12.5px/1.5 var(--font-mono); color: var(--color-ink); tab-size: 4; }
+.nb-code pre.editable { cursor: text; }
 .nb-more { min-height: 0; padding: 2px 0; color: var(--color-accent-strong); font-size: 12px; font-weight: 600; }
 .nb-out-more { align-self: flex-start; margin-left: 12px; }
 /* What it printed reads as the session wrote it: fixed columns keep R's tables aligned. */
@@ -82,8 +83,25 @@ const styles = `/* The Notebook: cells in the order they ran beside the live ses
 .nb-new:focus-within { border-color: var(--color-accent); box-shadow: 0 0 0 3px var(--color-accent-soft); }
 .nb-new { --nb-pad: 8px 11px 2px; }
 .nb-editor { position: relative; display: flex; min-width: 0; }
-.nb-new textarea, .nb-ink { margin: 0; padding: var(--nb-pad); border: 0; border-radius: 0; background: none; font: 12.5px/1.5 var(--font-mono); letter-spacing: 0; tab-size: 4; white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; }
-.nb-new textarea { display: block; width: 100%; min-height: 0; outline: 0; resize: none; box-shadow: none; color: var(--color-ink); }
+/* The page's editor, in the box's own font and room; a line high before it is there. */
+.nb-editor.cm { display: block; box-sizing: content-box; min-height: 1.5em; padding: var(--nb-pad); font: 12.5px/1.5 var(--font-mono); letter-spacing: 0; tab-size: 4; color: var(--color-ink); }
+.nb-new .nb-editor.cm .cm-editor { max-height: 21em; }
+.nb-composer.small .nb-editor.cm .cm-editor { max-height: 12em; }
+.nb-edit .nb-editor.cm .cm-editor { max-height: 60vh; }
+.nb-editor textarea, .nb-ink { margin: 0; padding: var(--nb-pad); border: 0; border-radius: 0; background: none; font: 12.5px/1.5 var(--font-mono); letter-spacing: 0; tab-size: 4; white-space: pre; overflow-x: auto; }
+.nb-editor.wrap textarea, .nb-editor.wrap .nb-ink { white-space: pre-wrap; overflow-wrap: break-word; word-break: normal; overflow-x: hidden; }
+.nb-editor textarea { display: block; width: 100%; min-height: 0; outline: 0; resize: none; box-shadow: none; color: var(--color-ink); }
+/* A cell's code written over where it stands: the same room as the code it replaces. */
+.nb-edit { --nb-pad: 9px 12px; display: flex; flex-direction: column; min-width: 0; border-radius: 8px; background: var(--color-well); box-shadow: 0 0 0 1px var(--color-accent), 0 0 0 4px var(--color-accent-soft); }
+.nb-edit.waiting { height: 0; overflow: hidden; box-shadow: none; }
+.nb-edit-foot { display: flex; align-items: center; gap: 6px; min-width: 0; padding: 0 6px 6px 12px; }
+.nb-edit-foot small { margin-right: auto; overflow: hidden; color: var(--color-meta); font-size: 11.5px; text-overflow: ellipsis; white-space: nowrap; }
+.nb-edit-foot > button { flex: none; min-height: 26px; padding: 2px 11px; gap: 5px; border-radius: 6px; font-size: 12.5px; font-weight: 600; }
+/* The runs a cell took the place of, under it. */
+.nb-earlier-toggle { min-height: 0; padding: 0; color: var(--color-meta); font-size: 11.5px; font-weight: 500; text-decoration: underline dotted; text-underline-offset: 2px; }
+.nb-earlier-toggle:hover { background: none; color: var(--color-accent-strong); }
+.nb-earlier { margin: 8px 0 2px; padding: 0; border-left: 2px solid var(--color-hairline); list-style: none; }
+.nb-earlier > .nb-cell { padding-top: 4px; padding-bottom: 4px; }
 .nb-ink { position: absolute; inset: 0; overflow: hidden; color: var(--color-ink); pointer-events: none; }
 .nb-ink code { font: inherit; }
 .nb-editor.inked textarea { color: transparent; caret-color: var(--color-ink); scrollbar-width: none; }
