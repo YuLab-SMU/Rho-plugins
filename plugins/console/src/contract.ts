@@ -38,7 +38,9 @@ export const terminalSchema = obj({
 // it ran in, how it ended and the start of what it printed. `unknown` is an end that was not seen.
 export const terminalCommandSchema = obj({
   commandId: { type: 'string', pattern: '^tc-[a-f0-9]{16}$' }, terminalId, command: { type: 'string' }, cwd: { type: 'string' },
-  by: { type: 'array', items: text, minItems: 1 }, startedAt: time, endedAt: { anyOf: [time, { type: 'null' }] },
+  by: { type: 'array', items: text, minItems: 1 }, enteredBy: text, startedAt: time, endedAt: { anyOf: [time, { type: 'null' }] },
   state: { enum: ['running', 'exited', 'unknown'] }, exit: { anyOf: [{ type: 'integer' }, { type: 'null' }] },
-  output: { type: 'string' }, cut: { type: 'boolean' }, problem: { anyOf: [{ type: 'string' }, { type: 'null' }] },
+  output: { type: 'string' }, outputBytes: { type: 'integer', minimum: 0 }, stored: { type: 'boolean' }, storedBytes: { type: 'integer', minimum: 0 },
+  screens: { type: 'integer', minimum: 0 }, cut: { type: 'boolean' }, problem: { anyOf: [{ type: 'string' }, { type: 'null' }] },
 });
+export const commandScreenSchema = obj({ at: time, lines: { type: 'array', items: { type: 'string' } } });

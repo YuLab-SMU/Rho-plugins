@@ -3,9 +3,11 @@ import * as fs from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import type { Writable } from 'node:stream';
-import { atomicJson, confined, now, readJson, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
+import { confined, now, requireThat, stateDirectory } from '@rho-workspace/plugin-contracts';
 import headless from '@xterm/headless';
-import { markCode, markedShell, shellMarks, unescapeMark } from './shell-marks.js';
+import { markedShell, shellMarks } from './shell-marks.js';
+import { CommandLog, commandLimits, type Tracking } from './terminal-commands.js';
+export { commandLimits, type CommandScreen, type TerminalCommand, type TerminalCommandState } from './terminal-commands.js';
 
 // A terminal is a shell on a pseudo-terminal, in the project folder: what a terminal window gives
 // the person, drawn by the page. The person and an Agent may both use it; who opened it and who
@@ -21,13 +23,10 @@ import { markCode, markedShell, shellMarks, unescapeMark } from './shell-marks.j
 // screen; a reading of it returns at most maxScreenLines lines, and one that waits for output
 // returns once the output has been quiet for quietMs, or at maxWaitMs.
 //
-// The commands run in a terminal whose shell marks them (zsh, bash) are recorded in the project's
-// state folder: at most maxCommands (the oldest go first), each command line up to commandChars
-// characters and the first commandOutputBytes of what it printed, read from the screen; the rest
-// is counted as cut. A listing returns at most maxCommandsListed.
+// The commands run in a terminal whose shell marks them are recorded in the project's state
+// folder, with what they printed, within the limits of terminal-commands.ts (commandLimits).
 export const terminalLimits = { maxTerminals: 4, scrollbackBytes: 1024 * 1024, maxReadBytes: 256 * 1024, maxWriteBytes: 64 * 1024, maxWaitMs: 25000, maxCols: 500, maxRows: 300, closeGraceMs: 2000,
-  screenScrollback: 2000, screenLines: 60, maxScreenLines: 500, quietMs: 400,
-  maxCommands: 500, commandChars: 4096, commandOutputBytes: 16 * 1024, maxCommandsListed: 200 };
+  screenScrollback: 2000, screenLines: 60, maxScreenLines: 500, quietMs: 400, ...commandLimits };
 export type TerminalLimits = typeof terminalLimits;
 
 export interface TerminalRecord {
@@ -40,22 +39,11 @@ export interface TerminalRecord {
   // Whether its shell marks its commands, so Rho records them; known once its first prompt shows.
   recording?: boolean;
 }
-// A command run in a terminal, as its shell marked it: the line, the folder it ran in (relative to
-// the project when inside it), who typed it (everyone whose input reached the shell since the
-// prompt before it, the first first), and how it ended. `unknown` is a command whose end was not
-// seen: its terminal or Rho closed while it ran.
-export type TerminalCommandState = 'running' | 'exited' | 'unknown';
-export interface TerminalCommand {
-  commandId: string; terminalId: string; command: string; cwd: string; by: string[];
-  startedAt: string; endedAt: string | null; state: TerminalCommandState; exit: number | null;
-  output: string; cut: boolean; problem: string | null;
-}
 type Screen = InstanceType<typeof headless.Terminal>;
-type Marker = NonNullable<ReturnType<Screen['registerMarker']>>;
 interface Live {
   child: ChildProcess; control: Writable | null; record: TerminalRecord; chunks: Buffer[]; waiters: Set<() => void>; errors: string; killTimer?: NodeJS.Timeout; screen: Screen;
-  // Who has typed since the last prompt, and the latest to type; the command running and where its output starts.
-  typers: string[]; lastTyper: string | null; running: { command: TerminalCommand; from: Marker | undefined } | null;
+  // Who has typed since the last prompt, and the command running.
+  tracking: Tracking;
 }
 
 // The pseudo-terminal is opened by a few lines of Python, which macOS and Linux have and which
@@ -112,28 +100,13 @@ const whole = (n: unknown, low: number, high: number) => typeof n === 'number' &
 
 export class TerminalHost {
   private live = new Map<string, Live>();
-  private commands: TerminalCommand[] | null = null;
-  private realRoot: string | null = null;
-  private writing: Promise<void> = Promise.resolve();
-  constructor(private root: string, private options: { limits?: Partial<TerminalLimits>; shell?: string; python?: string; env?: NodeJS.ProcessEnv; onChange?: () => void } = {}) {}
+  private log: CommandLog;
+  constructor(private root: string, private options: { limits?: Partial<TerminalLimits>; shell?: string; python?: string; env?: NodeJS.ProcessEnv; onChange?: () => void } = {}) {
+    this.log = new CommandLog(root, () => this.folder(), () => this.limits, () => this.changed());
+  }
   private get limits(): TerminalLimits { return { ...terminalLimits, ...this.options.limits }; }
   private changed() { this.options.onChange?.(); }
   private folder() { return stateDirectory(this.root, '.rho/plugins/console'); }
-  // The recorded commands; any still running when Rho closed ended unseen.
-  private async load() {
-    if (this.commands) return this.commands;
-    const commands = await readJson<TerminalCommand[]>(path.join(await this.folder(), 'terminal-commands.json'), []);
-    if (this.commands) return this.commands;
-    let changed = false;
-    for (const c of commands) if (c.state === 'running') { Object.assign(c, { state: 'unknown', problem: 'Rho closed while it ran; how it ended was not seen.' }); changed = true; }
-    this.commands = commands;
-    if (changed) this.save();
-    return commands;
-  }
-  private save() {
-    this.writing = this.writing.then(async () => atomicJson(path.join(await this.folder(), 'terminal-commands.json'), this.commands ?? [])).catch(() => {});
-    return this.writing;
-  }
   private shell() {
     const chosen = this.options.shell ?? process.env.SHELL ?? '/bin/sh';
     return path.isAbsolute(chosen) ? chosen : '/bin/sh';
@@ -157,14 +130,13 @@ export class TerminalHost {
     }
     const cwd = input.cwd ?? '', folder = cwd ? await confined(this.root, cwd) : await fs.realpath(this.root);
     requireThat((await fs.stat(folder)).isDirectory(), 'invalid', 'Open a terminal in a folder of this project.');
-    const shell = this.shell(), name = path.basename(shell), login = ['zsh', 'bash', 'fish', 'sh', 'ksh', 'dash'].includes(name);
+    const shell = this.shell(), name = path.basename(shell), login = ['zsh', 'bash', 'fish', 'sh', 'ksh', 'dash', 'ash', 'mksh'].includes(name);
     const record: TerminalRecord = { terminalId: 't-' + randomBytes(8).toString('hex'), by: input.by, shell, cwd, cols: input.cols, rows: input.rows, startedAt: now(), endedAt: null, exit: null, bytes: 0, kept: 0, problem: null, recording: false };
     // A shell that marks its commands starts with Rho's startup files around the person's own.
-    await this.load();
+    await this.log.load();
     const kind = markedShell(shell), nonce = randomBytes(12).toString('hex'), base: NodeJS.ProcessEnv = { ...process.env, ...this.options.env };
     for (const [key, value] of Object.entries(base)) if (value === undefined) delete base[key];
-    const marks = kind ? await shellMarks(kind, await this.folder(), nonce, base).catch(() => null) : null;
-    this.realRoot ??= await fs.realpath(this.root).catch(() => this.root);
+    const marks = kind ? await shellMarks(kind, await this.folder(), nonce, base, this.root).catch(() => null) : null;
     const env: NodeJS.ProcessEnv = { ...base, TERM: 'xterm-256color', COLORTERM: 'truecolor', TERM_PROGRAM: 'Rho', ...marks?.env };
     let child: ChildProcess;
     try {
@@ -175,8 +147,8 @@ export class TerminalHost {
       throw error;
     }
     const screen = new headless.Terminal({ cols: input.cols, rows: input.rows, scrollback: this.limits.screenScrollback, allowProposedApi: true });
-    const live: Live = { child, control: child.stdio[3] as Writable, record, chunks: [], waiters: new Set(), errors: '', screen, typers: [], lastTyper: null, running: null };
-    if (marks) screen.parser.registerOscHandler(markCode, data => { this.mark(live, nonce, data); return true; });
+    const live: Live = { child, control: child.stdio[3] as Writable, record, chunks: [], waiters: new Set(), errors: '', screen, tracking: { typers: [], lastTyper: null, running: null, prompt: null } };
+    if (marks) this.log.watch(screen, record.terminalId, nonce, live.tracking, record.by, () => { if (!record.recording) { record.recording = true; this.changed(); } });
     this.live.set(record.terminalId, live);
     const wake = () => { for (const done of [...live.waiters]) done(); };
     child.stdout!.on('data', (chunk: Buffer) => {
@@ -193,13 +165,8 @@ export class TerminalHost {
       clearTimeout(live.killTimer);
       record.endedAt = now(); record.exit = { code, signal };
       // A command running when its shell ended: `exit` ends with the shell; any other was not seen to end.
-      const last = live.running?.command;
-      if (last) {
-        live.running = null;
-        if (/^\s*(exit|logout)\b/.test(last.command)) Object.assign(last, { state: 'exited', exit: code, endedAt: record.endedAt });
-        else Object.assign(last, { state: 'unknown', endedAt: record.endedAt, problem: 'Its terminal ended while it ran.' });
-        this.save();
-      }
+      const last = live.tracking.running?.command;
+      if (last) void this.log.end(live.tracking, /^\s*(exit|logout)\b/.test(last.command) ? code : null, 'Its terminal ended while it ran.', live.screen);
       record.problem = problem ?? (code === 127 && !record.bytes ? (live.errors.trim() || 'The shell could not be started.') : code !== null && code > 1 && !record.bytes && live.errors.trim() ? live.errors.trim().split('\n').at(-1)! : null);
       wake(); this.changed();
     };
@@ -215,7 +182,7 @@ export class TerminalHost {
     requireThat(Buffer.byteLength(data) <= this.limits.maxWriteBytes, 'limit', `Send at most ${this.limits.maxWriteBytes} bytes at a time.`, { limit: 'maxWriteBytes', maximum: this.limits.maxWriteBytes });
     requireThat(live.record.endedAt === null, 'condition', 'This terminal\'s shell has ended. Open a new one.');
     live.child.stdin!.write(data);
-    if (by) { if (!live.typers.includes(by)) live.typers.push(by); live.lastTyper = by; }
+    this.log.typed(live.tracking, by, data);
     if (by && by !== live.record.by) { live.record.typedBy = { by, at: now() }; this.changed(); }
     return { terminalId, bytes: Buffer.byteLength(data), offset: live.record.bytes };
   }
@@ -287,64 +254,10 @@ export class TerminalHost {
     return { lines: text.slice(-lines), omitted: Math.max(0, text.length - lines), cursor: { row: buffer.cursorY, col: buffer.cursorX }, fullScreen: buffer.type === 'alternate', offset: record.bytes, quiet, terminal: { ...record } };
   }
 
-  // A mark from the terminal's shell, read where it falls in the output: S (a command starts, with
-  // its line and folder) or F (the last one ended with this status, and a prompt follows). Marks
-  // without this terminal's nonce are output like any other and change nothing.
-  private mark(live: Live, nonce: string, data: string) {
-    const [given, kind, ...rest] = data.split(';');
-    if (given !== nonce || !this.commands) return;
-    const limits = this.limits, buffer = live.screen.buffer.active, at = now();
-    if (kind === 'S') {
-      const [line = '', folder = ''] = rest.map(unescapeMark);
-      const inside = (root: string) => { const relative = path.relative(root, folder); return relative.startsWith('..') || path.isAbsolute(relative) ? null : relative; };
-      const cwd = folder ? inside(this.root) ?? (this.realRoot ? inside(this.realRoot) : null) ?? folder : '';
-      const by = live.typers.length ? [...live.typers] : live.lastTyper ? [live.lastTyper] : [live.record.by];
-      const command: TerminalCommand = { commandId: 'tc-' + randomBytes(8).toString('hex'), terminalId: live.record.terminalId, command: Array.from(line).slice(0, limits.commandChars).join(''), cwd, by,
-        startedAt: at, endedAt: null, state: 'running', exit: null, output: '', cut: false, problem: null };
-      if (live.running) Object.assign(live.running.command, { state: 'unknown', endedAt: at, problem: 'Another command started before its end was seen.' });
-      live.running = { command, from: buffer.type === 'normal' ? live.screen.registerMarker(0) : undefined };
-      this.commands.push(command);
-      while (this.commands.length > limits.maxCommands) this.commands.shift();
-      live.typers = [];
-    } else if (kind === 'F') {
-      live.record.recording = true; live.typers = [];
-      const running = live.running;
-      if (!running) { this.changed(); return; }
-      live.running = null;
-      const status = Number(rest[0]), command = running.command;
-      // What it printed: the screen's lines from where it started to the prompt that follows.
-      let output = '', cut = false;
-      if (running.from && running.from.line >= 0 && buffer.type === 'normal') {
-        const lines: string[] = [], end = buffer.baseY + buffer.cursorY + (buffer.cursorX > 0 ? 1 : 0);
-        let last: ReturnType<typeof buffer.getLine>;
-        for (let i = running.from.line; i < end; i++) {
-          const row = buffer.getLine(i);
-          if (!row) continue;
-          last = row;
-          if (row.isWrapped && lines.length) lines[lines.length - 1] += row.translateToString(true); else lines.push(row.translateToString(true));
-        }
-        // Output without a final newline is followed by zsh's end-of-line mark, a % or # in inverse
-        // video, which is the shell's, not the command's.
-        let mark: ReturnType<NonNullable<typeof last>['getCell']>;
-        for (let x = (last?.length ?? 0) - 1; x >= 0 && last; x--) { const cell = last.getCell(x); if (cell && cell.getChars().trim()) { mark = cell; break; } }
-        if (mark && mark.isInverse() && ['%', '#'].includes(mark.getChars()) && lines.length) lines[lines.length - 1] = lines[lines.length - 1]!.replace(/[%#]\s*$/, '');
-        output = lines.join('\n').replace(/\s+$/, '');
-        if (Buffer.byteLength(output) > limits.commandOutputBytes) { output = Buffer.from(output).subarray(0, limits.commandOutputBytes).toString('utf8').replace(/\uFFFD$/, ''); cut = true; }
-      } else if (running.from?.line === -1) cut = true;
-      running.from?.dispose();
-      Object.assign(command, { state: 'exited', endedAt: at, exit: Number.isInteger(status) ? status : null, output, cut });
-    } else return;
-    this.save(); this.changed();
-  }
-
   // The commands run in the project's terminals, the newest first, from every terminal and every
-  // run of Rho that kept them.
-  async commandList(limit = 50) {
-    const limits = this.limits;
-    requireThat(whole(limit, 1, limits.maxCommandsListed), 'limit', `List at most ${limits.maxCommandsListed} commands at a time.`, { limit: 'maxCommandsListed', maximum: limits.maxCommandsListed });
-    const ordered = [...await this.load()].reverse();
-    return { commands: ordered.slice(0, limit).map(c => ({ ...c, by: [...c.by] })), omitted: Math.max(0, ordered.length - limit) };
-  }
+  // run of Rho that kept them; and what one printed.
+  commandList(limit = 50, offset = 0) { return this.log.list(limit, offset); }
+  commandOutput(commandId: string, offset?: number, maxChars?: number) { return this.log.output(commandId, offset, maxChars); }
 
   // Closing hangs up the shell, as closing a terminal window does, and forgets the terminal.
   close(terminalId: string) {
@@ -365,13 +278,15 @@ export class TerminalHost {
   }
   // Rho closing: every shell is hung up, and a command still running is recorded as not seen to
   // end. The returned promise settles once the record is written.
-  shutdown() {
-    let changed = false;
+  async shutdown() {
+    const ending: Promise<void>[] = [];
     for (const live of this.live.values()) {
-      this.end(live); clearTimeout(live.killTimer); live.screen.dispose();
-      if (live.running) { Object.assign(live.running.command, { state: 'unknown', endedAt: now(), problem: 'Rho closed while it ran; how it ended was not seen.' }); live.running = null; changed = true; }
+      this.end(live); clearTimeout(live.killTimer);
+      if (live.tracking.running) ending.push(this.log.end(live.tracking, null, 'Rho closed while it ran; how it ended was not seen.', live.screen));
+      live.screen.dispose();
     }
     this.live.clear();
-    return changed ? this.save() : this.writing;
+    await Promise.all(ending);
+    await this.log.save();
   }
 }

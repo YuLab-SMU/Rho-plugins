@@ -3,14 +3,14 @@
 // The page that shows them places the records among its own, such as the Agent's commands, and
 // supplies the scoped client.
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import type { ConsoleRecord, TerminalCommand } from './index.js';
+import type { CommandScreen, ConsoleRecord, TerminalCommand } from './index.js';
 
 export interface UiClient { call(method: string, input: any, signal?: AbortSignal): Promise<any> }
 export type ConsoleCommand = ConsoleRecord;
 export type { TerminalCommand };
 // The protected resource is this tab: it shows at most this much of one command's output, reads a
 // running command again this often, and lists this many of the newest commands.
-export const consoleViewLimits = { shownBytes: 256 * 1024, pollMs: 700, listed: 50 };
+export const consoleViewLimits = { shownBytes: 256 * 1024, pollMs: 700, listed: 50, pageChars: 64 * 1024 };
 const failure = (error: unknown) => error instanceof Error ? error.message : 'The Console could not be reached.';
 const refused = (error: unknown) => ['unavailable', 'unauthorized'].includes((error as { error?: { kind?: string } } | null)?.error?.kind ?? '');
 const clock = (ms: number) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
@@ -154,7 +154,50 @@ export function CommandRecord({ record, client, projectId, made, after, onRunAga
 
 // One command run in a terminal: when, who typed it (`who` names each principal), the line, and
 // how it ended when that was not a clean exit; opened, the folder and what it printed.
-export function TerminalCommandRecord({ command, who, made, after }: { command: TerminalCommand; who: (principal: string) => string; made?: boolean; after?: ReactNode }) {
+// All a terminal command printed that is kept, read in pages when asked for: the kept start, the
+// size of the middle not kept, the kept end, and the full screens it drew.
+interface OutputPage { text: string; nextOffset: number; more: boolean; gap: { at: number; bytes: number } | null; screens: CommandScreen[]; problem: string | null }
+function useCommandOutput(client: UiClient | undefined, projectId: string | undefined, commandId: string) {
+  const [shown, setShown] = useState<{ text: string; next: number; more: boolean; gap: OutputPage['gap']; screens: CommandScreen[]; problem: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const read = useCallback((from: number) => {
+    if (!client || !projectId) return;
+    setBusy(true);
+    client.call('console.terminal.output', { projectId, commandId, offset: from, maxChars: consoleViewLimits.pageChars }).then((page: OutputPage) => {
+      setShown(old => ({ text: (from ? old?.text ?? '' : '') + page.text, next: page.nextOffset, more: page.more, gap: page.gap, screens: from ? old?.screens ?? [] : page.screens, problem: page.problem ?? '' }));
+    }, (e: Error) => setShown(old => ({ ...(old ?? { text: '', next: 0, more: false, gap: null, screens: [] }), problem: e.message }))).finally(() => setBusy(false));
+  }, [client, projectId, commandId]);
+  return { shown, busy, read };
+}
+// A full screen without the blank rows above and below what it showed (less paints from the bottom).
+const shownLines = (lines: string[]) => { const first = lines.findIndex(l => l.trim()); return first < 0 ? [] : lines.slice(first, lines.length - [...lines].reverse().findIndex(l => l.trim())); };
+const sizeText = (bytes: number) => bytes < 1024 ? bytes + ' bytes' : bytes < 1048576 ? (bytes / 1024).toFixed(bytes < 10240 ? 1 : 0) + ' KB' : (bytes / 1048576).toFixed(1) + ' MB';
+
+// What a terminal command printed: the start its record holds and, asked for, all that is kept
+// with the full screens it drew. Also for pages that show the command elsewhere, such as the Graph.
+export function TerminalOutput({ command, client, projectId }: { command: Pick<TerminalCommand, 'commandId' | 'output' | 'outputBytes' | 'stored' | 'screens' | 'state' | 'problem'>; client?: UiClient; projectId?: string }) {
+  ensureStyles();
+  const { shown, busy, read } = useCommandOutput(client, projectId, command.commandId);
+  const moreText = command.outputBytes > new TextEncoder().encode(command.output).length + 1;
+  if (shown) return <>
+    {shown.screens.map((screen, i) => <figure key={i} className="console-screen">
+      <figcaption className="console-note">{shown.screens.length > 1 ? `Full screen ${i + 1} of ${shown.screens.length}` : 'The full screen'} it showed at {clock(Date.parse(screen.at))}</figcaption>
+      <pre className="console-output">{shownLines(screen.lines).join('\n')}</pre>
+    </figure>)}
+    {shown.text && <pre className="console-output long">{shown.gap && shown.text.length > shown.gap.at ? <>{shown.text.slice(0, shown.gap.at)}<span className="console-gap">{sizeText(shown.gap.bytes)} in the middle is not kept</span>{shown.text.slice(shown.gap.at)}</> : shown.text}</pre>}
+    {shown.more && <div className="console-actions"><button type="button" className="console-again" disabled={busy} onClick={() => read(shown.next)}>{busy ? 'Reading…' : 'Show more'}</button></div>}
+    {shown.problem && <p className="console-note">{shown.problem}</p>}
+  </>;
+  return <>
+    {command.output ? <pre className="console-output">{command.output}</pre> : <p className="console-note">{command.state === 'running' ? 'Running. Its output shows in the terminal.' : command.screens ? 'It drew on the full screen and printed nothing after.' : 'It printed nothing.'}</p>}
+    {command.stored && client && <div className="console-actions"><button type="button" className="console-again" disabled={busy} onClick={() => read(0)}>
+      {busy ? 'Reading…' : moreText ? `Show all it printed · ${sizeText(command.outputBytes)}${command.screens ? ', and the full screen' : ''}` : 'Show the full screen it drew'}
+    </button></div>}
+    {command.problem && <p className="console-note">{command.problem}</p>}
+  </>;
+}
+
+export function TerminalCommandRecord({ command, who, made, after, client, projectId }: { command: TerminalCommand; who: (principal: string) => string; made?: boolean; after?: ReactNode; client?: UiClient; projectId?: string }) {
   ensureStyles();
   const [now, setNow] = useState(Date.now());
   const running = command.state === 'running';
@@ -173,9 +216,7 @@ export function TerminalCommandRecord({ command, who, made, after }: { command: 
       </summary>
       <div className="console-detail">
         <p className="console-note">In {command.cwd ? command.cwd + '/' : 'the project folder'}{command.by.length > 1 ? ' · typed by ' + typed : ''}</p>
-        {command.output ? <pre className="console-output">{command.output}</pre> : <p className="console-note">{running ? 'Running. Its output shows in the terminal.' : 'Nothing it printed is kept here: it printed nothing, or drew a full screen.'}</p>}
-        {command.cut && <p className="console-note">Only the start of what it printed is kept here.</p>}
-        {command.problem && <p className="console-note">{command.problem}</p>}
+        <TerminalOutput command={command} client={client} projectId={projectId} />
       </div>
     </details>
     {after}
@@ -199,6 +240,10 @@ const styles = `.console-command { border-top: 1px solid var(--color-divider); }
 .console-detail { display: flex; flex-direction: column; gap: 6px; margin: 0 0 10px calc(4.6em + 12px); }
 .console-output { margin: 0; padding: 8px 10px; max-height: 22em; overflow: auto; border-radius: 6px; background: var(--color-well); font: 11.5px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .console-note { color: var(--color-meta); font-size: 12px; }
+.console-output.long { max-height: 32em; }
+.console-gap { display: block; margin: 6px 0; padding: 3px 8px; border-left: 2px solid var(--color-hairline-strong); color: var(--color-meta); font-family: var(--font-sans, inherit); font-style: italic; }
+.console-screen { display: flex; flex-direction: column; gap: 4px; margin: 0; }
+.console-screen pre { white-space: pre; overflow-x: auto; }
 .console-actions { display: flex; }
 .console-command > .console-actions { margin: 0 0 8px calc(4.6em + 12px); }
 .console-again { min-height: 0; padding: 2px 0; color: var(--color-accent-strong); font-size: 13px; font-weight: 600; }

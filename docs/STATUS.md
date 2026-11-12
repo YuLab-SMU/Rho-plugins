@@ -162,6 +162,14 @@ Project notebook and shows the first Notebook drawn until another is chosen. Con
 records each command run in a zsh or bash terminal (`console.terminal.commands`): who typed it,
 the folder, the exit status and the start of its output, from marks the shell prints with a
 nonce, and gives the shell a history file of its own; macOS zsh and bash were run, Linux was not.
+Console 0.3.5 records fish (hooks) and sh, dash and ksh93 (marks in the prompt; the command is
+the line read from the screen, checked against the lines typed, so a line dash read after it
+was typed ahead is recorded as it ran); mksh and pdksh, which scroll a long line sideways, keep
+Rho's history but are not marked. A command's output is read line by line from the emulator:
+past the record's 16 KiB a file keeps the first 512 KiB and last 64 KiB with the gap counted,
+and the last 4 screens a full-screen program left, under 64 MiB per project
+(`console.terminal.output` reads it in pages). macOS bash, zsh, /bin/sh, dash and ksh and Debian
+12 arm64 bash, fish 3.6, dash, ksh93u+m and mksh were run: 17 and 19 console tests passed.
 Notebook 0.5.1 runs local R sessions on Linux. Node hands the R runner its answer descriptor
 as a socket, which Linux will not open as `/dev/fd/3` (ENXIO); there a `cat` that ignores
 the session's interrupts relays the answers. Printed text after a mark now waits up to a

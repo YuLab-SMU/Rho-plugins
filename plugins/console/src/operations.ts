@@ -1,5 +1,5 @@
 import { objectSchema as obj, timelineContract } from '@rho-workspace/plugin-contracts';
-import { changeId, commandId, recordSchema, terminalCommandSchema, terminalId, terminalSchema, terminalSize } from './contract.js';
+import { changeId, commandId, commandScreenSchema, recordSchema, terminalCommandSchema, terminalId, terminalSchema, terminalSize } from './contract.js';
 
 // Owner business contracts. Application project/authentication fields are separate.
 export const operationContracts = {
@@ -58,10 +58,18 @@ export const operationContracts = {
     outputSchema: obj({ lines: { type: 'array', items: { type: 'string' } }, omitted: { type: 'integer', minimum: 0 }, cursor: obj({ row: { type: 'integer', minimum: 0 }, col: { type: 'integer', minimum: 0 } }), fullScreen: { type: 'boolean' }, offset: { type: 'integer', minimum: 0 }, quiet: { type: 'boolean' }, terminal: terminalSchema }),
     requires: [] as string[], effect: 'read' as const,
   },
-  // The commands run in the project's terminals, the newest first, each with who typed it.
+  // The commands run in the project's terminals, the newest first from `offset`, each with who typed it.
   'console.terminal.commands': {
-    inputSchema: obj({ limit: { type: 'integer', minimum: 1, maximum: 200 } }, []),
+    inputSchema: obj({ limit: { type: 'integer', minimum: 1, maximum: 200 }, offset: { type: 'integer', minimum: 0 } }, []),
     outputSchema: obj({ commands: { type: 'array', items: terminalCommandSchema }, omitted: { type: 'integer', minimum: 0 } }),
+    requires: [] as string[], effect: 'read' as const,
+  },
+  // All a terminal command printed that is kept, from a character offset: its start, a gap where
+  // the middle was not kept, its end; and the full screens it drew.
+  'console.terminal.output': {
+    inputSchema: obj({ commandId: { type: 'string', pattern: '^tc-[a-f0-9]{16}$' }, offset: { type: 'integer', minimum: 0 }, maxChars: { type: 'integer', minimum: 1, maximum: 65536 } }, ['commandId']),
+    outputSchema: obj({ commandId: { type: 'string' }, text: { type: 'string' }, offset: { type: 'integer', minimum: 0 }, nextOffset: { type: 'integer', minimum: 0 }, more: { type: 'boolean' }, total: { type: 'integer', minimum: 0 },
+      gap: { anyOf: [obj({ at: { type: 'integer', minimum: 0 }, bytes: { type: 'integer', minimum: 0 } }), { type: 'null' }] }, screens: { type: 'array', items: commandScreenSchema }, problem: { anyOf: [{ type: 'string' }, { type: 'null' }] } }),
     requires: [] as string[], effect: 'read' as const,
   },
   'console.terminal.resize': {

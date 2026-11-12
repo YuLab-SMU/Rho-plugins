@@ -1,9 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { ConsoleRunner, consoleLimits } from '@rho-workspace/plugin-console';
 
 // Windows has no /bin/sh; these run under Git for Windows' sh, as Core's own checks do, and a
@@ -201,9 +203,11 @@ test('an Agent reads a terminal as text and types in it: its screen, a command\'
   const root = await project(), host = new TerminalHost(root, { shell: '/bin/sh', limits: { quietMs: 300 } });
   t.after(() => host.shutdown());
   const { terminal } = await host.open({ cols: 40, rows: 10, by: 'browser:local' });
+  await host.screen(terminal.terminalId, { after: 0, waitMs: 8000 });
   // The person's own typing is theirs; the Agent's is kept as the latest input of another.
-  host.write(terminal.terminalId, 'PS1="$ "\n', 'browser:local');
+  const set = host.write(terminal.terminalId, 'PS1="$ "\n', 'browser:local');
   assert.equal(host.list().terminals[0].typedBy ?? null, null);
+  await host.screen(terminal.terminalId, { after: set.offset, waitMs: 8000 });
   const sent = host.write(terminal.terminalId, 'printf "\\033[31mred\\033[0m %s\\n" one; echo two; echo a-line-much-longer-than-forty-columns-to-wrap-it\r', 'agent:a');
   assert.equal(typeof sent.offset, 'number');
   const after = await host.screen(terminal.terminalId, { after: sent.offset, waitMs: 10000 });
@@ -251,13 +255,25 @@ test('terminal limits: how many are open, the scrollback kept, and one write', {
   assert.deepEqual(host.list().terminals, []);
 });
 
-// zsh and bash mark each command for Rho. A home of its own keeps the machine's startup files out.
-const shells = ['/bin/bash', '/bin/zsh', '/usr/bin/zsh'].filter(file => { try { return spawnSync(file, ['-c', 'true']).status === 0; } catch { return false; } });
-for (const shell of [...new Set(shells.map(s => path.basename(s)))].map(name => shells.find(s => path.basename(s) === name))) {
+// zsh, bash and fish mark each command for Rho, and sh, dash and ksh their prompt. A home of its
+// own keeps the machine's startup files out.
+const shells = ['/bin/bash', '/bin/zsh', '/usr/bin/zsh', '/usr/bin/fish', '/opt/homebrew/bin/fish', '/usr/local/bin/fish', '/bin/sh', '/bin/dash', '/usr/bin/dash', '/bin/ksh', '/usr/bin/ksh', '/usr/bin/ksh93', '/bin/mksh', '/usr/bin/mksh']
+  .filter(file => { try { return spawnSync(file, ['-c', 'true']).status === 0; } catch { return false; } });
+const one = list => [...new Set(list.map(s => path.basename(s)))].map(name => list.find(s => path.basename(s) === name));
+// What a shell is: /bin/sh and ksh may be another shell by another name.
+const real = shell => { try { return path.basename(fsSync.realpathSync(shell)); } catch { return path.basename(shell); } };
+const sideways = shell => ['mksh', 'mksh-static', 'pdksh', 'oksh'].includes(real(shell));
+// Where each keeps Rho's history of its commands; dash keeps none.
+const historyFile = (shell, root, home) => {
+  const name = path.basename(shell);
+  if (name === 'fish') return path.join(home, '.local/share/fish', 'rho_' + createHash('sha256').update(path.resolve(root)).digest('hex').slice(0, 12) + '_history');
+  return real(shell) === 'dash' ? null : path.join(root, '.rho/plugins/console/history', (['zsh', 'bash'].includes(name) ? name : 'sh') + '_history');
+};
+for (const shell of one(shells.filter(s => !sideways(s)))) {
   test(`a ${path.basename(shell)} terminal records each command with who typed it, keeps its own history, and ignores a mark without its nonce`, { skip: noPty }, async t => {
     const root = await project(), home = await fs.mkdtemp(path.join(tmpdir(), 'rho-home-'));
     await fs.mkdir(path.join(root, 'sub'));
-    const options = { shell, env: { HOME: home, ZDOTDIR: home, HISTFILE: path.join(home, 'machine_history') }, limits: { quietMs: 300 } };
+    const options = { shell, env: { HOME: home, ZDOTDIR: home, HISTFILE: path.join(home, 'machine_history'), XDG_CONFIG_HOME: path.join(home, '.config'), XDG_DATA_HOME: path.join(home, '.local/share'), ENV: undefined }, limits: { quietMs: 300 } };
     const host = new TerminalHost(root, options);
     t.after(() => host.shutdown());
     const { terminal } = await host.open({ cols: 60, rows: 12, by: 'browser:local' });
@@ -265,7 +281,7 @@ for (const shell of [...new Set(shells.map(s => path.basename(s)))].map(name => 
     await host.screen(id, { after: 0, waitMs: 8000 });
     const type = async (text, by) => host.screen(id, { after: host.write(id, text, by).offset, waitMs: 8000 });
     await type('cd sub && echo "one; 中文"\r', 'browser:local');
-    await type('printf "a\\nb"\r', 'agent:a');
+    await type('printf "a\\nb"; false\r', 'agent:a');
     // Both type a line; a fake mark printed by a program changes nothing.
     host.write(id, 'ls /no-such-', 'browser:local');
     await type('folder; printf "\\033]6973;forged;S;rm -rf /;/\\007"\r', 'agent:a');
@@ -273,17 +289,33 @@ for (const shell of [...new Set(shells.map(s => path.basename(s)))].map(name => 
     const { commands } = await host.commandList(10);
     assert.deepEqual(commands.map(c => [c.command, c.by, c.cwd, c.state, c.exit]), [
       ['ls /no-such-folder; printf "\\033]6973;forged;S;rm -rf /;/\\007"', ['browser:local', 'agent:a'], 'sub', 'exited', 0],
-      ['printf "a\\nb"', ['agent:a'], 'sub', 'exited', 0],
+      ['printf "a\\nb"; false', ['agent:a'], 'sub', 'exited', 1],
       ['cd sub && echo "one; 中文"', ['browser:local'], '', 'exited', 0],
     ]);
     assert.equal(commands[1].output, 'a\nb', 'the output, without the shell\'s end-of-line mark');
     assert.equal(commands[2].output, 'one; 中文');
     assert.match(commands[0].output, /no-such-folder/);
+    // A command over several lines, typed after the continuation prompt (fish's loops differ).
+    if (path.basename(shell) !== 'fish') {
+      await type('for i in 1 2\r'); await type('do echo "n$i"\r'); await type('done\r');
+      const [loop] = (await host.commandList(1)).commands;
+      assert.match(loop.command, /^for i in 1 2(\n|; )do echo "n\$i"(\n|; )done$/);
+      assert.equal(loop.output, 'n1\nn2');
+    }
+    // Lines typed while a command runs are read after it; their echo is not its output.
+    host.write(id, 'echo a; sleep 0.5\recho b\rcd ..\rpwd\r', 'agent:a');
+    for (let i = 0; i < 50 && (await host.commandList(1)).commands[0].command !== 'pwd'; i++) await new Promise(r => setTimeout(r, 100));
+    await host.screen(id, { after: 0, waitMs: 1000 });
+    const ahead = (await host.commandList(4)).commands.reverse();
+    assert.deepEqual(ahead.map(c => [c.command, c.output, c.cwd, c.state]).slice(0, 3), [['echo a; sleep 0.5', 'a', 'sub', 'exited'], ['echo b', 'b', 'sub', 'exited'], ['cd ..', '', 'sub', 'exited']]);
+    assert.deepEqual([ahead[3].command, ahead[3].cwd], ['pwd', '']);
+    assert.ok(ahead[3].output.endsWith(path.basename(root)), ahead[3].output);
     // Its own history, not the machine's.
     await type('exit\r', 'browser:local');
     await new Promise(r => setTimeout(r, 500));
-    const history = await fs.readFile(path.join(root, '.rho/plugins/console/history', path.basename(shell) + '_history'), 'utf8');
-    assert.match(history, /printf "a\\nb"/);
+    const file = historyFile(shell, root, home);
+    // fish escapes a backslash in its history file.
+    if (file) assert.match(await fs.readFile(file, 'latin1'), /printf "a\\\\?nb"; false/);
     await assert.rejects(fs.stat(path.join(home, 'machine_history')));
     assert.deepEqual((await host.commandList(1)).commands.map(c => [c.command, c.state]), [['exit', 'exited']]);
     // Another run of Rho reads them back; one running when Rho closed ended unseen.
@@ -294,7 +326,70 @@ for (const shell of [...new Set(shells.map(s => path.basename(s)))].map(name => 
     const again = new TerminalHost(root, options);
     const listed = await again.commandList(2);
     assert.deepEqual(listed.commands.map(c => [c.command, c.state]), [['sleep 99', 'unknown'], ['exit', 'exited']]);
-    assert.equal(listed.omitted, 3);
+    assert.equal(listed.omitted, path.basename(shell) === 'fish' ? 7 : 8);
     await assert.rejects(again.commandList(201), e => e.kind === 'limit');
+  });
+}
+
+// What a command printed past the start, and what a full-screen program drew, are kept beside its
+// record, within their limits.
+test('a terminal command keeps all it printed as its start and end, the screens a full-screen program left, and lets the oldest go past the budget', { skip: noPty || !shells.includes('/bin/bash') }, async t => {
+  const root = await project(), home = await fs.mkdtemp(path.join(tmpdir(), 'rho-home-'));
+  const host = new TerminalHost(root, { shell: '/bin/bash', env: { HOME: home }, limits: { quietMs: 300, commandOutputBytes: 1000, commandHeadBytes: 4000, commandTailBytes: 2000, outputStoreBytes: 9000 } });
+  t.after(() => host.shutdown());
+  const { terminal } = await host.open({ cols: 80, rows: 12, by: 'browser:local' });
+  const id = terminal.terminalId;
+  await host.screen(id, { after: 0, waitMs: 8000 });
+  // Typed, and waited for until it ends.
+  const type = async text => {
+    const [before] = (await host.commandList(1)).commands;
+    host.write(id, text, 'agent:a');
+    for (let i = 0; i < 100; i++) { await new Promise(r => setTimeout(r, 100)); const [last] = (await host.commandList(1)).commands; if (last && last.commandId !== before?.commandId && last.state !== 'running') return; }
+    throw new Error('It did not end: ' + text);
+  };
+  await type('seq 1 20000\r');
+  await type('printf "\\033[?1049h\\033[Hfull screen here"; sleep 0.3; printf "\\033[?1049l"; echo after\r');
+  const [drawn, big] = (await host.commandList(2)).commands;
+  assert.equal(big.command, 'seq 1 20000');
+  assert.ok(Buffer.byteLength(big.output) <= 1000 && big.output.startsWith('1\n2\n3\n'), 'the record holds the start');
+  assert.equal(big.outputBytes, Array.from({ length: 20000 }, (_, i) => String(i + 1) + '\n').join('').length, 'all it printed, the last newline too');
+  assert.deepEqual([big.stored, big.cut], [true, true]);
+  // Read in pages: the kept start, a gap where the middle was, the kept end.
+  const first = await host.commandOutput(big.commandId, 0, 3000);
+  assert.ok(first.text.startsWith('1\n2\n') && first.more && first.gap.bytes > 90000 && first.gap.at > 3000);
+  let all = first.text, page = first;
+  while (page.more) { page = await host.commandOutput(big.commandId, page.nextOffset, 3000); all += page.text; }
+  assert.equal(all.length, first.total);
+  assert.ok(all.slice(0, first.gap.at).endsWith('\n') && all.trimEnd().endsWith('19999\n20000'), 'the end is kept: ' + JSON.stringify(all.slice(-30)));
+  assert.ok(Buffer.byteLength(all.slice(first.gap.at)) <= 2000);
+  // A full-screen program: its last screen, and what it printed after.
+  assert.deepEqual([drawn.output, drawn.screens, drawn.stored], ['after', 1, true]);
+  const shown = await host.commandOutput(drawn.commandId);
+  assert.ok(shown.screens[0].lines[0].startsWith('full screen here'));
+  // Past the budget the oldest kept output goes, and its record says so.
+  await type('seq 1 20000\r');
+  const [, , oldest] = (await host.commandList(3)).commands;
+  assert.equal(oldest.commandId, big.commandId);
+  assert.equal(oldest.stored, false); assert.match(oldest.problem, /Only the start/);
+  assert.equal((await host.commandOutput(big.commandId)).text, oldest.output);
+  await assert.rejects(host.commandOutput(big.commandId, 0, 64 * 1024 + 1), e => e.kind === 'limit');
+  await assert.rejects(host.commandOutput('tc-none'), e => e.kind === 'not_found');
+});
+
+// mksh and pdksh scroll a long line sideways as it is typed: their commands are not recorded, and
+// they still keep Rho's history rather than the machine's.
+for (const shell of one(shells.filter(sideways))) {
+  test(`a ${path.basename(shell)} terminal (${real(shell)}) runs unmarked and keeps Rho's history`, { skip: noPty }, async t => {
+    const root = await project(), home = await fs.mkdtemp(path.join(tmpdir(), 'rho-home-'));
+    const host = new TerminalHost(root, { shell, env: { HOME: home, HISTFILE: path.join(home, 'machine_history'), ENV: undefined }, limits: { quietMs: 300 } });
+    t.after(() => host.shutdown());
+    const { terminal } = await host.open({ cols: 40, rows: 12, by: 'browser:local' });
+    await host.screen(terminal.terminalId, { after: 0, waitMs: 8000 });
+    await host.screen(terminal.terminalId, { after: host.write(terminal.terminalId, 'echo a-line-much-longer-than-forty-columns-wide end\r').offset, waitMs: 8000 });
+    assert.equal(host.list().terminals[0].recording, false);
+    assert.deepEqual((await host.commandList(10)).commands, []);
+    await host.screen(terminal.terminalId, { after: host.write(terminal.terminalId, 'exit\r').offset, waitMs: 3000 });
+    assert.match(await fs.readFile(path.join(root, '.rho/plugins/console/history/sh_history'), 'latin1'), /a-line-much-longer/);
+    await assert.rejects(fs.stat(path.join(home, 'machine_history')));
   });
 }

@@ -39,26 +39,53 @@ kept across a restart: when Rho closes, each shell is hung up as if its window w
 A few lines of Python (`python3`, or the program named) open the pseudo-terminal on macOS and
 Linux, so the package needs no compiled module; on Windows `open` is refused as unavailable.
 
-A zsh or bash terminal records its commands (`shell-marks.ts`). The shell starts with Rho's
-startup files around the person's own (for zsh a `ZDOTDIR` whose files read theirs, as VS Code's
-terminal does; for bash an init file that reads the login files), which give it a history file
-of its own under `.rho/plugins/console/history/`, apart from the machine's shell history, and
-two hooks. Before a command runs, the shell prints its line and folder as an escape sequence
-(OSC 6973) that terminals ignore; before the next prompt, its exit status. Each carries a nonce
-only that shell holds, so a program printing one is ignored. `commandList` returns the recorded
-commands, newest first: the line, the folder, who typed it (everyone whose input reached the
-shell since the prompt before it, the first first), how it ended, and the start of what it
-printed, read from the screen without zsh's end-of-line mark. They are kept in
+A terminal records the commands run in it (`shell-marks.ts`, `terminal-commands.ts`). The shell
+starts with Rho's startup files around the person's own, which give it a history of its own,
+apart from the machine's shell history, and marks: escape sequences (OSC 6973) that terminals
+ignore, each with a nonce only that shell holds, so a program printing one is ignored.
+
+- **zsh, bash and fish** have hooks. zsh gets a `ZDOTDIR` whose files read the person's, as VS
+  Code's terminal does; bash an init file that reads the login files; fish a file sourced by
+  `--init-command` after its configuration. Before a command runs the shell marks its line and
+  folder; before the next prompt, its exit status. zsh and bash keep their history under
+  `.rho/plugins/console/history/`; fish keeps it by name in its own data folder, as
+  `rho_<project hash>`.
+- **sh, dash and ksh93** have no hooks. `ENV` names a file that reads the login files and the
+  person's own `ENV` file (or `~/.kshrc`), then puts the marks in the prompt: the last status
+  where it starts, the folder where it ends, and a mark after the continuation prompt. The command
+  is the line typed after the prompt, read from the screen when the line feed that runs it
+  arrives, and the lines after each continuation prompt. dash shows a line typed while a command
+  runs only then, not again when it reads it, so the line shown after the prompt is checked
+  against the lines typed: one typed after the prompt appears as typed; otherwise the oldest line
+  typed before the prompt appeared is what ran, and what is shown is its output. A command it ran
+  without a line feed (a `cd` typed ahead) is recorded at the next prompt. `/bin/sh` that is bash
+  gets bash's hooks. A prompt the person sets later replaces the marks.
+- **mksh, pdksh, tcsh, csh** and other shells are not marked (`recording` stays false). mksh and
+  pdksh scroll a long line sideways as it is typed, so the screen does not show it whole; they
+  still keep Rho's history file.
+
+`commandList` returns the recorded commands, newest first from an offset: the line, the folder,
+who typed it (everyone whose input reached the shell since the prompt before it, the first
+first) and who entered it, how it ended, and the start of what it printed. What a command
+printed is read from the terminal emulator line by line as each line feed completes one, so
+carriage returns and colours are applied and nothing depends on the scrollback; the echo of a
+line typed while it ran is not its output, and zsh's end-of-line mark is removed. What a
+full-screen program (an editor, `top`, `less`) drew is kept as the screen it showed when it
+left. When there is more than the record holds, or a screen, a file beside it keeps the first
+512 KiB and the last 64 KiB, the bytes between counted, and the last 4 screens; `commandOutput`
+reads it in pages of characters, with the place and size of the gap. Records are kept in
 `terminal-commands.json` across restarts; one running when its terminal or Rho closed ended
-unseen (`unknown`). Other shells run without marks (`recording` stays false).
+unseen (`unknown`).
 
 Limits (`terminalLimits`, each configurable): at most 4 terminals in a project at once (an ended
 one makes room; with all of them live another is refused), the last 1 MiB of each one's output
 (a reader asking for older bytes is told how many are gone), 256 KiB and 25 s of waiting per
 read, 64 KiB per write, and for `screen` 2000 lines kept above the screen, at most 500 lines per
-reading and 400 ms of quiet before a waiting one returns; 500 recorded commands (the oldest go
-first), each line up to 4096 characters and the first 16 KiB of what it printed (the rest is
-marked cut), at most 200 per listing.
+reading and 400 ms of quiet before a waiting one returns. For the recorded commands
+(`commandLimits`): 500 records (the oldest go first, with their files), each line up to 4096
+characters, the first 16 KiB of output in the record, 512 KiB first and 64 KiB last in its file,
+4 screens, 64 MiB of such files in a project (past it the oldest are let go and their records say
+so), at most 200 records per listing and 64 Ki characters per read of output.
 
 State lives under `.rho/plugins/console/` in the project. The package grants no
 authority: the application decides who may run commands. Rho lets only the person
@@ -75,7 +102,9 @@ line and `CommandRecord` one command, its output read as it arrives (at most 256
 read again every 700 ms while it runs), with the page's own line under it, such as the files
 that changed while it ran. `useTerminalCommands` reads the newest 50 terminal commands as the
 cursor moves, and `TerminalCommandRecord` draws one, naming who typed it through the page's
-`who`. They add their own styles once, in the page's variables.
+`who`; given the page's client, it reads all that is kept of the output in pages of 64 Ki
+characters, and the full screens, when asked. `TerminalOutput` is that part alone, for a page
+that shows the command elsewhere. They add their own styles once, in the page's variables.
 
 ```sh
 npm run build
