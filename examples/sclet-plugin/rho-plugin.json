@@ -61,7 +61,7 @@
     {
       "id": "ledger",
       "title": "Read analysis ledger",
-      "description": "Run GetAnalysisLedger without copying assay matrices; findings are included only when requested.",
+      "description": "Read the ledger through GetAIAgentPayload and return its payload plus the outbound policy; findings are included only when requested.",
       "effect": "native",
       "methods": [
         "kernel.run"
@@ -80,6 +80,85 @@
         },
         "required": [
           "object"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "profile",
+      "title": "Read data profile",
+      "description": "Read the value-free dataset profile through GetAIAgentPayload, with its outbound policy.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "design",
+      "title": "Read design candidates",
+      "description": "Read GetAIProfile's design candidates, colData column names, recorded design confirmations and the ledger fingerprint. Column values stay in R.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+            "maxLength": 128
+          }
+        },
+        "required": [
+          "object"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "confirm-design",
+      "title": "Confirm design roles",
+      "description": "Record which colData column plays each design role through ConfirmAIDesignSemantics. The declaration is user input; sclet never infers it from column names.",
+      "effect": "native",
+      "methods": [
+        "kernel.run"
+      ],
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "object": {
+            "type": "string",
+            "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+            "maxLength": 128
+          },
+          "design": {
+            "type": "object",
+            "minProperties": 1,
+            "additionalProperties": {
+              "type": "string",
+              "pattern": "^[A-Za-z.][A-Za-z0-9._]*$",
+              "maxLength": 128
+            }
+          }
+        },
+        "required": [
+          "object",
+          "design"
         ],
         "additionalProperties": false
       }
@@ -288,8 +367,8 @@
     },
     {
       "id": "report",
-      "title": "Render a recorded report",
-      "description": "RenderAIReport reads recorded evidence and prints its own verification results.",
+      "title": "Read a recorded report",
+      "description": "Read the report through GetAIAgentPayload. Report text is free-form and needs user consent before it is sent to a model provider; the outbound policy line says whether consent is required.",
       "effect": "native",
       "methods": [
         "kernel.run"

@@ -6,9 +6,10 @@
 <h1>sclet</h1><p>Work with a SingleCellExperiment in this project’s shared R session.</p>
 <div id="status" role="status">Read sessions to see what is already running.</div>
 <div class="row"><button data-op="sessions">Read sessions</button><button data-op="check">Check R packages</button><button data-op="skill">Read sclet guide</button></div>
-<div class="row"><label>R object <input id="object" value="sce" maxlength="128"></label><button data-op="ledger">Read ledger</button><button data-op="registry">Available actions</button></div>
+<div class="row"><label>R object <input id="object" value="sce" maxlength="128"></label><button data-op="ledger">Read ledger</button><button data-op="profile">Data profile</button><button data-op="design">Read design</button><button data-op="registry">Available actions</button></div>
 <div class="row"><label>Report ID <input id="report-id" placeholder="Active result, or a record ID" maxlength="128"></label><button data-op="report">Read report</button></div>
 <p class="note">Checking packages starts R if needed. Load your data in Notebook first. Reading a ledger runs a small cell; assay matrices stay in R. Missing packages must be installed in the selected R environment.</p>
+<details><summary>Confirm design roles</summary><p>GetAIProfile suggests design candidates; sclet never infers roles from column names. Declare which colData column plays each role (batch, condition, subject, sample); column values stay in R.</p><label for="design">Design JSON</label><textarea id="design" spellcheck="false" placeholder='{"batch":"batch_id","condition":"condition"}'></textarea><div class="row"><button data-op="confirm-design">Confirm design</button></div></details>
 <details><summary>Plan and execute</summary><p>Read the current ledger and action registry. Supply its fingerprint and your chosen actions; sclet validates native prerequisites before execution.</p>
 <label for="plan">Plan JSON</label><textarea id="plan" spellcheck="false" placeholder='{"task":"my-analysis","context_fingerprint":"from the current ledger","actions":[{"id":"s1","action":"normalize_data"}]}'></textarea>
 <div class="row"><button data-op="validate">Validate plan</button></div><label>Validation ID <input id="validation" placeholder="Returned by validation" size="38"></label><div class="row"><button data-op="execute">Execute validated plan</button></div><p class="note">Execution updates the selected R object. Execution status and scientific validity are separate; read the report and its evidence checks afterward.</p></details>
@@ -17,15 +18,18 @@
 <script>
 let cellId=null,timer=null,busy=false;
 const out=document.querySelector('#output'),status=document.querySelector('#status'),refresh=document.querySelector('#refresh');
-function show(cell){cellId=cell.cellId;out.textContent=(cell.outputs||[]).map(x=>x.text||'').join('\n')+(cell.error?'\n'+(typeof cell.error==='string'?cell.error:JSON.stringify(cell.error)):'');status.textContent='Notebook cell '+cell.cellId+' · '+cell.state;refresh.hidden=false;const found=out.textContent.match(/"validationId"\s*:\s*"([a-f0-9]{64})"/);if(found)document.querySelector('#validation').value=found[1];clearTimeout(timer);if(['running','queued','waiting'].includes(cell.state))timer=setTimeout(observe,700)}
+function policyOf(text){try{const value=JSON.parse(text);if(value&&typeof value==='object'&&value.policy)return value.policy}catch{}const found=text.match(/^Outbound policy: (\{.*\})$/m);if(found){try{return JSON.parse(found[1])}catch{}}return null}
+function policyNote(text){const policy=policyOf(text);if(!policy)return '';const count=Array.isArray(policy.redacted_fields)?policy.redacted_fields.length:0;if(!count&&!policy.requires_user_consent)return '';return 'Outbound policy: '+count+' redacted field(s)'+(policy.requires_user_consent?'; consent required before sending to a provider':'')}
+function show(cell){cellId=cell.cellId;out.textContent=(cell.outputs||[]).map(x=>x.text||'').join('\n')+(cell.error?'\n'+(typeof cell.error==='string'?cell.error:JSON.stringify(cell.error)):'');status.textContent='Notebook cell '+cell.cellId+' · '+cell.state;const note=policyNote(out.textContent);if(note)status.textContent+=' · '+note;refresh.hidden=false;const found=out.textContent.match(/"validationId"\s*:\s*"([a-f0-9]{64})"/);if(found)document.querySelector('#validation').value=found[1];clearTimeout(timer);if(['running','queued','waiting'].includes(cell.state))timer=setTimeout(observe,700)}
 async function observe(){if(!cellId)return;try{const result=await rho.call('cell',{cellId});if(result.state!=='completed')throw new Error(result.error||result.state);const cell=result.value.cells?.find(x=>x.cellId===cellId);if(cell)show(cell);else status.textContent='Original cell is not available. Keep its identity; do not resubmit.'}catch(error){status.textContent=error.message;refresh.hidden=false}}
 refresh.onclick=observe;
 document.querySelectorAll('[data-op]').forEach(button=>button.onclick=async()=>{
  if(busy)return;const operation=button.dataset.op,object=document.querySelector('#object').value.trim();let input={};
  try{
- if(['ledger','registry','report'].includes(operation))input={object,...(operation==='ledger'?{includeArtifacts:true}:{})};
+ if(['ledger','registry','report','profile','design'].includes(operation))input={object,...(operation==='ledger'?{includeArtifacts:true}:{})};
  if(operation==='report'&&document.querySelector('#report-id').value.trim())input.recordId=document.querySelector('#report-id').value.trim();
  if(operation==='skill')input={name:'sclet-driver'};
+ if(operation==='confirm-design')input={object,design:JSON.parse(document.querySelector('#design').value)};
  if(operation==='validate')input={object,plan:JSON.parse(document.querySelector('#plan').value)};
  if(operation==='record')input={object,recordId:document.querySelector('#record-id').value.trim(),result:JSON.parse(document.querySelector('#result').value)};
  if(operation==='execute')input={validationId:document.querySelector('#validation').value.trim()};

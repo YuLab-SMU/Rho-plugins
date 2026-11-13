@@ -32,11 +32,23 @@ then execute the returned validationId. The original Notebook cell is retained
 and observed; the returned SCE replaces that same variable, including partial
 state. An already submitted validation is never executed again.
 
+**Data profile** and **Read design** are read-only. The profile is value-free.
+The design read returns candidate design roles, colData column names, recorded
+confirmations and the ledger fingerprint, never column values. When a
+design-gated action needs roles, fill in the **Confirm design** JSON (role →
+colData column) and confirm; sclet records your declaration rather than guessing
+from column names.
+
 Execution produces an execution record, not an AI result report. Record your
 supported interpretation with `record` (RecordAIResult, claim auditing enabled),
-then render it by its **Report ID**. Leaving Report ID empty asks sclet for its
-active result and can report that none exists. Scientific evidence and claims
-are sclet's responsibility; the adapter never invents them from an exit status.
+then read it by its **Report ID**. Leaving Report ID empty asks sclet for its
+active result and can report that none exists. The ledger, profile and report
+reads route through sclet's GetAIAgentPayload and include an outbound policy
+(redacted fields, whether user consent is required, warnings, token estimate,
+fingerprint); the workbench adds a warning line when the policy redacts fields or
+requires consent. Report text is free-form and needs user consent before it is
+sent to a model provider. Scientific evidence and claims are sclet's
+responsibility; the adapter never invents them from an exit status.
 
 Disable, remove or close the view without stopping R or deleting data. Native
 session shutdown and interruption use Notebook's existing controls. Validation
@@ -45,6 +57,10 @@ default is 32 and maximum 128, with refusal rather than eviction at the limit.
 An R restart loses these records. Use normal R checkpoints and validate again.
 
 ## Observed scope
+
+Requires a sclet build that exports `GetAIAgentPayload()` (source tree after
+2026-11-13); **Check R packages** reports it as `GetAIAgentPayload: TRUE|FALSE`
+so an older install is visible before a read fails.
 
 Tested with sclet 1.1.0 at commit
 `3e03720fea17ee30bb598cce3bc94dc0c728fc44`, R 4.5.2 and SingleCellExperiment
@@ -55,6 +71,11 @@ fingerprints were refused afterward. A no-biological-claims interpretation was
 recorded and its report passed sclet's citation/claim self-check. This is software
 integration evidence, not scientific validation. See Rho's
 [episode](https://github.com/YuLab-SMU/Rho/blob/main/docs/THIRD-PARTY-PLUGINS-EPISODE.md).
+
+The ledger/profile/report cells were additionally replayed against a
+temporarily installed sclet in one R process (profile → design → confirm-design
+→ validate → execute → record → report), and the report's outbound policy line
+asked for consent; that is still software integration evidence.
 
 The host runs trusted native code with the user's OS permissions. Its disposable
 process and opaque-origin UI are not an OS sandbox. No Core execution guarantee,

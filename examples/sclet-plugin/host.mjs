@@ -14,12 +14,31 @@ export async function run(operation, input, ctx) {
   let code;
   if (operation === 'check') code = `packages <- c("sclet", "SingleCellExperiment", "jsonlite")
 for (pkg in packages) cat(pkg, if (requireNamespace(pkg, quietly=TRUE)) as.character(packageVersion(pkg)) else "MISSING — install in this R library", "\\n")
+cat("GetAIAgentPayload:", requireNamespace("sclet", quietly=TRUE) && exists("GetAIAgentPayload", asNamespace("sclet")), "\\n")
 cat("R libraries:", paste(.libPaths(), collapse="; "), "\\n")`;
   else if (operation === 'skill') code = `${need}
 cat(sclet::ReadAISkill(${quote(input.name)})$body, "\\n")`;
   else if (operation === 'ledger') code = `${need}
 ${object(input.object)}
-${json(`sclet::GetAnalysisLedger(sce, include_artifacts=${input.includeArtifacts ? 'TRUE' : 'FALSE'}, include_data=FALSE)`)}`;
+${json(`sclet::GetAIAgentPayload(sce, what="ledger", include_artifacts=${input.includeArtifacts ? 'TRUE' : 'FALSE'}, detail="summary")`)}`;
+  else if (operation === 'profile') code = `${need}
+${object(input.object)}
+${json('sclet::GetAIAgentPayload(sce, what="profile")')}`;
+  else if (operation === 'design') code = `${need}
+${object(input.object)}
+profile <- sclet::GetAIProfile(sce)
+ledger <- sclet::GetAnalysisLedger(sce)
+${json('list(design=profile$design, columns=profile$dataset$col_data$columns, confirmations=ledger$analysis_story$design_confirmations, fingerprint=ledger$fingerprint)')}`;
+  else if (operation === 'confirm-design') {
+    if (!input.design || typeof input.design !== 'object' || Array.isArray(input.design)) throw new Error('confirm-design requires a design object mapping roles to colData columns.');
+    code = `${need}
+${object(input.object)}
+design <- jsonlite::fromJSON(${quote(JSON.stringify(input.design))}, simplifyVector=FALSE)
+updated <- sclet::ConfirmAIDesignSemantics(sce, design=design)
+assign(${quote(input.object)}, updated, envir=.GlobalEnv)
+ledger <- sclet::GetAnalysisLedger(updated)
+${json('list(fingerprint=ledger$fingerprint, confirmations=ledger$analysis_story$design_confirmations)')}`;
+  }
   else if (operation === 'registry') code = `${need}
 ${object(input.object)}
 registry <- sclet::AIDefaultExecutionRegistry(sce, include="all")
@@ -57,7 +76,11 @@ assign(${quote(input.object)}, updated, envir=.GlobalEnv)
 ${json(`list(recordId=${quote(input.recordId)}, fingerprint=sclet::GetAnalysisLedger(updated)$fingerprint)`)}`;
   else if (operation === 'report') code = `${need}
 ${object(input.object)}
-cat(sclet::RenderAIReport(sce, id=${input.recordId ? quote(input.recordId) : 'NULL'}), "\\n")`;
+payload <- sclet::GetAIAgentPayload(sce, what="report", record_id=${input.recordId ? quote(input.recordId) : 'NULL'})
+report <- payload$payload$report
+if (is.null(report)) report <- payload$payload
+if (is.character(report)) cat(report, "\\n") else cat(jsonlite::toJSON(report, auto_unbox=TRUE, null="null", pretty=TRUE, force=TRUE), "\\n")
+cat("Outbound policy:", jsonlite::toJSON(payload$policy, auto_unbox=TRUE, null="null", force=TRUE), "\\n")`;
   else throw new Error('Unknown sclet operation.');
   // R evaluates local temporaries without replacing unrelated notebook variables.
   // Submission returns the original cell immediately; cell reads only observe it.
